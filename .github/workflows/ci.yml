@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: poker
+          POSTGRES_USER: poker
+          POSTGRES_PASSWORD: poker
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U poker -d poker"
+          --health-interval 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://poker:poker@localhost:5432/poker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.3"
+      - run: uv sync --frozen
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Django checks
+        run: |
+          uv run python manage.py check
+          uv run python manage.py makemigrations --check --dry-run
+      - name: Tests
+        run: uv run pytest
+      - name: Simulation (500 hands, 9 players)
+        run: |
+          uv run python -m apps.games.engine.simulate --hands 500 --players 9 --seed ${{ github.run_number }} | tee sim.txt
+          grep -q " 0 violations" sim.txt
