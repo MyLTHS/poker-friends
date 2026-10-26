@@ -15,7 +15,7 @@ Bài tập:
 4. Xem CI chạy; nhờ Claude hoặc Codex review; tự gộp vào `main` (bạn là người duy nhất được gộp).
 
 ```bash
-cd ~/Projects/poker-friends
+cd ~/Projects/notes-2026
 git switch -c lym/a-sua-readme
 # sửa README.md
 git commit -am "docs: thêm mô tả dự án"

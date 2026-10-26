@@ -1,15 +1,15 @@
 1. Lỗi thật
 
 - Chưa thấy lỗi chắc chắn làm CI hoặc Docker dev hỏng; các lệnh lint, Django check, migration check và mô phỏng đều qua.
-- Cấu hình production có thể chạy với `DEBUG=true` và secret mặc định/yếu. Giá trị `change-me` không bị chặn: [.env.example](/Users/lym/Projects/poker-friends/.env.example:2), [settings.py](/Users/lym/Projects/poker-friends/config/settings.py:23).
-- `.env.local`, `.env.*.local` của Next.js không được ignore; có nguy cơ commit bí mật và đưa chúng vào Docker build context: [.gitignore](/Users/lym/Projects/poker-friends/.gitignore:5), [.dockerignore](/Users/lym/Projects/poker-friends/.dockerignore:9).
+- Cấu hình production có thể chạy với `DEBUG=true` và secret mặc định/yếu. Giá trị `change-me` không bị chặn: [.env.example](../../.env.example#L2), [settings.py](../../config/settings.py#L23).
+- `.env.local`, `.env.*.local` của Next.js không được ignore; có nguy cơ commit bí mật và đưa chúng vào Docker build context: [.gitignore](../../.gitignore#L5), [.dockerignore](../../.dockerignore#L9).
 
 2. Bất tiện khi làm frontend
 
-- CI chỉ có backend; không có lint, typecheck, test hay build cho `web/`: [ci.yml](/Users/lym/Projects/poker-friends/.github/workflows/ci.yml:8).
-- Service Django mang tên `web`, dễ xung đột với frontend thật: [docker-compose.yml](/Users/lym/Projects/poker-friends/docker-compose.yml:20).
-- Giới hạn PR khoảng 400 dòng và TDD tuyệt đối khá khó áp dụng cho scaffold, styling/design system: [CONTRIBUTING.md](/Users/lym/Projects/poker-friends/CONTRIBUTING.md:37), [CONTRIBUTING.md](/Users/lym/Projects/poker-friends/CONTRIBUTING.md:49).
-- Chưa có quy ước frontend origin/proxy; cấu hình CSRF hiện chỉ tin cậy cổng `8000`: [.env.example](/Users/lym/Projects/poker-friends/.env.example:5).
+- CI chỉ có backend; không có lint, typecheck, test hay build cho `web/`: [ci.yml](../../.github/workflows/ci.yml#L8).
+- Service Django mang tên `web`, dễ xung đột với frontend thật: [docker-compose.yml](../../docker-compose.yml#L20).
+- Giới hạn PR khoảng 400 dòng và TDD tuyệt đối khá khó áp dụng cho scaffold, styling/design system: [CONTRIBUTING.md](../../CONTRIBUTING.md#L37), [CONTRIBUTING.md](../../CONTRIBUTING.md#L49).
+- Chưa có quy ước frontend origin/proxy; cấu hình CSRF hiện chỉ tin cậy cổng `8000`: [.env.example](../../.env.example#L5).
 
 3. Đề xuất
 
