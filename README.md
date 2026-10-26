@@ -74,6 +74,7 @@ B1 (engine luật chơi) đã xong trước; đợt tiếp theo là **B2 — D�
 - [ ] Đồng hồ suy nghĩ, hết giờ tự check/fold
 - [ ] Heartbeat, disconnect, reconnect bằng snapshot, khôi phục ván dở khi restart
 - [ ] Staging trên VPS (Caddy HTTPS), diễn tập backup → khôi phục
+- [ ] CD staging: gộp vào `main` + CI xanh thì tự build, migrate, deploy lên staging
 
 **B6. Tài khoản**
 
@@ -102,7 +103,8 @@ B1 (engine luật chơi) đã xong trước; đợt tiếp theo là **B2 — D�
 ### D–G. Ra mắt
 
 - [ ] D. Kiểm thử tổng thể: thử gian lận, bấm đúp, mạng chập, kill server
-- [ ] E. Production: Sentry, backup hằng ngày, deploy + rollback, runbook
+- [ ] E. Production: Sentry, backup hằng ngày, runbook
+- [ ] E. CD production: gắn tag `vX.Y.Z` thì deploy image đã chạy trên staging; rollback về tag trước
 - [ ] F. Beta: 2–3 buổi chơi thật; một buổi 2 giờ không sai chip, không lộ bài, không crash
 - [ ] G. Nhìn lại: retrospective, sổ bài học, chọn hướng tiếp
 

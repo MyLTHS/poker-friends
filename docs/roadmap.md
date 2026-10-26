@@ -110,11 +110,13 @@ hơn dùng khoá?
 **Việc:** đồng hồ suy nghĩ, hết giờ tự check/fold, deadline tuyệt đối; heartbeat + trạng thái
 disconnect; reconnect bằng snapshot; khôi phục ván dở khi restart; sit-out / sit-in. **Staging tối
 thiểu** trên VPS (Docker Compose + Caddy HTTPS) và **diễn tập backup → khôi phục**.
+**CD staging:** gộp PR vào `main` và CI xanh thì GitHub Actions tự build image, đẩy lên registry,
+SSH vào VPS chạy migration rồi đổi sang bản mới; kiểm health check, hỏng thì giữ bản cũ.
 
 **Dự đoán:** kể 5 cách ván bài có thể hỏng giữa chừng. Cái nào nguy hiểm nhất?
 **Tự làm:** tự kill server giữa ván trên staging, khởi động lại, kiểm chip không lệch.
 **Trang thử:** rút mạng 10 giây rồi vào lại; chơi thử qua link staging.
-**Cần chủ dự án chuẩn bị:** VPS, tên miền.
+**Cần chủ dự án chuẩn bị:** VPS, tên miền, SSH key deploy (lưu trong GitHub Secrets).
 
 ### B6. Tài khoản (1,5 tuần)
 
@@ -202,9 +204,12 @@ chập, kill server giữa lệnh; chơi thử nội bộ nhiều giờ.
 ## E. Production và vận hành (1 tuần)
 
 **Việc:** nâng staging thành production; Sentry; backup hằng ngày + lịch diễn tập khôi phục;
-script deploy và rollback; runbook sự cố.
+runbook sự cố. **CD production:** chủ dự án gắn tag `vX.Y.Z` thì GitHub Actions deploy đúng image
+đã chạy trên staging (không build lại), có bước duyệt trước khi chạy; backup DB trước migration.
+**Rollback:** một lệnh (hoặc chạy lại workflow với tag cũ) đưa production về bản trước; migration
+phải tương thích ngược để bản cũ chạy được trên DB mới.
 **Dự đoán:** vì sao "backup chưa thử khôi phục thì coi như chưa có backup"?
-**Tự làm:** tự deploy một thay đổi nhỏ rồi rollback.
+**Tự làm:** gắn tag deploy một thay đổi nhỏ lên production rồi rollback về tag trước.
 
 ## F. Beta với bạn bè (1–2 tuần)
 
@@ -232,3 +237,4 @@ chọn hướng tiếp (tournament, bạn bè, thống kê, app mobile).
 | Hai AI sửa đè code nhau | Nhánh + worktree riêng; phân vùng `apps/` và `web/` |
 | PokerKit có thêm hành vi bất ngờ | Mô phỏng chạy trong CI; mọi bất thường thành test hồi quy |
 | Dịch vụ ngoài làm chậm | VPS/tên miền trước B5; Google/email trước B6 |
+| Deploy tự động làm hỏng hệ thống | Chỉ deploy khi CI xanh; health check; production theo tag + bước duyệt; rollback một lệnh |
