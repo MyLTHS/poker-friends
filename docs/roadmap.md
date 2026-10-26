@@ -3,6 +3,8 @@
 Bản 4: 22/10/2026. Xây theo lớp, phục vụ mục tiêu **học hỏi và rèn tư duy**. Đã qua hai vòng phản
 biện với Codex ([docs/collab/](collab/)). Chờ chủ dự án duyệt.
 
+**Tiến độ** (việc nào đã xong, đang ở đợt nào): xem checklist ở [README](../README.md#tiến-độ).
+
 ## Nguyên tắc
 
 - **Học theo lớp**: nền móng → backend → thiết kế + frontend → kiểm thử → vận hành → beta → nhìn lại.
