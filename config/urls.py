@@ -18,6 +18,11 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
+from apps.games import views as games_views
+
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/rooms/<int:room_id>/seats/", games_views.take_seat),
+    path("api/rooms/<int:room_id>/seats/me/", games_views.leave_seat),
+    path("api/rooms/<int:room_id>/snapshot/", games_views.get_snapshot),
 ]
