@@ -1,0 +1,17 @@
+{
+  "name": "poker-friends-web",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "api:gen": "node scripts/gen-api-types.mjs",
+    "api:check": "node scripts/gen-api-types.mjs --check && tsc -p tsconfig.api.json && node scripts/check-fixture-types.mjs"
+  },
+  "devDependencies": {
+    "json-schema-to-typescript": "16.0.0",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

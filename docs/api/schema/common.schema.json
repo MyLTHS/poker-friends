@@ -277,6 +277,7 @@
     },
     "PlayerResult": {
       "title": "PlayerResult",
+      "description": "One player's outcome. stack is the room balance after the hand and the 7-2 bonus.",
       "type": "object",
       "properties": {
         "player_id": { "$ref": "#/$defs/PlayerId" },
@@ -286,7 +287,7 @@
           "type": "integer",
           "description": "Seven-deuce bonus received (+) or paid (-); 0 when none."
         },
-        "stack": { "$ref": "#/$defs/Chips", "description": "Room balance after the hand and the bonus." }
+        "stack": { "$ref": "#/$defs/Chips" }
       },
       "required": ["player_id", "seat", "hand_net", "seven_deuce_net", "stack"],
       "additionalProperties": false
@@ -308,7 +309,7 @@
     },
     "SevenDeuceAward": {
       "title": "SevenDeuceAward",
-      "description": "Rule #27: the pot was taken holding 7-2 after everyone else folded. The two cards are shown to the whole table.",
+      "description": "Rule #27: the pot was taken holding 7-2 after everyone else folded. The two cards are shown to the whole table. total is the sum of payments: exactly what the winner received.",
       "type": "object",
       "properties": {
         "player_id": { "$ref": "#/$defs/PlayerId" },
@@ -329,10 +330,7 @@
           "type": "array",
           "items": { "$ref": "#/$defs/SevenDeucePayment" }
         },
-        "total": {
-          "$ref": "#/$defs/Chips",
-          "description": "Sum of payments: exactly what the winner received."
-        }
+        "total": { "$ref": "#/$defs/Chips" }
       },
       "required": ["player_id", "seat", "cards", "bonus", "payments", "total"],
       "additionalProperties": false

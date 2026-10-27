@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CommandAckMessage",
-  "description": "Reply to the sender only: the command was applied. duplicate is true when this command_id had already been applied and nothing was applied again.",
+  "description": "Reply to the sender only: the command was applied. duplicate is true when this command_id had already been applied and nothing was applied again. result_version is the version of the first state event the command caused.",
   "type": "object",
   "properties": {
     "protocol_version": {
@@ -32,8 +32,7 @@
           "type": "boolean"
         },
         "result_version": {
-          "$ref": "../common.schema.json#/$defs/Version",
-          "description": "Version of the first state event the command caused."
+          "$ref": "../common.schema.json#/$defs/Version"
         }
       },
       "required": [
