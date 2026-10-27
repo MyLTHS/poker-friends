@@ -12,9 +12,11 @@
     "lint": "eslint .",
     "test": "vitest run",
     "api:gen": "node scripts/gen-api-types.mjs",
-    "api:check": "node scripts/gen-api-types.mjs --check && tsc -p tsconfig.api.json && node scripts/check-fixture-types.mjs"
+    "api:check": "node scripts/gen-api-types.mjs --check && tsc -p tsconfig.api.json && node scripts/check-fixture-types.mjs",
+    "e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
