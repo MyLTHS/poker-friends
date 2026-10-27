@@ -110,6 +110,265 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/config/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cấu hình màn đăng nhập
+         * @description Cho biết có bật Google không, và đặt cookie `csrftoken`. Gọi đầu tiên khi mở trang.
+         */
+        get: operations["getAuthConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/me/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Người đang đăng nhập */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/signup/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Đăng ký bằng email và mật khẩu
+         * @description Tạo tài khoản chưa xác minh và gửi email có link xác minh
+         *     (`FRONTEND_URL/account/verify?token=...`). **Không** đăng nhập luôn: phải xác minh email
+         *     trước. Khách muốn giữ chip thì dùng `upgrade`, không dùng `signup`.
+         */
+        post: operations["signup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/verify-email/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Xác minh email bằng token trong link
+         * @description Token hết hạn sau 3 ngày, và không dùng được nữa khi email của tài khoản đã đổi.
+         */
+        post: operations["verifyEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/verify-email/resend/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gửi lại link xác minh
+         * @description Luôn trả 202, có tài khoản chưa xác minh với email đó hay không (không lộ email nào đã đăng ký).
+         */
+        post: operations["resendVerificationEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/login/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Đăng nhập bằng email và mật khẩu
+         * @description Sai email hay sai mật khẩu đều trả `invalid_credentials`. Email chưa xác minh:
+         *     `email_not_verified` (403). Giới hạn: 20 lần/10 phút mỗi IP, 5 lần sai/15 phút mỗi email
+         *     (quá thì `rate_limited` kể cả khi mật khẩu đúng).
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Đăng xuất
+         * @description Khách đăng xuất là mất tài khoản khách (không có cách đăng nhập lại).
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password/forgot/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quên mật khẩu — gửi link đặt lại
+         * @description Luôn trả 202 (không lộ email nào đã đăng ký). Link `FRONTEND_URL/account/reset?uid=...&token=...`
+         *     dùng một lần, hết hạn sau 1 giờ. Giới hạn: 5 lần/giờ mỗi IP, 3 lần/giờ mỗi email.
+         */
+        post: operations["forgotPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password/reset/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Đặt mật khẩu mới bằng link trong email
+         * @description Thành công thì email của tài khoản cũng được coi là đã xác minh. Không tự đăng nhập.
+         */
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/guest/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chơi ngay bằng tài khoản khách
+         * @description Tạo `User` với `is_guest=true` và đăng nhập luôn. Không đặt tên thì tên là `khach-xxxxxx`.
+         *     Đang có phiên rồi thì trả 200 với chính tài khoản đó, không tạo thêm. Giới hạn 20 khách/giờ
+         *     mỗi IP.
+         */
+        post: operations["createGuest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/upgrade/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Nâng cấp khách lên tài khoản email/mật khẩu
+         * @description Gắn email + mật khẩu vào **chính** `User` khách đang đăng nhập (giữ nguyên `id`), nên chip
+         *     và lịch sử ván ở mọi phòng giữ nguyên. Vẫn đăng nhập sau khi nâng cấp; email gửi link xác
+         *     minh như `signup`. Email đã thuộc tài khoản khác: `email_taken`, không gộp tài khoản.
+         *     Không phải khách: `not_guest`. Nâng cấp bằng Google: xem `/accounts/google/login/`.
+         */
+        post: operations["upgradeGuest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/google/login/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bắt đầu đăng nhập (hoặc nâng cấp khách) bằng Google
+         * @description **Form của trình duyệt, không phải fetch**: trang web submit một `<form method="post">`
+         *     (có `csrfmiddlewaretoken`), server chuyển trình duyệt sang Google rồi Google chuyển về
+         *     `/accounts/google/login/callback/`. Cuối cùng trình duyệt về `FRONTEND_URL/account` với:
+         *
+         *     - `?google=ok` — đã đăng nhập (tài khoản mới hoặc cũ), hoặc khách đã nâng cấp.
+         *     - `?error=google_disabled` — server chưa có key Google.
+         *     - `?error=google_failed` — người dùng huỷ ở Google hoặc Google báo lỗi.
+         *     - `?error=email_taken` — email Google đã thuộc tài khoản email/mật khẩu khác (không gộp).
+         *     - `?error=social_account_taken` — (nâng cấp) tài khoản Google này đã gắn với người khác.
+         *     - `?error=not_guest` — (nâng cấp) người đang đăng nhập không phải khách.
+         *
+         *     `process=connect` khi khách đang đăng nhập muốn nâng cấp: Google được gắn vào chính `User`
+         *     khách (giữ `id`, chip, lịch sử), email Google coi như đã xác minh.
+         */
+        post: operations["startGoogleLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -138,12 +397,81 @@ export interface components {
             server_time: components["schemas"]["ServerTime"];
             table: components["schemas"]["TableState"];
         };
+        AuthConfig: {
+            /** @description `false` khi server chưa có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: ẩn nút Google. */
+            google_enabled: boolean;
+        };
+        Me: {
+            /** @description Không đổi khi khách nâng cấp. */
+            id: number;
+            /** @description Tên hiện ở bàn chơi. */
+            username: string;
+            /**
+             * Format: email
+             * @description `null` với khách.
+             */
+            email: string | null;
+            is_guest: boolean;
+            email_verified: boolean;
+            /** @description `false` với khách và người chỉ đăng nhập bằng Google. */
+            has_password: boolean;
+            google_connected: boolean;
+        };
+        /** @description Chữ (kể cả tiếng Việt), số và `@ . + - _`, không có dấu cách. Không phân biệt hoa thường khi so trùng. */
+        Username: string;
+        /** @description Theo bộ kiểm tra mật khẩu của Django (tối thiểu 8 ký tự, không quá phổ biến, không toàn số, không giống tên/email). */
+        Password: string;
+        SignupRequest: {
+            /** Format: email */
+            email: string;
+            username: components["schemas"]["Username"];
+            password: components["schemas"]["Password"];
+        };
+        LoginRequest: {
+            /** Format: email */
+            email: string;
+            password: string;
+        };
+        EmailRequest: {
+            /** Format: email */
+            email: string;
+        };
+        TokenRequest: {
+            /** @description Tham số `token` của link trong email. */
+            token: string;
+        };
+        ResetPasswordRequest: {
+            /** @description Tham số `uid` của link trong email. */
+            uid: string;
+            /** @description Tham số `token` của link trong email. */
+            token: string;
+            password: components["schemas"]["Password"];
+        };
+        GuestRequest: {
+            username?: components["schemas"]["Username"];
+        };
+        UpgradeRequest: {
+            /** Format: email */
+            email: string;
+            password: components["schemas"]["Password"];
+            username?: components["schemas"]["Username"];
+        };
+        GoogleLoginForm: {
+            /**
+             * @description `connect` để khách đang đăng nhập nâng cấp bằng Google.
+             * @default login
+             * @enum {string}
+             */
+            process?: "login" | "connect";
+            /** @description Giá trị cookie `csrftoken`. */
+            csrfmiddlewaretoken: string;
+        };
         ApiError: {
             /**
              * @description Mã ổn định, client được phép `switch` theo mã.
              * @enum {string}
              */
-            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited";
+            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest";
             /** @description Để đọc log, không hiện cho người chơi. */
             message: string;
             /** @description Chỉ có khi `validation_error`, lỗi theo từng trường của body. */
@@ -286,7 +614,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description Body sai (`validation_error`, `invalid_seat`) */
+        /** @description Body sai (`validation_error`, `invalid_seat`, `invalid_credentials`, `invalid_token`) */
         BadRequest: {
             headers: {
                 [name: string]: unknown;
@@ -304,6 +632,15 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
+        /** @description Thiếu/sai CSRF token (`forbidden`), hoặc email chưa xác minh (`email_not_verified`) */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiError"];
+            };
+        };
         /** @description Không có phòng hoặc không được xem phòng này (`room_not_found`) */
         NotFound: {
             headers: {
@@ -313,7 +650,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`) */
+        /** @description Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`) */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -482,6 +819,302 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getAuthConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cấu hình */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConfig"];
+                };
+            };
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tài khoản của phiên này */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    signup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã tạo, đã gửi email xác minh */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    verifyEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã xác minh */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    resendVerificationEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã nhận */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã đăng nhập, cookie `sessionid` mới */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã đăng xuất */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    forgotPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã nhận */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã đổi mật khẩu */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    createGuest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["GuestRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã có phiên, trả tài khoản hiện tại */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Đã tạo khách và đăng nhập */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    upgradeGuest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpgradeRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã nâng cấp */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    startGoogleLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["GoogleLoginForm"];
+            };
+        };
+        responses: {
+            /** @description Chuyển sang Google, hoặc về trang web với `?error=google_disabled` */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
 }

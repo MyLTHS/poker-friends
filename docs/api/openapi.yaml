@@ -3,14 +3,20 @@ info:
   title: Poker Friends REST API
   version: 0.1.0
   description: |
-    Đặc tả REST tối thiểu (đợt B3). **Chưa có endpoint nào được cài**: đây là hợp đồng để
-    frontend làm trước trên mock. Mỗi thao tác có `x-phase` cho biết đợt nào sẽ cài:
+    Đặc tả REST (bắt đầu từ đợt B3). Mỗi thao tác có `x-phase` cho biết đợt nào cài:
 
     - `B4`: cần để chơi realtime (vào ghế, rời ghế, lấy snapshot).
+    - `B6`: tài khoản (`/api/auth/`, tag `auth`) — **đã cài**.
     - `B7`: phòng và quyền (tạo phòng, xem phòng; quyền chủ phòng, phòng private, link mời).
 
-    Đăng nhập (B6) dùng cookie phiên của Django (`sessionid`) và CSRF token cho mọi request
-    không phải GET. Trước B6, B4 dùng tạm tài khoản khách.
+    Đăng nhập dùng cookie phiên của Django (`sessionid`). Mọi request không phải GET gửi header
+    `X-CSRFToken` bằng giá trị cookie `csrftoken` (gọi `GET /api/auth/config/` để có cookie này),
+    **kể cả khi chưa đăng nhập**. Đăng nhập/đăng xuất làm cookie `csrftoken` đổi giá trị, nên đọc
+    lại cookie trước mỗi request.
+
+    Đăng nhập Google không phải JSON mà là luồng chuyển trang của trình duyệt
+    (`/accounts/google/login/`), cuối luồng trình duyệt về trang web
+    `FRONTEND_URL/account?google=ok` hoặc `FRONTEND_URL/account?error=<mã>`.
 
     Kiểu dữ liệu dùng chung với WebSocket (`RoomInfo`, `SeatOccupant`, `TableState`) lấy thẳng từ
     `schema/common.schema.json` để hai phía không lệch nhau. Giao thức WebSocket:
@@ -25,6 +31,8 @@ tags:
     description: Phòng chơi
   - name: seats
     description: Ghế trong phòng
+  - name: auth
+    description: Tài khoản (B6) — email/mật khẩu, khách, nâng cấp khách, Google
 paths:
   /api/rooms/:
     post:
@@ -154,6 +162,293 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/auth/config/:
+    get:
+      tags: [auth]
+      operationId: getAuthConfig
+      summary: Cấu hình màn đăng nhập
+      description: Cho biết có bật Google không, và đặt cookie `csrftoken`. Gọi đầu tiên khi mở trang.
+      x-phase: B6
+      security: [{}]
+      responses:
+        "200":
+          description: Cấu hình
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthConfig"
+  /api/auth/me/:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Người đang đăng nhập
+      x-phase: B6
+      responses:
+        "200":
+          description: Tài khoản của phiên này
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+  /api/auth/signup/:
+    post:
+      tags: [auth]
+      operationId: signup
+      summary: Đăng ký bằng email và mật khẩu
+      description: |
+        Tạo tài khoản chưa xác minh và gửi email có link xác minh
+        (`FRONTEND_URL/account/verify?token=...`). **Không** đăng nhập luôn: phải xác minh email
+        trước. Khách muốn giữ chip thì dùng `upgrade`, không dùng `signup`.
+      x-phase: B6
+      security: [{}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+      responses:
+        "201":
+          description: Đã tạo, đã gửi email xác minh
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/auth/verify-email/:
+    post:
+      tags: [auth]
+      operationId: verifyEmail
+      summary: Xác minh email bằng token trong link
+      description: Token hết hạn sau 3 ngày, và không dùng được nữa khi email của tài khoản đã đổi.
+      x-phase: B6
+      security: [{}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          description: Đã xác minh
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /api/auth/verify-email/resend/:
+    post:
+      tags: [auth]
+      operationId: resendVerificationEmail
+      summary: Gửi lại link xác minh
+      description: Luôn trả 202, có tài khoản chưa xác minh với email đó hay không (không lộ email nào đã đăng ký).
+      x-phase: B6
+      security: [{}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailRequest"
+      responses:
+        "202":
+          description: Đã nhận
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/auth/login/:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Đăng nhập bằng email và mật khẩu
+      description: |
+        Sai email hay sai mật khẩu đều trả `invalid_credentials`. Email chưa xác minh:
+        `email_not_verified` (403). Giới hạn: 20 lần/10 phút mỗi IP, 5 lần sai/15 phút mỗi email
+        (quá thì `rate_limited` kể cả khi mật khẩu đúng).
+      x-phase: B6
+      security: [{}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Đã đăng nhập, cookie `sessionid` mới
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/auth/logout/:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Đăng xuất
+      description: Khách đăng xuất là mất tài khoản khách (không có cách đăng nhập lại).
+      x-phase: B6
+      security: [{}, {session: []}]
+      responses:
+        "204":
+          description: Đã đăng xuất
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/auth/password/forgot/:
+    post:
+      tags: [auth]
+      operationId: forgotPassword
+      summary: Quên mật khẩu — gửi link đặt lại
+      description: |
+        Luôn trả 202 (không lộ email nào đã đăng ký). Link `FRONTEND_URL/account/reset?uid=...&token=...`
+        dùng một lần, hết hạn sau 1 giờ. Giới hạn: 5 lần/giờ mỗi IP, 3 lần/giờ mỗi email.
+      x-phase: B6
+      security: [{}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailRequest"
+      responses:
+        "202":
+          description: Đã nhận
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/auth/password/reset/:
+    post:
+      tags: [auth]
+      operationId: resetPassword
+      summary: Đặt mật khẩu mới bằng link trong email
+      description: Thành công thì email của tài khoản cũng được coi là đã xác minh. Không tự đăng nhập.
+      x-phase: B6
+      security: [{}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "204":
+          description: Đã đổi mật khẩu
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /api/auth/guest/:
+    post:
+      tags: [auth]
+      operationId: createGuest
+      summary: Chơi ngay bằng tài khoản khách
+      description: |
+        Tạo `User` với `is_guest=true` và đăng nhập luôn. Không đặt tên thì tên là `khach-xxxxxx`.
+        Đang có phiên rồi thì trả 200 với chính tài khoản đó, không tạo thêm. Giới hạn 20 khách/giờ
+        mỗi IP.
+      x-phase: B6
+      security: [{}, {session: []}]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuestRequest"
+      responses:
+        "200":
+          description: Đã có phiên, trả tài khoản hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "201":
+          description: Đã tạo khách và đăng nhập
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/auth/upgrade/:
+    post:
+      tags: [auth]
+      operationId: upgradeGuest
+      summary: Nâng cấp khách lên tài khoản email/mật khẩu
+      description: |
+        Gắn email + mật khẩu vào **chính** `User` khách đang đăng nhập (giữ nguyên `id`), nên chip
+        và lịch sử ván ở mọi phòng giữ nguyên. Vẫn đăng nhập sau khi nâng cấp; email gửi link xác
+        minh như `signup`. Email đã thuộc tài khoản khác: `email_taken`, không gộp tài khoản.
+        Không phải khách: `not_guest`. Nâng cấp bằng Google: xem `/accounts/google/login/`.
+      x-phase: B6
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpgradeRequest"
+      responses:
+        "200":
+          description: Đã nâng cấp
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /accounts/google/login/:
+    post:
+      tags: [auth]
+      operationId: startGoogleLogin
+      summary: Bắt đầu đăng nhập (hoặc nâng cấp khách) bằng Google
+      description: |
+        **Form của trình duyệt, không phải fetch**: trang web submit một `<form method="post">`
+        (có `csrfmiddlewaretoken`), server chuyển trình duyệt sang Google rồi Google chuyển về
+        `/accounts/google/login/callback/`. Cuối cùng trình duyệt về `FRONTEND_URL/account` với:
+
+        - `?google=ok` — đã đăng nhập (tài khoản mới hoặc cũ), hoặc khách đã nâng cấp.
+        - `?error=google_disabled` — server chưa có key Google.
+        - `?error=google_failed` — người dùng huỷ ở Google hoặc Google báo lỗi.
+        - `?error=email_taken` — email Google đã thuộc tài khoản email/mật khẩu khác (không gộp).
+        - `?error=social_account_taken` — (nâng cấp) tài khoản Google này đã gắn với người khác.
+        - `?error=not_guest` — (nâng cấp) người đang đăng nhập không phải khách.
+
+        `process=connect` khi khách đang đăng nhập muốn nâng cấp: Google được gắn vào chính `User`
+        khách (giữ `id`, chip, lịch sử), email Google coi như đã xác minh.
+      x-phase: B6
+      security: [{}, {session: []}]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/GoogleLoginForm"
+      responses:
+        "302":
+          description: Chuyển sang Google, hoặc về trang web với `?error=google_disabled`
 components:
   securitySchemes:
     session:
@@ -219,6 +514,136 @@ components:
           $ref: "./schema/common.schema.json#/$defs/TableState"
       required: [version, server_time, table]
       additionalProperties: false
+    AuthConfig:
+      type: object
+      properties:
+        google_enabled:
+          type: boolean
+          description: "`false` khi server chưa có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: ẩn nút Google."
+      required: [google_enabled]
+      additionalProperties: false
+    Me:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Không đổi khi khách nâng cấp.
+        username:
+          type: string
+          description: Tên hiện ở bàn chơi.
+        email:
+          type: [string, "null"]
+          format: email
+          description: "`null` với khách."
+        is_guest:
+          type: boolean
+        email_verified:
+          type: boolean
+        has_password:
+          type: boolean
+          description: "`false` với khách và người chỉ đăng nhập bằng Google."
+        google_connected:
+          type: boolean
+      required: [id, username, email, is_guest, email_verified, has_password, google_connected]
+      additionalProperties: false
+    Username:
+      type: string
+      minLength: 2
+      maxLength: 30
+      description: Chữ (kể cả tiếng Việt), số và `@ . + - _`, không có dấu cách. Không phân biệt hoa thường khi so trùng.
+    Password:
+      type: string
+      maxLength: 128
+      description: Theo bộ kiểm tra mật khẩu của Django (tối thiểu 8 ký tự, không quá phổ biến, không toàn số, không giống tên/email).
+    SignupRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        username:
+          $ref: "#/components/schemas/Username"
+        password:
+          $ref: "#/components/schemas/Password"
+      required: [email, username, password]
+      additionalProperties: false
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          maxLength: 128
+      required: [email, password]
+      additionalProperties: false
+    EmailRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+      required: [email]
+      additionalProperties: false
+    TokenRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          maxLength: 512
+          description: Tham số `token` của link trong email.
+      required: [token]
+      additionalProperties: false
+    ResetPasswordRequest:
+      type: object
+      properties:
+        uid:
+          type: string
+          maxLength: 64
+          description: Tham số `uid` của link trong email.
+        token:
+          type: string
+          maxLength: 128
+          description: Tham số `token` của link trong email.
+        password:
+          $ref: "#/components/schemas/Password"
+      required: [uid, token, password]
+      additionalProperties: false
+    GuestRequest:
+      type: object
+      properties:
+        username:
+          $ref: "#/components/schemas/Username"
+      additionalProperties: false
+    UpgradeRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          $ref: "#/components/schemas/Password"
+        username:
+          $ref: "#/components/schemas/Username"
+      required: [email, password]
+      additionalProperties: false
+    GoogleLoginForm:
+      type: object
+      properties:
+        process:
+          type: string
+          enum: [login, connect]
+          default: login
+          description: "`connect` để khách đang đăng nhập nâng cấp bằng Google."
+        csrfmiddlewaretoken:
+          type: string
+          description: Giá trị cookie `csrftoken`.
+      required: [csrfmiddlewaretoken]
     ApiError:
       type: object
       properties:
@@ -236,6 +661,12 @@ components:
             - not_seated
             - player_in_hand
             - rate_limited
+            - invalid_credentials
+            - email_not_verified
+            - email_taken
+            - username_taken
+            - invalid_token
+            - not_guest
           description: Mã ổn định, client được phép `switch` theo mã.
         message:
           type: string
@@ -251,13 +682,19 @@ components:
       additionalProperties: false
   responses:
     BadRequest:
-      description: Body sai (`validation_error`, `invalid_seat`)
+      description: Body sai (`validation_error`, `invalid_seat`, `invalid_credentials`, `invalid_token`)
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ApiError"
     Unauthenticated:
       description: Chưa đăng nhập (`not_authenticated`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    Forbidden:
+      description: Thiếu/sai CSRF token (`forbidden`), hoặc email chưa xác minh (`email_not_verified`)
       content:
         application/json:
           schema:
@@ -269,7 +706,7 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
     Conflict:
-      description: Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`)
+      description: Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`)
       content:
         application/json:
           schema:
