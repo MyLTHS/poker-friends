@@ -8,16 +8,17 @@ No-Limit Texas Hold'em chip ảo cho nhóm bạn. Backend Django + PokerKit.
 
 ## Tiến độ
 
-Cập nhật: 26/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đoán, bài tập) ở [docs/roadmap.md](docs/roadmap.md).
+Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đoán, bài tập) ở [docs/roadmap.md](docs/roadmap.md).
 
-**Đang ở:** cuối giai đoạn A (nền móng) — code đã xong, còn bài tập và cổng duyệt của chủ dự án.
-B1 (engine luật chơi) đã xong trước; đợt tiếp theo là **B2 — Dữ liệu**.
+**Đang ở:** A và B1 đã được chủ dự án duyệt (bỏ qua bài tập/ghi bài học để đi nhanh). Đang làm
+**B2 — Dữ liệu**.
 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
-| A | Nền móng codebase | 🟡 Còn bài tập + duyệt |
-| B1 | Engine luật chơi | ✅ Xong code, chờ duyệt |
-| B2–B8 | Dữ liệu, hợp đồng API, realtime, độ bền, tài khoản, phòng, xã hội | ⬜ Chưa bắt đầu |
+| A | Nền móng codebase | ✅ Đã duyệt |
+| B1 | Engine luật chơi | ✅ Đã duyệt |
+| B2 | Dữ liệu | 🟡 Đang làm |
+| B3–B8 | Hợp đồng API, realtime, độ bền, tài khoản, phòng, xã hội | ⬜ Chưa bắt đầu |
 | C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Codex làm trên mock từ sau B3) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
@@ -32,9 +33,8 @@ B1 (engine luật chơi) đã xong trước; đợt tiếp theo là **B2 — D�
 - [x] GitHub Actions: ruff, Django check, kiểm migration, pytest, mô phỏng 500 ván — xanh trên `main`
 - [x] `CONTRIBUTING.md`, mẫu PR
 - [x] Codex review cấu trúc và quy ước ([trao đổi](docs/collab/2026-10-22-claude-response-phase-a.md))
-- [ ] Bài tập: sửa README trên nhánh `lym/a-sua-readme`, mở PR, xem CI chạy, gộp
-- [ ] Ghi bài học: [docs/learning/a-nen-mong.md](docs/learning/a-nen-mong.md)
-- [ ] Cổng duyệt: clone repo, chạy một lệnh, test pass
+- [x] Bài tập: sửa README trên nhánh `lym/a-sua-readme`, mở PR, xem CI chạy, gộp
+- [x] Cổng duyệt: chủ dự án duyệt trực tiếp, bỏ qua ghi bài học chi tiết để đi nhanh sang B
 
 ### B. Backend
 
@@ -46,8 +46,8 @@ B1 (engine luật chơi) đã xong trước; đợt tiếp theo là **B2 — D�
 - [x] `record()` / `replay()` ra đúng kết quả
 - [x] `TableSession`: ghế, xoay button, sit-out/sit-in, cấp chip, ledger trong bộ nhớ, bảng tổng kết
 - [x] 62 test (golden + property test) và mô phỏng 3 × 5.000 ván: 0 mất/sinh chip, 0 lộ bài
-- [ ] Bài tập: test 3 người all-in với stack khác nhau
-- [ ] Duyệt với chủ dự án
+- [x] Bài tập test 3 người all-in: bỏ qua, duyệt trực tiếp
+- [x] Duyệt với chủ dự án
 
 **B2. Dữ liệu**
 
