@@ -95,7 +95,9 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản
 - [x] B4b: trang React nối backend thật: `/rooms/<id>/table` (REST snapshot trước để có cookie
   phiên, rồi WebSocket Django), reducer nhận `room.updated`; thử tay một ván trọn với người chơi
   thứ hai qua WebSocket
-- [ ] B4b: Playwright 2–3 trình duyệt (cần tải trình duyệt Chromium, chờ chủ dự án đồng ý)
+- [x] B4b: Playwright (`web/e2e/`, `npm run e2e`, job CI `e2e`): hai người chơi và một người xem,
+  mỗi người một trình duyệt riêng, chơi trọn một ván trên Django thật; không ai thấy bài úp của người
+  khác, stack mọi trang khớp nhau, bấm đúp chỉ áp một lần
 - [ ] Duyệt với chủ dự án
 
 **B5. Độ bền + staging**

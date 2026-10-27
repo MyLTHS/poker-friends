@@ -60,6 +60,7 @@ Google và cấu hình gửi email thật: [docs/huong-dan-google-smtp.md](../do
 | `npm test` | Unit test bằng Vitest (CI chạy) |
 | `npm run api:gen` | Sinh lại `src/api/*.ts` từ `docs/api/` |
 | `npm run api:check` | CI chạy: báo lỗi nếu type lệch schema hoặc fixture không khớp type |
+| `npm run e2e` | Playwright (B4b): tự chạy Django (DB riêng `e2e.sqlite3`, tạo lại mỗi lần) và web ở cổng 3100, 3 trình duyệt chơi một ván. Cần Chromium của Playwright 1.64.1 đã có trên máy; **đừng tự chạy `npx playwright install`** khi chưa hỏi. CI tự cài |
 
 ## Cấu trúc
 

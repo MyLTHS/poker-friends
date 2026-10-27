@@ -11,3 +11,4 @@ node_modules/
 .ruff_cache/
 .hypothesis/
 staticfiles/
+e2e.sqlite3
