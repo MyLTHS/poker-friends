@@ -144,36 +144,68 @@ class LedgerEntry(models.Model):
 
 
 class Hand(models.Model):
-    """One played hand: config and actions needed for ``HandEngine.replay()``."""
+    """One played hand: config and actions needed for ``HandEngine.replay()``.
+
+    In the engine a player is identified by ``str(user.pk)``; ``config`` and ``result`` use
+    that id too.
+    """
 
     room = models.ForeignKey(Room, on_delete=models.PROTECT, related_name="hands")
     hand_no = models.PositiveIntegerField()
     button_seat = models.PositiveSmallIntegerField()
     config = models.JSONField()
+    # ``HandResult`` as computed when the hand finished, kept to check replays against.
+    result = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        ordering = ["room_id", "hand_no"]
         constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(completed_at__isnull=True, result__isnull=True)
+                    | models.Q(completed_at__isnull=False, result__isnull=False)
+                ),
+                name="hand_result_iff_completed",
+            ),
             models.UniqueConstraint(fields=["room", "hand_no"], name="unique_hand_no_per_room"),
             # Target of the ledger's (room, hand) foreign key; see LedgerEntry.hand.
             models.UniqueConstraint(fields=["room", "id"], name="unique_hand_id_per_room"),
         ]
 
+    def replay_record(self) -> dict:
+        """The record ``HandEngine.replay()`` takes, rebuilt from the stored command log."""
+        return {
+            "config": self.config,
+            "actions": [
+                {"player_id": str(c.player_id), "kind": c.kind, "amount": c.amount}
+                for c in self.commands.all()
+            ],
+        }
+
 
 class HandCommand(models.Model):
-    """A player command already applied to a hand; ``command_id`` makes replays idempotent."""
+    """A player command already applied to a hand; ``command_id`` makes replays idempotent.
 
-    hand = models.ForeignKey(Hand, on_delete=models.CASCADE, related_name="commands")
+    ``sequence`` (1, 2, 3...) is the order the engine applied the commands in, which is the
+    order a replay must use.
+    """
+
+    # PROTECT: the command log is how a hand is recovered, so it must outlive any delete.
+    hand = models.ForeignKey(Hand, on_delete=models.PROTECT, related_name="commands")
     player = models.ForeignKey(User, on_delete=models.PROTECT, related_name="hand_commands")
+    sequence = models.PositiveIntegerField()
     command_id = models.CharField(max_length=64)
     kind = models.CharField(max_length=10)
     amount = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        ordering = ["hand_id", "sequence"]
         constraints = [
             models.UniqueConstraint(
                 fields=["hand", "command_id"], name="unique_command_id_per_hand"
             ),
+            models.UniqueConstraint(fields=["hand", "sequence"], name="unique_sequence_per_hand"),
         ]

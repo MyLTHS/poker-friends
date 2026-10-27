@@ -39,7 +39,7 @@ class LedgerEntryAdmin(admin.ModelAdmin):
 class HandCommandInline(admin.TabularInline):
     model = HandCommand
     extra = 0
-    readonly_fields = ("player", "command_id", "kind", "amount", "created_at")
+    readonly_fields = ("sequence", "player", "command_id", "kind", "amount", "created_at")
 
 
 @admin.register(Hand)

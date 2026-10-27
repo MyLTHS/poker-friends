@@ -5,11 +5,15 @@ chips granted to that room. Hand results redistribute chips among players (net z
 hand), they never create or destroy any.
 """
 
+from dataclasses import asdict
+
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, IntegrityError, connection, transaction
-from django.db.models import Sum
+from django.db.models import ProtectedError, Sum
+from django.utils import timezone
 
+from apps.games.engine.hand import HandEngine
 from apps.games.models import (
     AppendOnlyError,
     Hand,
@@ -20,6 +24,8 @@ from apps.games.models import (
     RoomSeat,
     User,
 )
+
+from .helpers import build_hand, call, check_down, raise_to
 
 pytestmark = pytest.mark.django_db
 
@@ -297,14 +303,98 @@ class TestHandCommandIdempotency:
         alice = make_user("alice")
         hand = Hand.objects.create(room=room, hand_no=1, config={}, button_seat=1)
         HandCommand.objects.create(
-            hand=hand, player=alice, command_id="cmd-1", kind="call", amount=None
+            hand=hand, player=alice, sequence=1, command_id="cmd-1", kind="call", amount=None
         )
 
         with pytest.raises(IntegrityError):
             with transaction.atomic():
                 HandCommand.objects.create(
-                    hand=hand, player=alice, command_id="cmd-1", kind="call", amount=None
+                    hand=hand, player=alice, sequence=2, command_id="cmd-1", kind="call"
                 )
+
+
+class TestHandCommandLog:
+    def test_a_sequence_number_is_used_once_per_hand(self):
+        room, alice = make_room(), make_user("alice")
+        hand = make_hand(room)
+        HandCommand.objects.create(hand=hand, player=alice, sequence=1, command_id="a", kind="call")
+
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                HandCommand.objects.create(
+                    hand=hand, player=alice, sequence=1, command_id="b", kind="fold"
+                )
+
+    def test_commands_come_back_in_sequence_order(self):
+        room, alice = make_room(), make_user("alice")
+        hand = make_hand(room)
+        for sequence in (3, 1, 2):
+            HandCommand.objects.create(
+                hand=hand, player=alice, sequence=sequence, command_id=f"c{sequence}", kind="call"
+            )
+
+        assert [c.sequence for c in hand.commands.all()] == [1, 2, 3]
+
+    def test_a_hand_with_commands_cannot_be_deleted(self):
+        room, alice = make_room(), make_user("alice")
+        hand = make_hand(room)
+        HandCommand.objects.create(hand=hand, player=alice, sequence=1, command_id="a", kind="call")
+
+        with pytest.raises(ProtectedError):
+            hand.delete()
+        assert HandCommand.objects.filter(hand=hand).count() == 1
+
+    def test_a_completed_hand_must_store_its_result(self):
+        room = make_room()
+        assert_rejected(
+            lambda: Hand.objects.create(
+                room=room, hand_no=1, button_seat=1, config={}, completed_at=timezone.now()
+            )
+        )
+
+
+class TestHandReplayFromDatabase:
+    def test_replaying_stored_commands_reproduces_the_stored_result(self):
+        room = make_room()
+        alice, bob = make_user("alice"), make_user("bob")
+        users = {str(alice.pk): alice, str(bob.pk): bob}
+        a, b = str(alice.pk), str(bob.pk)
+        engine = build_hand(
+            [(1, a, 100), (2, b, 100)],
+            button_seat=1,
+            holes={a: "AhAd", b: "KcKd"},
+            board="2c7d9hTsJs",
+        )
+        config = engine.record()["config"]
+        engine.act(raise_to(a, 10))
+        engine.act(call(b))
+        check_down(engine)
+
+        hand = Hand.objects.create(
+            room=room,
+            hand_no=1,
+            button_seat=1,
+            config=config,
+            result=asdict(engine.result()),
+            completed_at=timezone.now(),
+        )
+        actions = list(enumerate(engine.record()["actions"], start=1))
+        # Store the log backwards so that only the sequence number can restore the order.
+        for sequence, action in reversed(actions):
+            HandCommand.objects.create(
+                hand=hand,
+                player=users[action["player_id"]],
+                sequence=sequence,
+                command_id=f"cmd-{sequence}",
+                kind=action["kind"],
+                amount=action["amount"],
+            )
+
+        stored = Hand.objects.get(pk=hand.pk)
+        replayed = HandEngine.replay(stored.replay_record())
+
+        assert asdict(replayed.result()) == stored.result
+        assert stored.result["net"] == {a: 10, b: -10}
 
 
 class TestGuestUpgrade:
