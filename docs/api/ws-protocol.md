@@ -45,7 +45,7 @@ Mọi message **server gửi** có đủ các trường sau ở cấp ngoài cù
 | `protocol_version` | số, luôn `1` | Phiên bản giao thức. Chỉ tăng khi đổi phá vỡ tương thích |
 | `type` | chuỗi | Loại message, ví dụ `action.applied` |
 | `room_id` | số ≥ 1 | Phòng |
-| `hand_id` | số ≥ 1 hoặc `null` | Ván đang chạy lúc gửi (`Hand.pk` trong DB, không phải số thứ tự ván); `null` giữa hai ván |
+| `hand_id` | số ≥ 1 hoặc `null` | Ván đang chạy lúc gửi (`Hand.pk` trong DB, không phải số thứ tự ván); `null` giữa hai ván. `hand.started`, `action.applied`, `turn.deadline`, `hand.completed` luôn thuộc một ván nên **không bao giờ** `null` |
 | `version` | số ≥ 0 | Bộ đếm sự kiện của phòng (mục 6) |
 | `server_time` | chuỗi | Giờ server, UTC, ISO 8601 có `Z`: `2026-10-27T14:03:05.120Z` |
 | `payload` | object | Nội dung riêng của từng loại |

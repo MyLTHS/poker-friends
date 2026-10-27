@@ -50,9 +50,23 @@ export type VisibleCard = string;
  */
 export type Card = string;
 /**
- * raise also covers an opening bet; its amount is the total to raise to.
+ * One applied action. Like command.act: fold, check and call have no amount; raise has the total raised to. timeout is true when the server acted because the clock ran out.
  */
-export type ActionKind = "fold" | "check" | "call" | "raise";
+export type AppliedAction =
+  | {
+      player_id: PlayerId;
+      seat: SeatNumber;
+      kind: "fold" | "check" | "call";
+      amount: null;
+      timeout: boolean;
+    }
+  | {
+      player_id: PlayerId;
+      seat: SeatNumber;
+      kind: "raise";
+      amount: number;
+      timeout: boolean;
+    };
 /**
  * Created by the client once per intent and resent unchanged on every retry. A UUID v4 is recommended.
  */
@@ -215,13 +229,13 @@ export interface Turn {
   think_time_seconds: number;
 }
 /**
- * State event: a new hand was dealt. Each receiver sees only their own hole cards.
+ * State event: a new hand was dealt. Each receiver sees only their own hole cards. Always about one hand, so hand_id is never null.
  */
 export interface HandStartedMessage {
   protocol_version: ProtocolVersion;
   type: "hand.started";
   room_id: RoomId;
-  hand_id: HandIdOrNull;
+  hand_id: HandId;
   version: Version;
   server_time: ServerTime;
   payload: {
@@ -229,13 +243,13 @@ export interface HandStartedMessage {
   };
 }
 /**
- * State event: one action was applied. hand is the state right after it (new board cards included), projected for the receiver.
+ * State event: one action was applied. hand is the state right after it (new board cards included), projected for the receiver. Always about one hand, so hand_id is never null.
  */
 export interface ActionAppliedMessage {
   protocol_version: ProtocolVersion;
   type: "action.applied";
   room_id: RoomId;
-  hand_id: HandIdOrNull;
+  hand_id: HandId;
   version: Version;
   server_time: ServerTime;
   payload: {
@@ -243,27 +257,14 @@ export interface ActionAppliedMessage {
     hand: HandView;
   };
 }
-export interface AppliedAction {
-  player_id: PlayerId;
-  seat: SeatNumber;
-  kind: ActionKind;
-  /**
-   * Total raised to for raise; null otherwise.
-   */
-  amount: number | null;
-  /**
-   * true when the server acted because the clock ran out.
-   */
-  timeout: boolean;
-}
 /**
- * State event: a player must act before deadline. legal_actions are in the last HandView the actor received.
+ * State event: a player must act before deadline. legal_actions are in the last HandView the actor received. Always about one hand, so hand_id is never null.
  */
 export interface TurnDeadlineMessage {
   protocol_version: ProtocolVersion;
   type: "turn.deadline";
   room_id: RoomId;
-  hand_id: HandIdOrNull;
+  hand_id: HandId;
   version: Version;
   server_time: ServerTime;
   payload: {
@@ -271,13 +272,13 @@ export interface TurnDeadlineMessage {
   };
 }
 /**
- * State event: the hand is over and settled. Cards shown at showdown, and the 7-2 winner's two cards, are visible to everyone; folded cards stay hidden.
+ * State event: the hand is over and settled. Cards shown at showdown, and the 7-2 winner's two cards, are visible to everyone; folded cards stay hidden. Always about one hand, so hand_id is never null.
  */
 export interface HandCompletedMessage {
   protocol_version: ProtocolVersion;
   type: "hand.completed";
   room_id: RoomId;
-  hand_id: HandIdOrNull;
+  hand_id: HandId;
   version: Version;
   server_time: ServerTime;
   payload: {

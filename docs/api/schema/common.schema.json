@@ -257,23 +257,33 @@
     },
     "AppliedAction": {
       "title": "AppliedAction",
-      "type": "object",
-      "properties": {
-        "player_id": { "$ref": "#/$defs/PlayerId" },
-        "seat": { "$ref": "#/$defs/SeatNumber" },
-        "kind": { "$ref": "#/$defs/ActionKind" },
-        "amount": {
-          "description": "Total raised to for raise; null otherwise.",
-          "type": ["integer", "null"],
-          "minimum": 1
+      "description": "One applied action. Like command.act: fold, check and call have no amount; raise has the total raised to. timeout is true when the server acted because the clock ran out.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "player_id": { "$ref": "#/$defs/PlayerId" },
+            "seat": { "$ref": "#/$defs/SeatNumber" },
+            "kind": { "type": "string", "enum": ["fold", "check", "call"] },
+            "amount": { "type": "null" },
+            "timeout": { "type": "boolean" }
+          },
+          "required": ["player_id", "seat", "kind", "amount", "timeout"],
+          "additionalProperties": false
         },
-        "timeout": {
-          "description": "true when the server acted because the clock ran out.",
-          "type": "boolean"
+        {
+          "type": "object",
+          "properties": {
+            "player_id": { "$ref": "#/$defs/PlayerId" },
+            "seat": { "$ref": "#/$defs/SeatNumber" },
+            "kind": { "const": "raise" },
+            "amount": { "type": "integer", "minimum": 1 },
+            "timeout": { "type": "boolean" }
+          },
+          "required": ["player_id", "seat", "kind", "amount", "timeout"],
+          "additionalProperties": false
         }
-      },
-      "required": ["player_id", "seat", "kind", "amount", "timeout"],
-      "additionalProperties": false
+      ]
     },
     "PlayerResult": {
       "title": "PlayerResult",

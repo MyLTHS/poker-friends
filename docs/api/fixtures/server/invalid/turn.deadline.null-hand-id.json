@@ -1,0 +1,16 @@
+{
+  "protocol_version": 1,
+  "type": "turn.deadline",
+  "room_id": 1,
+  "hand_id": null,
+  "version": 13,
+  "server_time": "2026-10-27T14:03:05.120Z",
+  "payload": {
+    "turn": {
+      "player_id": "1",
+      "seat": 1,
+      "deadline": "2026-10-27T14:03:25.120Z",
+      "think_time_seconds": 20
+    }
+  }
+}
