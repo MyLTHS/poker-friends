@@ -3,6 +3,8 @@
 Each test failed before its fix. See docs/adr/ADR-001-table-actor.md ("Ghi chú khi cài (B4a)").
 """
 
+import asyncio
+
 import pytest
 from django.db import OperationalError
 from django.db.models import Sum
@@ -101,3 +103,82 @@ class TestSaveFailure:
         assert hand1.completed_at is not None
         assert LedgerEntry.objects.filter(hand=hand1).aggregate(t=Sum("amount"))["t"] == 0
         assert LedgerEntry.objects.filter(room=room).aggregate(t=Sum("amount"))["t"] == 2 * CHIPS
+
+
+class TestClock:
+    """Points 2 and 3: a clock only ever acts on the turn it was set for."""
+
+    def test_a_late_timer_does_not_act_on_the_same_players_next_turn(self):
+        # Heads-up: the big blind checks to close preflop and is first to act on the flop.
+        room, a, b = heads_up_room()
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            hand_id = started["hand_id"]
+            sb = started["payload"]["hand"]["actor"]
+            await send_act(ca if sb == str(a.pk) else cb, room, hand_id, "sb-call-0001", "call")
+            await drain(ca)
+            await drain(cb)
+            table = await actor_module.get_actor(room.pk)
+            bb = table.session.current_hand.actor
+            turn = len(table.session.current_hand._actions)
+            # The check and the clock of that same turn arrive together, check first.
+            check = act_message(room, hand_id, "bb-check-0001", "check")
+            table._queue.put_nowait(actor_module._Command("x", bb, check))
+            table._queue.put_nowait(actor_module._Timeout(hand_id, bb, turn))
+            await drain(ca)
+            rows = [r.command_id async for r in HandCommand.objects.filter(hand_id=hand_id)]
+            assert rows == ["sb-call-0001", "bb-check-0001"]
+
+        run_async(body)
+
+    def test_a_client_cannot_take_the_command_id_the_clock_will_use(self):
+        room, a, b = heads_up_room(think_time_seconds=1)
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            hand_id = started["hand_id"]
+            sb = started["payload"]["hand"]["actor"]
+            # What the server used to name the clock's command for this turn.
+            await send_act(
+                ca if sb == str(a.pk) else cb, room, hand_id, f"timeout-{hand_id}-2", "call"
+            )
+            await drain(ca)
+            await asyncio.sleep(1.6)  # the big blind's clock runs out
+            rows = [
+                (r.command_id, r.kind) async for r in HandCommand.objects.filter(hand_id=hand_id)
+            ]
+            assert len(rows) == 2
+            assert rows[1][0].startswith("timeout:")
+
+        run_async(body)
+
+    def test_a_clock_whose_command_cannot_be_recorded_tries_again(self, monkeypatch):
+        from django.db import IntegrityError
+
+        room, a, b = heads_up_room(think_time_seconds=1)
+        real_create = HandCommand.objects.acreate
+        failures = []
+
+        async def flaky_create(**kwargs):
+            if kwargs["command_id"].startswith("timeout:") and not failures:
+                failures.append(kwargs["command_id"])
+                raise IntegrityError("simulated")
+            return await real_create(**kwargs)
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            await started_hand(ca, cb)
+            monkeypatch.setattr(HandCommand.objects, "acreate", flaky_create)
+            monkeypatch.setattr(actor_module, "TIMEOUT_RETRY_SECONDS", 0.2)
+            await asyncio.sleep(1.8)
+            table = await actor_module.get_actor(room.pk)
+            commands = [c async for c in HandCommand.objects.filter(hand=table.hand or 0)]
+            assert failures
+            assert table.suspended is False
+            # The retry recorded the clock's action, so the hand moved on.
+            assert any(c.command_id.startswith("timeout:") for c in commands) or table.hand is None
+
+        run_async(body)

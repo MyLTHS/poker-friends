@@ -77,6 +77,17 @@ class _Command:
 class _Timeout:
     hand_pk: int  # ignored if the room has moved past this hand
     player_id: str  # ignored if it is no longer this player's turn (ADR-001 mục "Hết giờ")
+    # Actions applied in the hand when the clock was set: the clock only acts on that turn,
+    # not on a later turn of the same player (heads-up: the big blind closes preflop by
+    # checking and is first to act on the flop).
+    turn: int
+
+
+# The clock's own commands are named "timeout:<hand>-<n>"; ":" is outside the CommandId
+# pattern clients must use (docs/api/schema/common.schema.json), so no client can take it.
+TIMEOUT_COMMAND_PREFIX = "timeout:"
+# The clock's command could not be recorded (nothing applied yet): try again this much later.
+TIMEOUT_RETRY_SECONDS = 1.0
 
 
 @dataclass
@@ -345,12 +356,22 @@ class TableActor:
         if self.hand is None or self.hand.pk != item.hand_pk or self.suspended:
             return  # the hand (or room) moved on since this timer was scheduled
         engine = self.session.current_hand
-        if engine.actor != item.player_id:
+        if engine.actor != item.player_id or len(engine._actions) != item.turn:
             return  # a real action for this turn was processed first; the timer lost the race
         actor_player = item.player_id
         legal = engine.legal_actions(actor_player)
         action = Action(actor_player, ActionKind.CHECK if legal.can_check else ActionKind.FOLD)
-        await self._write_command(action, f"timeout-{self.hand.pk}-{len(engine._actions) + 1}")
+        command_id = f"{TIMEOUT_COMMAND_PREFIX}{self.hand.pk}-{item.turn + 1}"
+        try:
+            await self._write_command(action, command_id)
+        except Reject:
+            # Not recorded, so nothing happened yet: retry rather than leave the table waiting
+            # for a clock that already fired.
+            log.warning("room %s: could not record %s, retrying", self.room.pk, command_id)
+            asyncio.get_running_loop().call_later(
+                TIMEOUT_RETRY_SECONDS, lambda: self._queue.put_nowait(item)
+            )
+            return
         await self._apply_checked_action(action, timeout=True)
 
     # ---- starting hands ------------------------------------------------------------------
@@ -416,10 +437,10 @@ class TableActor:
         if self._deadline_timer:
             self._deadline_timer.cancel()
         self._deadline = deadline
-        hand_pk, player_id = self.hand.pk, engine.actor
+        hand_pk, player_id, turn_no = self.hand.pk, engine.actor, len(engine._actions)
         self._deadline_timer = asyncio.get_running_loop().call_later(
             self.room.think_time_seconds,
-            lambda: self._queue.put_nowait(_Timeout(hand_pk, player_id)),
+            lambda: self._queue.put_nowait(_Timeout(hand_pk, player_id, turn_no)),
         )
         await self._broadcast("turn.deadline", lambda viewer: {"turn": turn})
 

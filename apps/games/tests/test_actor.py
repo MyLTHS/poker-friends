@@ -243,7 +243,8 @@ class TestTimeout:
                 "payload": {"kind": "call", "amount": None},
             }
             # Put both on the queue before the actor runs either: same instant, as in ADR-001.
-            timeout = actor_module._Timeout(hand_id, to_act)
+            turn = len(table.session.current_hand._actions)
+            timeout = actor_module._Timeout(hand_id, to_act, turn)
             items = [timeout, actor_module._Command("x", to_act, command)]
             for item in items if timeout_first else reversed(items):
                 table._queue.put_nowait(item)

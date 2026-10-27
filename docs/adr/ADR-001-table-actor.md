@@ -56,7 +56,8 @@ cùng `command_id` và được xử lý như mới. Không có trường hợp 
 người gửi tưởng đã xong.
 
 Lệnh hết giờ được ghi y như lệnh người chơi, với `command_id` do server tạo
-(ví dụ `timeout-<hand_id>-<sequence>`), để replay ra đúng ván.
+(`timeout:<hand_id>-<sequence>`; dấu `:` nằm ngoài mẫu `CommandId` của client nên client không chiếm
+trước được), để replay ra đúng ván.
 
 ### 3. Lệnh bị từ chối chỉ ghi log
 
@@ -183,7 +184,8 @@ trùng theo `(hand, command_id)`, khôi phục mục 4 và fail-stop mục 5. Nh
   (`command_id_reused`).
 - **Đồng hồ tối thiểu.** Mỗi lượt đặt một hẹn giờ `think_time_seconds`; tới hạn thì xếp lệnh hết
   giờ (gắn `hand` **và** người tới lượt) vào cùng hàng đợi; lượt đã qua thì bỏ qua. Lệnh hết giờ ghi
-  `command_id` = `timeout-<hand_id>-<sequence>`. Khôi phục giữa ván cho người đang tới lượt đủ thời
+  `command_id` = `timeout:<hand_id>-<sequence>` (gắn số lượt: đồng hồ chỉ tác động đúng lượt nó được
+  hẹn; ghi lệnh hết giờ thất bại thì hẹn lại sau 1 giây). Khôi phục giữa ván cho người đang tới lượt đủ thời
   gian lại từ đầu (mục 4.5 để B5 chốt). Mất kết nối không đổi đồng hồ.
 - **Fail-stop chưa tự khôi phục** (mục 5.4): phòng giữ trạng thái tạm dừng tới khi process khởi
   động lại; lúc đó khôi phục chạy như mục 4. Nếu lệnh "độc" làm replay hỏng thì actor của phòng không
