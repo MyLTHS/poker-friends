@@ -69,7 +69,7 @@ class RoomSeat(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        # The room's own limit lives in another table, so the database cannot check it.
+        # Readable early error; triggers from migration 0006 enforce the same rule in the DB.
         if self.seat > self.room.max_seats:
             raise ValidationError(f"Seat {self.seat} is beyond this room's {self.room.max_seats}.")
         super().save(*args, **kwargs)
