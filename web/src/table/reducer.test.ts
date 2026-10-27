@@ -204,3 +204,50 @@ describe("hand.completed", () => {
     expect(reduce(model, { type: "dismiss.celebration" }).celebration).toBeNull();
   });
 });
+
+describe("real backend messages (B4b)", () => {
+  it("applies room.updated as a state event: new settings, version moves on", () => {
+    const updated = {
+      protocol_version: 1,
+      type: "room.updated",
+      room_id: snapshot.room_id,
+      hand_id: null,
+      version: snapshot.version + 1,
+      server_time: "2026-10-27T14:03:06.000Z",
+      payload: { room: { ...snapshot.payload.table.room, small_blind: 10, big_blind: 20 } },
+    } as ServerMessage;
+    const model = run([server(updated)], connected());
+    expect(model.table?.room.big_blind).toBe(20);
+    expect(model.lastVersion).toBe(snapshot.version + 1);
+    expect(model.outbox.filter((m) => m.type === "resync.request")).toEqual([]);
+  });
+
+  it("shows a notice when the room is closed", () => {
+    const closed = {
+      protocol_version: 1,
+      type: "room.updated",
+      room_id: snapshot.room_id,
+      hand_id: null,
+      version: snapshot.version + 1,
+      server_time: "2026-10-27T14:03:06.000Z",
+      payload: { room: { ...snapshot.payload.table.room, status: "closed" } },
+    } as ServerMessage;
+    expect(run([server(closed)], connected()).notice?.text).toContain("đóng");
+  });
+
+  it("ignores chat and audience notices without touching the version", () => {
+    const chat = {
+      protocol_version: 1,
+      type: "chat.message",
+      room_id: snapshot.room_id,
+      hand_id: null,
+      version: snapshot.version,
+      server_time: "2026-10-27T14:03:06.000Z",
+      payload: { message: { message_id: 1, player_id: "2", display_name: "An", text: "gg", sent_at: "2026-10-27T14:03:06.000Z" } },
+    } as ServerMessage;
+    const before = connected();
+    const after = run([server(chat)], before);
+    expect(after.lastVersion).toBe(before.lastVersion);
+    expect(after.table).toBe(before.table);
+  });
+});

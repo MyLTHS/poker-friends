@@ -36,8 +36,9 @@ export function useTableSocket(url: string) {
         if (socket.current === ws) socket.current = null;
         if (stopped) return;
         dispatch({ type: "socket.closed" });
-        // Kicked (4403) or no access (4404): retrying cannot help (docs/api/ws-protocol.md).
-        if (event.code === 4403 || event.code === 4404) return;
+        // Kicked (4403), no access (4404), too many guests from here (4429): retrying cannot
+        // help (docs/api/ws-protocol.md).
+        if (event.code === 4403 || event.code === 4404 || event.code === 4429) return;
         retry = setTimeout(connect, RETRY_MS[Math.min(attempt++, RETRY_MS.length - 1)]);
       };
     };

@@ -12,6 +12,7 @@ import type {
   PlayerResult,
   RejectCode,
   RoomSuspendedMessage,
+  RoomUpdatedMessage,
   SeatUpdatedMessage,
   ServerMessage,
   SevenDeuceAward,
@@ -25,7 +26,8 @@ export type StateEvent =
   | TurnDeadlineMessage
   | HandCompletedMessage
   | SeatUpdatedMessage
-  | RoomSuspendedMessage;
+  | RoomSuspendedMessage
+  | RoomUpdatedMessage;
 
 const STATE_EVENTS = new Set<ServerMessage["type"]>([
   "hand.started",
@@ -34,6 +36,7 @@ const STATE_EVENTS = new Set<ServerMessage["type"]>([
   "hand.completed",
   "seat.updated",
   "room.suspended",
+  "room.updated",
 ]);
 
 /** How long to wait for command.ack / command.rejected before resending the same command. */
@@ -274,5 +277,15 @@ function applyEvent(model: TableModel, event: StateEvent): TableModel {
         table: { ...table, room: { ...table.room, status: "suspended" }, turn: null },
         notice: notice(model, "Bàn tạm dừng để khôi phục. Chờ một chút rồi trang sẽ tự nối lại."),
       };
+    case "room.updated": {
+      // The owner's new settings (or the room closing) take effect between hands (B7).
+      const room = event.payload.room;
+      const closed = room.status === "closed" && table.room.status !== "closed";
+      return {
+        ...model,
+        table: { ...table, room },
+        notice: closed ? notice(model, "Chủ phòng đã đóng phòng. Không có ván mới.") : model.notice,
+      };
+    }
   }
 }

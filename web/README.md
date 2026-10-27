@@ -66,6 +66,7 @@ Google và cấu hình gửi email thật: [docs/huong-dan-google-smtp.md](../do
 | Thư mục | Nội dung |
 |---|---|
 | `src/app/` | Trang: `/` chọn người chơi, `/table?player=<id>` bàn chơi, `/account` tài khoản (+ `/account/verify`, `/account/reset` mở từ link trong email), `/rooms` lobby và phòng (B7) |
+| `src/rooms/LiveTableScreen.tsx` | B4b: `/rooms/<id>/table`, cùng màn bàn chơi với mock nhưng nối WebSocket của Django |
 | `src/rooms/` | Trang thử B7/B8: lobby, trang phòng + bảng chủ phòng + chat/người xem (WebSocket tới `NEXT_PUBLIC_DJANGO_WS`, mặc định `ws://localhost:8000`), mở link mời, lịch sử + bảng lời/lỗ, xem lại ván; `api.ts`, `live.ts`, `replay.ts` có test |
 | `src/account/` | Màn tài khoản (B6): `api.ts` gọi `/api/auth/` kèm CSRF, `messages.ts` câu thông báo theo mã lỗi; có test |
 | `src/club/` | Component hướng A (bàn, ghế, lá bài, chip, thanh hành động) và `club.css`, **chép** từ `design/mockups/src/` (không import chéo thư mục). Sửa mockup thì chép lại tay |
