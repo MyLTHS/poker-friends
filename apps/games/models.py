@@ -19,7 +19,7 @@ class User(AbstractUser):
 class Room(models.Model):
     class Status(models.TextChoices):
         OPEN = "open", "Open"
-        PLAYING = "playing", "Playing"
+        PLAYING = "playing", "Playing"  # never stored: clients get it while a hand runs
         CLOSED = "closed", "Closed"
 
     name = models.CharField(max_length=100)
@@ -31,8 +31,9 @@ class Room(models.Model):
     small_blind = models.PositiveIntegerField()
     big_blind = models.PositiveIntegerField()
     think_time_seconds = models.PositiveIntegerField(default=30)
-    # Fixed chip bonus every other seated player (sit-out included) owes a showdown winner
-    # holding a 7 and a 2 (any suits). 0 means the room has no seven-deuce bonus.
+    # Fixed chip bonus every other seated player (sit-out included) owes a player who wins the
+    # pot holding a 7 and a 2 (any suits) because everyone else folded: a successful bluff, a
+    # walk included; never at showdown (spec.md #27). 0 means the room has no seven-deuce bonus.
     seven_deuce_bonus = models.PositiveIntegerField(default=0)
     # Private rooms are hidden from the lobby; only the owner and members (who opened the invite
     # link) see them. The token is in the invite link; rotating it kills old links.

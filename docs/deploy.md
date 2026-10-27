@@ -48,8 +48,9 @@ Sau khi khôi phục: kiểm tổng chip mỗi phòng bằng tổng chip đã c�
 Nghĩa là server đã ghi một lệnh nhưng engine không áp được, nên dừng phòng thay vì đoán
 (ADR-001 mục 5). Các phòng khác vẫn chạy.
 
-1. **Khởi động lại server.** Lúc khởi động, phòng được dựng lại bằng replay. Nếu lỗi chỉ thoáng qua
-   thì phòng chạy tiếp như thường.
+1. **Khởi động lại server**, rồi mở trang bàn của phòng đó: phòng chỉ được dựng lại bằng replay
+   lúc có người mở nó (ADR-001 mục 4), không phải ngay lúc server lên. Nếu lỗi chỉ thoáng qua thì
+   phòng chạy tiếp như thường.
 2. Nếu phòng **vẫn tạm dừng** sau khởi động lại (replay hỏng ở cùng một lệnh), xem log tìm dòng
    `replay of hand <hand_id> failed`, rồi huỷ ván đó:
 

@@ -29,7 +29,12 @@ Các file đi kèm:
 ## 2. Kết nối
 
 - URL (B4): `ws://<host>/ws/rooms/<room_id>/`. Đăng nhập bằng cookie phiên của Django (khách
-  hoặc tài khoản thật, xem B6); chưa đăng nhập thì server đóng kết nối ngay khi bắt tay.
+  hoặc tài khoản thật, xem B6). Chưa đăng nhập mà vào phòng **public**: server tạo luôn một tài
+  khoản khách và đăng nhập cho người đó (như `POST /api/auth/guest/`, tính vào giới hạn khách mỗi
+  IP; hết lượt thì đóng với mã 4429). WebSocket không đặt được cookie, nên trình duyệt chưa có cookie
+  thì mỗi kết nối là một khách mới: web app gọi REST trước để có cookie. Phòng **private** thì phải
+  đã đăng nhập (khách cũng được) và có quyền xem, không thì đóng với mã 4404 (các mã đóng: xem
+  cuối phần `room.updated`).
 - Mock server dùng tạm `ws://localhost:8765/ws/rooms/1/?player=<player_id>` để chọn mình là ai.
 - Mỗi message là **một object JSON trong một frame text**.
 - Vừa kết nối xong, server gửi ngay một `table.snapshot` cho riêng người đó.

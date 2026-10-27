@@ -67,7 +67,10 @@ Lệnh sai luật, sai lượt, trùng `command_id` với nội dung khác… **
 
 ### 4. Khôi phục bằng `HandEngine.replay`
 
-Khi process khởi động (hoặc actor của một phòng được tạo lại):
+Khôi phục chạy **lười**, từng phòng: process khởi động không dựng gì cả; actor của một phòng được
+dựng lại (`get_actor`) lúc có người đầu tiên mở phòng đó (kết nối WebSocket, hoặc một thao tác bàn
+qua REST: vào/rời ghế, sit-out, cấp chip, kick…). Trước lúc đó, lobby và trang phòng chỉ đọc DB
+(ván dở hiện là `playing`). Khi dựng:
 
 1. Tìm `Hand` của phòng chưa có `completed_at` (ván dở).
 2. `HandEngine.replay(hand.replay_record())`: dựng lại từ cấu hình đã lưu (ghế, stack, button,
