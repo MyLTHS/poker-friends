@@ -1,0 +1,7 @@
+{% autoescape off %}Chào {{ user.username }},
+
+Bấm link dưới đây để xác minh email cho tài khoản Poker Friends:
+
+{{ link }}
+
+Link dùng được trong {{ hours }} giờ. Nếu bạn không đăng ký, cứ bỏ qua email này.{% endautoescape %}

@@ -8,6 +8,7 @@ dependencies = [
     "daphne>=4.2.3",
     "dj-database-url>=3.1.2",
     "django>=6.1.2",
+    "django-allauth[socialaccount]>=65.21.0",
     "djangorestframework>=3.18.3",
     "pokerkit>=0.7.7",
     "psycopg[binary]>=3.3.6",
