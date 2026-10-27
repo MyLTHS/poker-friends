@@ -10,8 +10,9 @@ from django.http import HttpRequest, HttpResponseNotAllowed, JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from . import actor as actor_module
+from . import rooms
 from .accounts import player_for_request
-from .models import Room
+from .models import Room, User
 
 CONFLICT_CODES = {"already_seated", "seat_taken", "not_seated", "player_in_hand", "room_closed"}
 
@@ -20,11 +21,21 @@ def _error(code: str, message: str, status: int) -> JsonResponse:
     return JsonResponse({"code": code, "message": message}, status=status)
 
 
-async def _room_or_404(room_id: int) -> Room | None:
-    try:
-        return await Room.objects.aget(pk=room_id)
-    except Room.DoesNotExist:
-        return None
+async def _player_in_room(request: HttpRequest, room_id: int) -> tuple[Room, User] | JsonResponse:
+    """The room and the caller (a new logged-in guest if needed), if the caller may see it."""
+    room = await Room.objects.filter(pk=room_id).afirst()
+    if room is None:
+        return _error("room_not_found", "No such room.", 404)
+    user = await request.auser()
+    if room.is_private and not user.is_authenticated:
+        return _error("room_not_found", "No such room.", 404)  # no guest for nothing
+    user = await player_for_request(request)
+    verdict = await rooms.access(room, user)
+    if verdict == "hidden":
+        return _error("room_not_found", "No such room.", 404)
+    if verdict == "kicked":
+        return _error("kicked", "The owner removed you from this room.", 403)
+    return room, user
 
 
 def _status_for(code: str) -> int:
@@ -38,15 +49,16 @@ def _status_for(code: str) -> int:
 async def take_seat(request: HttpRequest, room_id: int) -> JsonResponse:
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
-    if await _room_or_404(room_id) is None:
-        return _error("room_not_found", "No such room.", 404)
+    found = await _player_in_room(request, room_id)
+    if isinstance(found, JsonResponse):
+        return found
+    _, user = found
     try:
         body = json.loads(request.body or b"{}")
         seat = int(body["seat"])
     except (TypeError, ValueError, KeyError):
         return _error("validation_error", "seat (int) is required.", 400)
 
-    user = await player_for_request(request)
     act = await actor_module.get_actor(room_id)
     try:
         occupant = await act.take_seat(user, seat)
@@ -58,9 +70,10 @@ async def take_seat(request: HttpRequest, room_id: int) -> JsonResponse:
 async def leave_seat(request: HttpRequest, room_id: int) -> JsonResponse:
     if request.method != "DELETE":
         return HttpResponseNotAllowed(["DELETE"])
-    if await _room_or_404(room_id) is None:
-        return _error("room_not_found", "No such room.", 404)
-    user = await player_for_request(request)
+    found = await _player_in_room(request, room_id)
+    if isinstance(found, JsonResponse):
+        return found
+    _, user = found
     act = await actor_module.get_actor(room_id)
     try:
         await act.leave_seat(user)
@@ -73,9 +86,10 @@ async def leave_seat(request: HttpRequest, room_id: int) -> JsonResponse:
 async def get_snapshot(request: HttpRequest, room_id: int) -> JsonResponse:
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
-    if await _room_or_404(room_id) is None:
-        return _error("room_not_found", "No such room.", 404)
-    user = await player_for_request(request)
+    found = await _player_in_room(request, room_id)
+    if isinstance(found, JsonResponse):
+        return found
+    _, user = found
     act = await actor_module.get_actor(room_id)
     message = act.snapshot_message(str(user.pk))
     return JsonResponse(

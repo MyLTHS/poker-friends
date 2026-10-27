@@ -11,8 +11,8 @@ No-Limit Texas Hold'em chip ảo cho nhóm bạn. Backend Django + PokerKit.
 Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đoán, bài tập) ở [docs/roadmap.md](docs/roadmap.md).
 
 **Đang ở:** A và B1 đã được chủ dự án duyệt; B2 và B3 đã gộp vào `main`, chờ duyệt. B4a và B6
-xong code, chờ duyệt. Đang làm **B5 (phần code)**, rồi B7, B8 và ba bản thiết kế cho C1; B4b (nối
-trang React với backend thật, Playwright) làm sau.
+xong code, chờ duyệt; B5 xong phần code. Đang làm **B7**, rồi B8 và ba bản thiết kế cho C1; B4b
+(nối trang React với backend thật, Playwright) làm sau.
 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
@@ -21,9 +21,10 @@ trang React với backend thật, Playwright) làm sau.
 | B2 | Dữ liệu | ✅ Xong code, chờ duyệt |
 | B3 | Hợp đồng API | ✅ Xong code, chờ duyệt |
 | B4 | Bàn chơi realtime | 🟡 B4a (backend) xong code, chờ duyệt; B4b (nối React, Playwright) chưa bắt đầu |
-| B5 | Độ bền + staging | 🟡 Đang làm phần code; staging chờ VPS |
+| B5 | Độ bền + staging | 🟡 Phần code xong, chờ duyệt; staging chờ VPS |
 | B6 | Tài khoản | ✅ Xong code, chờ duyệt |
-| B7–B8 | Phòng, xã hội | ⬜ Chưa bắt đầu |
+| B7 | Phòng và quyền | 🟡 Backend xong, trang thử đang làm |
+| B8 | Xã hội và quản trị | ⬜ Chưa bắt đầu |
 | C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, một Claude riêng chỉ đọc review) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
@@ -116,10 +117,16 @@ trang React với backend thật, Playwright) làm sau.
 - [ ] Lym tạo key Google + SMTP thật và thử lại
 - [ ] Duyệt với chủ dự án
 
-**B7. Phòng và quyền**
+**B7. Phòng và quyền** — `apps/games/rooms.py`, tag `rooms` trong [openapi.yaml](docs/api/openapi.yaml)
 
-- [ ] Phòng public/private, lobby, link mời
-- [ ] Quyền chủ phòng: cấp chip, đổi blind, kick, đóng phòng; rate limit
+- [x] Phòng public/private, lobby, link mời có token (đổi được, link cũ hết hiệu lực); phòng
+  private chỉ chủ phòng, thành viên vào bằng link và người đang ngồi thấy (REST và WebSocket)
+- [x] Quyền chủ phòng qua hàng đợi của actor: cấp/trừ chip (không khi người đó đang trong ván, không
+  âm), đổi blind/thời gian/thưởng 7-2 (giữa ván thì chờ ván sau, phát `room.updated`), kick (rời
+  ghế, đóng kết nối, không vào lại được), đóng phòng (giữa ván thì đóng khi ván xong)
+- [x] Rate limit tạo phòng (10/giờ mỗi người) và lệnh WebSocket (20/10 giây mỗi người chơi)
+- [ ] Trang thử: tạo phòng, gửi link mời, chủ phòng cấp chip và kick
+- [ ] Duyệt với chủ dự án
 
 **B8. Xã hội và quản trị**
 

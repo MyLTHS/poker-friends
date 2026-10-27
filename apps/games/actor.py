@@ -11,6 +11,7 @@ the ASGI process; recovery (ADR-001 mục 4) rebuilds it from the database when 
 import asyncio
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -26,7 +27,17 @@ from .engine.hand import Action, ActionKind, HandEngine, IllegalAction
 from .engine.table import LedgerEntry as EngineLedgerEntry
 from .engine.table import LedgerKind as EngineLedgerKind
 from .engine.table import TableError, TableSession
-from .models import Hand, HandCommand, LedgerEntry, Room, RoomSeat, User
+from .models import (
+    Hand,
+    HandCommand,
+    LedgerEntry,
+    LedgerKind,
+    Room,
+    RoomBan,
+    RoomMember,
+    RoomSeat,
+    User,
+)
 from .services import HandPersistenceError, save_completed_hand
 
 # save_completed_hand() is synchronous (one transaction.atomic block); run it in a thread.
@@ -102,6 +113,19 @@ class _LeaveSeat:
     future: asyncio.Future
 
 
+@dataclass
+class _Call:
+    """An owner action (B7), run by the room's one writer like everything else."""
+
+    fn: Callable[[], Awaitable[Any]]
+    future: asyncio.Future
+
+
+# Settings the owner may change (PATCH /api/rooms/{id}/); they apply between hands.
+ROOM_SETTINGS = ("name", "small_blind", "big_blind", "think_time_seconds", "seven_deuce_bonus")
+KICKED_CLOSE_CODE = 4403
+
+
 class TableActor:
     # Pause between two hands so players can see the result; tests set it to 0.
     next_hand_delay = 4.0
@@ -120,6 +144,8 @@ class TableActor:
         self._deadline_timer = None
         self._deadline: datetime | None = None
         self.resume_deadline: datetime | None = None  # set by _recover() for a hand in progress
+        self.pending: dict[str, Any] = {}  # owner's setting changes waiting for the next hand
+        self.closing = False  # the owner closed the room during a hand
         self._task = asyncio.create_task(self._run())
 
     # ---- public: called from consumers/views, never touches the engine directly -----------
@@ -142,6 +168,28 @@ class TableActor:
         future: asyncio.Future = asyncio.get_running_loop().create_future()
         self._queue.put_nowait(_LeaveSeat(user, future))
         await future
+
+    async def grant_chips(self, player_id: str, amount: int) -> int:
+        return await self._call(lambda: self._grant_chips(player_id, amount))
+
+    async def update_settings(self, changes: dict[str, Any]) -> None:
+        await self._call(lambda: self._update_settings(changes))
+
+    async def kick(self, user_id: int) -> None:
+        await self._call(lambda: self._kick(user_id))
+
+    async def close(self) -> bool:
+        """Close the room; ``False`` when it closes only after the running hand."""
+        return await self._call(self._close)
+
+    async def _call(self, fn: Callable[[], Awaitable[Any]]) -> Any:
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._queue.put_nowait(_Call(fn, future))
+        return await future
+
+    @property
+    def closed(self) -> bool:
+        return self.room.status == Room.Status.CLOSED
 
     def snapshot_message(self, player_id: str) -> dict[str, Any]:
         """A full ``table.snapshot`` envelope for ``player_id``, built directly (no queue).
@@ -206,6 +254,13 @@ class TableActor:
                 await self._on_take_seat(item)
             case _LeaveSeat():
                 await self._on_leave_seat(item)
+            case _Call():
+                try:
+                    result = await item.fn()
+                except Exception as error:
+                    item.future.set_exception(error)
+                else:
+                    item.future.set_result(result)
 
     # ---- connections -------------------------------------------------------------------
 
@@ -365,6 +420,8 @@ class TableActor:
         """
         if self.hand is not None or self.suspended or not self.connections:
             return
+        if self.closed or self.closing:
+            return
         previous_button = self.session._button_seat
         try:
             engine = self.session.start_hand()
@@ -459,13 +516,21 @@ class TableActor:
             },
             hand_id=hand_pk,
         )
-        self._schedule_next_hand()
+        # Between hands now: the owner's changes made during the hand take effect.
+        if self.pending:
+            await self._apply_settings()
+        if self.closing:
+            await self._finish_close()
+        else:
+            self._schedule_next_hand()
 
     # ---- seats (REST) ----------------------------------------------------------------------
 
     async def _on_take_seat(self, item: _TakeSeat) -> None:
         player_id = str(item.user.pk)
         try:
+            if self.closed or self.closing:
+                raise Reject("room_closed")
             if player_id in self.session.seats.values():
                 raise Reject("already_seated")
             if item.seat in self.session.seats:
@@ -499,6 +564,85 @@ class TableActor:
             await self._seat_updated(seat)
             item.future.set_result(None)
 
+    # ---- owner actions (B7) ------------------------------------------------------------------
+
+    async def _grant_chips(self, player_id: str, amount: int) -> int:
+        if player_id not in self.session.seats.values():
+            raise Reject("not_seated")
+        before = len(self.session.ledger)
+        try:
+            self.session.grant_chips(player_id, amount)
+        except TableError as error:
+            raise Reject(error.code, str(error)) from error
+        try:
+            await LedgerEntry.objects.acreate(
+                room=self.room, user_id=int(player_id), kind=LedgerKind.GRANT, amount=amount
+            )
+        except Exception:
+            del self.session.ledger[before:]  # not recorded: undo the in-memory entry too
+            raise
+        await self._seat_updated(self._seat_of(player_id))
+        await self._maybe_start_hand()
+        return self.session.stacks[player_id]
+
+    async def _update_settings(self, changes: dict[str, Any]) -> None:
+        current = {key: getattr(self.room, key) for key in ROOM_SETTINGS}
+        merged = {**current, **self.pending, **changes}
+        if merged["small_blind"] >= merged["big_blind"]:
+            raise Reject("validation_error", "small_blind must be below big_blind")
+        self.pending.update(changes)
+        if self.hand is None:
+            await self._apply_settings()
+
+    async def _apply_settings(self) -> None:
+        changes, self.pending = self.pending, {}
+        for key, value in changes.items():
+            setattr(self.room, key, value)
+        await self.room.asave(update_fields=list(changes))
+        self.session.small_blind = self.room.small_blind
+        self.session.big_blind = self.room.big_blind
+        self.session.seven_deuce_bonus = self.room.seven_deuce_bonus
+        await self._room_updated()
+
+    async def _kick(self, user_id: int) -> None:
+        player_id = str(user_id)
+        if self.session._in_hand(player_id):
+            raise Reject("player_in_hand")
+        seat = self._seat_of(player_id) if player_id in self.session.seats.values() else None
+        if seat is not None:
+            self.session.stand_up(player_id)
+            await RoomSeat.objects.filter(room=self.room, user_id=user_id).adelete()
+        await RoomBan.objects.aget_or_create(room=self.room, user_id=user_id)
+        await RoomMember.objects.filter(room=self.room, user_id=user_id).adelete()
+        # Drop their connections first so they get nothing more, then close them.
+        kicked = [conn for conn, player in self.connections.items() if player == player_id]
+        layer = get_channel_layer()
+        for conn in kicked:
+            self.connections.pop(conn)
+            channel = self.channels.pop(conn, None)
+            if channel is not None and layer is not None:
+                await layer.send(channel, {"type": "table.close", "code": KICKED_CLOSE_CODE})
+        if seat is not None:
+            await self._seat_updated(seat)
+
+    async def _close(self) -> bool:
+        if self.closed:
+            return True
+        if self.hand is not None:
+            self.closing = True
+            return False
+        await self._finish_close()
+        return True
+
+    async def _finish_close(self) -> None:
+        self.closing = False
+        self.room.status = Room.Status.CLOSED
+        await self.room.asave(update_fields=["status"])
+        await self._room_updated()
+
+    async def _room_updated(self) -> None:
+        await self._broadcast("room.updated", lambda viewer: {"room": self._room_info()})
+
     # ---- fail-stop (ADR-001 mục 5) ---------------------------------------------------------
 
     async def _fail_stop(self, reason: str, hand_id: int | None = None) -> None:
@@ -526,7 +670,12 @@ class TableActor:
         return {"hand_id": self.hand.pk, "hand_no": self.session.hand_no, **engine.view_for(seated)}
 
     def _room_info(self) -> dict[str, Any]:
-        status = "suspended" if self.suspended else ("playing" if self.hand else "open")
+        if self.closed:
+            status = "closed"
+        elif self.suspended:
+            status = "suspended"
+        else:
+            status = "playing" if self.hand else "open"
         return {
             "room_id": self.room.pk,
             "name": self.room.name,

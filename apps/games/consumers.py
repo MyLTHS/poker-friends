@@ -11,15 +11,30 @@ import uuid
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 
+from apps.accounts.ratelimit import RateLimited
+
 from . import actor as actor_module
-from . import contract
+from . import contract, rooms
 from .accounts import player_for_scope
+from .models import Room
+
+NO_ACCESS_CLOSE_CODE = 4404
 
 
 class RoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_id = int(self.scope["url_route"]["kwargs"]["room_id"])
+        room = await Room.objects.filter(pk=self.room_id).afirst()
+        user = self.scope.get("user")
+        if room is None or (room.is_private and not (user and user.is_authenticated)):
+            await self.close(code=NO_ACCESS_CLOSE_CODE)
+            return
         user = await player_for_scope(self.scope)
+        verdict = await rooms.access(room, user)
+        if verdict != "ok":
+            code = NO_ACCESS_CLOSE_CODE if verdict == "hidden" else actor_module.KICKED_CLOSE_CODE
+            await self.close(code=code)
+            return
         self.player_id = str(user.pk)
         self.conn = uuid.uuid4().hex
         await self.accept()
@@ -61,11 +76,21 @@ class RoomConsumer(AsyncWebsocketConsumer):
         if message["type"] == "resync.request":
             await self.send(text_data=json.dumps(self.actor.snapshot_message(self.player_id)))
             return
+        try:
+            # The default cache is in-process memory, so this does not block the event loop.
+            rooms.COMMANDS_PER_PLAYER.hit(self.player_id)
+        except RateLimited:
+            await self._rejected(command_id, "rate_limited", "Too many commands.")
+            return
         self.actor.submit_command(self.conn, self.player_id, message)
 
     async def table_message(self, event):
         """From the actor via the channel layer: relay as-is."""
         await self.send(text_data=event["text"])
+
+    async def table_close(self, event):
+        """From the actor: this player was kicked (B7)."""
+        await self.close(code=event["code"])
 
     async def _reply(self, type_: str, payload: dict) -> None:
         actor = getattr(self, "actor", None)

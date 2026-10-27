@@ -34,6 +34,10 @@ class Room(models.Model):
     # Fixed chip bonus every other seated player (sit-out included) owes a showdown winner
     # holding a 7 and a 2 (any suits). 0 means the room has no seven-deuce bonus.
     seven_deuce_bonus = models.PositiveIntegerField(default=0)
+    # Private rooms are hidden from the lobby; only the owner and members (who opened the invite
+    # link) see them. The token is in the invite link; rotating it kills old links.
+    is_private = models.BooleanField(default=False)
+    invite_token = models.CharField(max_length=43, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -73,6 +77,30 @@ class RoomSeat(models.Model):
         if self.seat > self.room.max_seats:
             raise ValidationError(f"Seat {self.seat} is beyond this room's {self.room.max_seats}.")
         super().save(*args, **kwargs)
+
+
+class RoomMember(models.Model):
+    """Someone allowed into a private room: joined through its invite link (or the owner)."""
+
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="members")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="room_memberships")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["room", "user"], name="unique_member_per_room")
+        ]
+
+
+class RoomBan(models.Model):
+    """Someone the owner kicked: they cannot see (if private), join or sit in the room again."""
+
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="bans")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="room_bans")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["room", "user"], name="unique_ban_per_room")]
 
 
 class LedgerKind(models.TextChoices):

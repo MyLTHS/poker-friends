@@ -7,6 +7,7 @@ Errors are ``{"code", "message", "fields"?}`` (ApiError).
 
 from django.conf import settings
 from django.contrib.auth import logout
+from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import exceptions, status
@@ -209,3 +210,12 @@ class UpgradeView(AccountView):
             request, data["email"], data["password"], data.get("username")
         )
         return me(user)
+
+
+def csrf_failure(request, reason=""):
+    """CSRF_FAILURE_VIEW: API callers get an ApiError, not Django's HTML page."""
+    if request.path.startswith("/api/"):
+        return JsonResponse({"code": "forbidden", "message": f"CSRF failed: {reason}"}, status=403)
+    from django.views.csrf import csrf_failure as default
+
+    return default(request, reason)

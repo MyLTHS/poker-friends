@@ -121,6 +121,7 @@ INSTALLED_APPS += [
     "apps.accounts",
 ]
 MIDDLEWARE += ["allauth.account.middleware.AccountMiddleware"]
+CSRF_FAILURE_VIEW = "apps.accounts.views.csrf_failure"  # JSON ApiError under /api/
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
