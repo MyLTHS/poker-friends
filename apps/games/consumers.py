@@ -16,7 +16,7 @@ from apps.accounts.ratelimit import RateLimited
 from . import actor as actor_module
 from . import contract, rooms
 from .accounts import player_for_scope
-from .models import Room
+from .models import Room, User
 
 NO_ACCESS_CLOSE_CODE = 4404
 GUEST_LIMIT_CLOSE_CODE = 4429
@@ -58,6 +58,12 @@ class RoomConsumer(AsyncWebsocketConsumer):
             self.actor.disconnect(self.conn)
 
     async def receive(self, text_data=None, bytes_data=None):
+        if not await User.objects.filter(pk=int(self.player_id), is_active=True).aexists():
+            # Locked in the admin while connected. Auth already treats an inactive account as
+            # logged out for new requests; this socket was opened before and must stop too.
+            # 4403 like a kick, so the client does not keep reconnecting.
+            await self.close(code=actor_module.KICKED_CLOSE_CODE)
+            return
         try:
             message = json.loads(text_data) if text_data is not None else None
         except ValueError as error:

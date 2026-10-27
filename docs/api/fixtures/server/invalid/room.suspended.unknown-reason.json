@@ -7,6 +7,6 @@
   "server_time": "2026-10-27T14:03:44.902Z",
   "payload": {
     "reason": "maintenance",
-    "message": "Chip conservation violated after a recorded command."
+    "message": "The table stopped after a server error and waits for recovery."
   }
 }

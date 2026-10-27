@@ -144,6 +144,14 @@ class _Call:
 # Settings the owner may change (PATCH /api/rooms/{id}/); they apply between hands.
 ROOM_SETTINGS = ("name", "small_blind", "big_blind", "think_time_seconds", "seven_deuce_bonus")
 KICKED_CLOSE_CODE = 4403
+# A client that stopped reading (its channel is full) is dropped, then its socket is closed with
+# this code once the channel has room: the client reconnects and gets a fresh snapshot.
+RESYNC_CLOSE_CODE = 4408
+CLOSE_RETRY_SECONDS = 1.0
+CLOSE_ATTEMPTS = 30
+# What clients see when a room stops (fail-stop). The cause goes to the server log only: an
+# engine error can quote the deck or someone's hole cards.
+SUSPENDED_MESSAGE = "The table stopped after a server error and waits for recovery."
 
 
 class TableActor:
@@ -168,6 +176,7 @@ class TableActor:
         self.closing = False  # the owner closed the room during a hand
         self._audience: list[dict[str, str]] = []  # last spectator list sent (B8)
         self._pausing = False  # between two hands, waiting for next_hand_delay
+        self._closers: set[asyncio.Task] = set()  # see _drop_full
         self._task = asyncio.create_task(self._run())
 
     # ---- public: called from consumers/views, never touches the engine directly -----------
@@ -239,6 +248,8 @@ class TableActor:
     async def stop(self) -> None:
         if self._deadline_timer:
             self._deadline_timer.cancel()
+        for closer in list(self._closers):
+            closer.cancel()
         self._task.cancel()
         try:
             await self._task
@@ -786,7 +797,7 @@ class TableActor:
         self.suspended = True
         await self._broadcast(
             "room.suspended",
-            lambda viewer: {"reason": "recovery_needed", "message": reason},
+            lambda viewer: {"reason": "recovery_needed", "message": SUSPENDED_MESSAGE},
             hand_id=hand_id,
         )
 
@@ -914,14 +925,7 @@ class TableActor:
         for conn, viewer in list(self.connections.items()):
             if conn == exclude:
                 continue
-            try:
-                await self._send(conn, type_, payload_for(viewer), hand_id)
-            except ChannelFull:
-                # That client stopped reading: drop it (it resyncs from a snapshot when it
-                # reconnects) rather than fail the whole room for one slow socket.
-                log.warning("room %s: channel full, dropping connection %s", self.room.pk, conn)
-                self.connections.pop(conn, None)
-                self.channels.pop(conn, None)
+            await self._send(conn, type_, payload_for(viewer), hand_id)
 
     async def _reply(self, conn: str, type_: str, payload: dict[str, Any]) -> None:
         await self._send(conn, type_, payload, self.hand.pk if self.hand else None)
@@ -935,6 +939,16 @@ class TableActor:
         await self._reply(conn, "command.ack", payload)
 
     async def _rejected(self, conn, command_id, code, message="") -> None:
+        # The only trace of a rejected command (ADR-001 mục 3): it never reaches HandCommand.
+        log.info(
+            "room %s hand %s: rejected command %s from player %s: %s %s",
+            self.room.pk,
+            self.hand.pk if self.hand else None,
+            command_id,
+            self.connections.get(conn),
+            code,
+            message,
+        )
         payload = {"command_id": command_id, "code": code, "message": message or code}
         await self._reply(conn, "command.rejected", payload)
 
@@ -954,7 +968,34 @@ class TableActor:
         channel = self.channels.get(conn)
         layer = get_channel_layer()
         if channel is not None and layer is not None:
-            await layer.send(channel, {"type": "table.message", "text": json.dumps(message)})
+            try:
+                await layer.send(channel, {"type": "table.message", "text": json.dumps(message)})
+            except ChannelFull:
+                self._drop_full(conn)
+
+    def _drop_full(self, conn: str) -> None:
+        """That client stopped reading: drop it rather than fail the whole room for one slow
+        socket. It has missed an event, so close its socket as soon as the channel has room;
+        the client then reconnects and resyncs from a snapshot."""
+        log.warning("room %s: channel full, dropping connection %s", self.room.pk, conn)
+        self.connections.pop(conn, None)
+        channel = self.channels.pop(conn, None)
+        if channel is None:
+            return
+
+        async def close() -> None:
+            layer = get_channel_layer()
+            for _ in range(CLOSE_ATTEMPTS):
+                try:
+                    await layer.send(channel, {"type": "table.close", "code": RESYNC_CLOSE_CODE})
+                    return
+                except ChannelFull:
+                    await asyncio.sleep(CLOSE_RETRY_SECONDS)
+            log.warning("room %s: could not close full connection %s", self.room.pk, conn)
+
+        closer = asyncio.create_task(close())
+        self._closers.add(closer)
+        closer.add_done_callback(self._closers.discard)
 
 
 def _asked(player_id: str, kind: str, payload: dict[str, Any]) -> tuple:

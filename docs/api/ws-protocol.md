@@ -29,7 +29,12 @@ Các file đi kèm:
 ## 2. Kết nối
 
 - URL (B4): `ws://<host>/ws/rooms/<room_id>/`. Đăng nhập bằng cookie phiên của Django (khách
-  hoặc tài khoản thật, xem B6); chưa đăng nhập thì server đóng kết nối ngay khi bắt tay.
+  hoặc tài khoản thật, xem B6). Chưa đăng nhập mà vào phòng **public**: server tạo luôn một tài
+  khoản khách và đăng nhập cho người đó (như `POST /api/auth/guest/`, tính vào giới hạn khách mỗi
+  IP; hết lượt thì đóng với mã 4429). WebSocket không đặt được cookie, nên trình duyệt chưa có cookie
+  thì mỗi kết nối là một khách mới: web app gọi REST trước để có cookie. Phòng **private** thì phải
+  đã đăng nhập (khách cũng được) và có quyền xem, không thì đóng với mã 4404 (các mã đóng: xem
+  cuối phần `room.updated`).
 - Mock server dùng tạm `ws://localhost:8765/ws/rooms/1/?player=<player_id>` để chọn mình là ai.
 - Mỗi message là **một object JSON trong một frame text**.
 - Vừa kết nối xong, server gửi ngay một `table.snapshot` cho riêng người đó.
@@ -384,7 +389,8 @@ không biết chắc trạng thái nên **dừng phòng** (fail-stop) thay vì �
 
 1. Lệnh đó **không** nhận `command.ack` hay `command.rejected`: kết quả chưa biết.
 2. Cả phòng nhận `room.suspended` (`reason: "recovery_needed"`). Client hiện "Bàn tạm dừng" và tắt
-   nút hành động.
+   nút hành động. `message` luôn là một câu cố định; nguyên nhân chỉ ghi ở log server (lỗi engine có
+   thể nhắc tới bộ bài hay bài tẩy).
 3. Trong lúc tạm dừng: mọi lệnh nhận `command.rejected` mã `room_suspended`; kết nối mới nhận
    `table.snapshot` với `room.status` là `"suspended"`.
    Phòng cũng mở ra ở trạng thái này nếu lúc server khởi động lại, ván dở không dựng lại được (B5).
@@ -398,7 +404,7 @@ không biết chắc trạng thái nên **dừng phòng** (fail-stop) thay vì �
   "protocol_version": 1, "type": "room.suspended", "room_id": 1, "hand_id": 41,
   "version": 23, "server_time": "2026-10-27T14:03:44.902Z",
   "payload": {"reason": "recovery_needed",
-              "message": "Chip conservation violated after a recorded command."}
+              "message": "The table stopped after a server error and waits for recovery."}
 }
 ```
 
@@ -422,10 +428,15 @@ trong DB nên không mất khi server khởi động lại. Đóng phòng giữa
 ```
 
 Người bị chủ phòng kick: cả bàn nhận `seat.updated` (ghế trống); mọi kết nối của người đó bị server
-đóng với mã **4403**, và người đó không vào lại được phòng (REST trả `kicked`). Kết nối vào phòng
+đóng với mã **4403**, và người đó không vào lại được phòng (REST trả `kicked`). Tài khoản bị khóa
+trong admin (bỏ "active") lúc đang kết nối: tin kế tiếp người đó gửi không được xử lý, server đóng
+kết nối với **4403** (tới lúc đó họ vẫn nhận tin của bàn). Kết nối vào phòng
 private mà không có quyền xem: mã **4404**. Chưa đăng nhập và IP này đã tạo quá nhiều khách
 (20/giờ): mã **4429**. Server nhận bắt tay rồi mới đóng, để trình duyệt thấy được mã (đóng ngay lúc
 bắt tay thì trình duyệt chỉ thấy 1006). Client **không thử kết nối lại** khi nhận 4403 hay 4404.
+Client đọc không kịp (kênh của kết nối đầy): server bỏ kết nối đó khỏi bàn (nó đã lỡ ít nhất một sự
+kiện) rồi đóng với mã **4408** ngay khi kênh có chỗ; client kết nối lại như mất mạng và nhận
+snapshot mới.
 
 ### `chat.message` (thông báo, B8)
 

@@ -377,7 +377,7 @@ export interface RoomSuspendedMessage {
      */
     reason: "recovery_needed";
     /**
-     * For logs and developers, not for players.
+     * A fixed sentence, not for players. The cause is in the server log only: it may name cards.
      */
     message: string;
   };

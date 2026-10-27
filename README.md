@@ -10,9 +10,10 @@ No-Limit Texas Hold'em chip ảo cho nhóm bạn. Backend Django + PokerKit.
 
 Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đoán, bài tập) ở [docs/roadmap.md](docs/roadmap.md).
 
-**Đang ở:** A và B1 đã được chủ dự án duyệt; B2 và B3 đã gộp vào `main`, chờ duyệt. B4a và B6
-xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản thiết kế cho C1; B4b
-(nối trang React với backend thật, Playwright) làm sau.
+**Đang ở:** A và B1 đã được chủ dự án duyệt. B2 tới B8 (kể cả B4b nối trang React với backend
+thật, E2E Playwright) đã gộp vào `main`, chờ duyệt; staging của B5 chờ VPS. Đã sửa các điểm phải
+sửa trước C của đợt kiểm tra chỉ-đọc toàn bộ B; phần để lại ghi ở [Việc còn lại](#việc-còn-lại-cho-d-và-e).
+**C1: ba hướng thiết kế đã vẽ xong (nhánh `claude/c1-designs`), chờ chủ dự án chọn.**
 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
@@ -20,12 +21,13 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản
 | B1 | Engine luật chơi | ✅ Đã duyệt |
 | B2 | Dữ liệu | ✅ Xong code, chờ duyệt |
 | B3 | Hợp đồng API | ✅ Xong code, chờ duyệt |
-| B4 | Bàn chơi realtime | 🟡 B4a (backend) xong code, chờ duyệt; B4b (nối React, Playwright) chưa bắt đầu |
+| B4 | Bàn chơi realtime | ✅ B4a (backend) và B4b (nối React, E2E Playwright) xong code, chờ duyệt |
 | B5 | Độ bền + staging | 🟡 Phần code xong, chờ duyệt; staging chờ VPS |
 | B6 | Tài khoản | ✅ Xong code, chờ duyệt |
 | B7 | Phòng và quyền | ✅ Xong code, chờ duyệt |
 | B8 | Xã hội và quản trị | ✅ Xong code, chờ duyệt |
-| C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, một Claude riêng chỉ đọc review) |
+| C1 | Thiết kế | 🟡 Ba hướng đã vẽ xong, **chờ chủ dự án chọn** |
+| C2–C5 | Frontend | ⬜ Chưa bắt đầu (làm theo hướng được chọn ở C1) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
 | F | Beta với bạn bè | ⬜ |
@@ -128,7 +130,8 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản
   private chỉ chủ phòng, thành viên vào bằng link và người đang ngồi thấy (REST và WebSocket)
 - [x] Quyền chủ phòng qua hàng đợi của actor: cấp/trừ chip (không khi người đó đang trong ván, không
   âm), đổi blind/thời gian/thưởng 7-2 (giữa ván thì chờ ván sau, phát `room.updated`), kick (rời
-  ghế, đóng kết nối, không vào lại được), đóng phòng (giữa ván thì đóng khi ván xong)
+  ghế, đóng kết nối, không vào lại được; phòng private đổi luôn link mời, phòng public chỉ chặn
+  được tài khoản, xem [spec](docs/spec.md)), đóng phòng (giữa ván thì đóng khi ván xong)
 - [x] Rate limit tạo phòng (10/giờ mỗi người) và lệnh WebSocket (20/10 giây mỗi người chơi)
 - [x] Trang thử `web/` → `/rooms`: lobby, tạo phòng, link mời (`/rooms/join?token=`), bảng chủ phòng
   (cấp/trừ chip, kick, đổi cấu hình, đổi link, đóng phòng); ghế cập nhật qua REST mỗi 3 giây
@@ -163,6 +166,20 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản
 - [ ] E. CD production: gắn tag `vX.Y.Z` thì deploy image đã chạy trên staging; rollback về tag trước
 - [ ] F. Beta: 2–3 buổi chơi thật; một buổi 2 giờ không sai chip, không lộ bài, không crash
 - [ ] G. Nhìn lại: retrospective, sổ bài học, chọn hướng tiếp
+
+### Việc còn lại cho D và E
+
+Từ đợt kiểm tra chỉ-đọc toàn bộ B (trước C). Không chặn C; làm ở D hoặc E:
+
+- [ ] `DJANGO_DEBUG` mặc định là bật khi `.env` không ghi gì: production phải đặt rõ
+  `DJANGO_DEBUG=False` (E); cân nhắc đổi mặc định thành tắt.
+- [ ] Vào/rời ghế qua REST chưa có rate limit riêng (lệnh WebSocket và tạo phòng đã có).
+- [ ] `Hand` chưa lưu ai đã trả thưởng 7-2 bao nhiêu: hiện chỉ suy ra từ các dòng `LedgerEntry`
+  loại `seven_deuce` của ván đó.
+- [ ] Staging (chờ VPS), CD production, backup hằng ngày (đã có trong E ở trên).
+- Chấp nhận, không làm: kick trong phòng public chỉ chặn tài khoản, không chặn người đó mở tài khoản
+  khách mới (không chặn theo IP, [spec](docs/spec.md)); tài khoản bị khóa lúc đang kết nối vẫn nhận
+  tin của bàn tới khi gửi tin kế tiếp thì bị đóng (4403).
 
 ## Chạy
 

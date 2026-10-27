@@ -76,17 +76,18 @@ Phát hiện quan trọng về PokerKit cần nhớ khi code các lớp trên (c
 check miễn phí ở `Mode.CASH_GAME` — engine phải tự quyết `can_fold = call_amount > 0`, không dựa
 vào `can_fold()` của PokerKit.
 
-### 2. Lớp dữ liệu (B2 — chưa code)
+### 2. Lớp dữ liệu (B2 — đã code, `apps/games/models.py`)
 
-Model dự kiến:
+Các model chính (B7–B8 thêm `RoomMember`, `RoomBan`, `OwnerAction`, `ChatMessage`; đủ danh sách và
+ràng buộc: `apps/games/models.py`):
 
 | Model | Vai trò | Ghi chú |
 |---|---|---|
 | `User` | Tài khoản, có cờ `is_guest` | Khách nâng cấp lên thật vẫn giữ nguyên `id` → giữ lịch sử + chip |
-| `Room` | Một bàn/phòng chơi | Trạng thái `open → playing → closed`; cấu hình blind, số ghế, thời gian suy nghĩ, `seven_deuce_bonus` (luật #27, 0 = tắt thưởng) |
+| `Room` | Một bàn/phòng chơi | `status` trong DB chỉ là `open` hoặc `closed`; `playing` (đang có ván) và `suspended` (chờ khôi phục) là trạng thái **tính ra** lúc gửi cho client, không lưu; cấu hình blind, số ghế, thời gian suy nghĩ, `seven_deuce_bonus` (luật #27, 0 = tắt thưởng) |
 | `RoomSeat` | Một người ngồi ở một ghế của một `Room` | Gắn `User` ↔ `Room`, số ghế (1 đến `max_seats` của phòng, DB kiểm bằng trigger), trạng thái sit-out |
 | `LedgerEntry` | Bút toán chip | **Chỉ ghi thêm (append-only)** — không `UPDATE`/`DELETE` dòng cũ; mọi thay đổi chip (cấp, kết quả ván, thưởng luật 7-2) là một dòng mới. `kind`: `grant` / `hand` / `seven_deuce`; dòng `hand`/`seven_deuce` trỏ tới `Hand` cùng phòng, `grant` thì không. Trigger PostgreSQL chặn cả SQL thô |
-| `Hand` | Một ván đã chơi xong | Lưu `HandConfig` (ghế/stack/button/blind/bộ bài/mức thưởng 7-2) + `result` (kết quả lúc ván xong, để đối chiếu khi replay), đủ để `HandEngine.replay()` lại |
+| `Hand` | Một ván, ghi lúc chia bài (`completed_at` có khi ván xong) | Lưu `HandConfig` (ghế/stack/button/blind/bộ bài/mức thưởng 7-2) + `result` (kết quả lúc ván xong, để đối chiếu khi replay), đủ để `HandEngine.replay()` lại |
 | `HandCommand` | Một lệnh người chơi đã được áp dụng vào một `Hand` | Ghi **trước khi** áp vào engine (xem mục 3) — là nguồn phục hồi khi process chết giữa ván. `sequence` cho thứ tự replay; **chỉ ghi thêm** như ledger; xóa `Hand` bị chặn (`PROTECT`) |
 
 Bất biến bắt buộc có test: **tổng `LedgerEntry` của một `Room` luôn bằng tổng chip đã cấp cho
@@ -96,7 +97,8 @@ Ghi `LedgerEntry` luôn trong một DB transaction cùng với bản ghi kết q
 
 ### 3. Lớp điều phối — Table actor (B3–B4, ADR-001)
 
-Quyết định kiến trúc (thống nhất với Codex ở `docs/collab/`, sẽ chốt thành `ADR-001` ở B3):
+Quyết định kiến trúc (thống nhất với Codex ở `docs/collab/`, đã chốt thành
+[ADR-001](adr/ADR-001-table-actor.md) ở B3):
 
 - Một process ASGI; **mỗi phòng (room) có một asyncio task + một hàng đợi lệnh riêng** — đây
   chính là "writer duy nhất" cho bàn đó, tránh phải dùng khoá (lock) khi nhiều người bấm cùng lúc.
@@ -146,6 +148,10 @@ Quyết định kiến trúc (thống nhất với Codex ở `docs/collab/`, s�
 - Quyền chủ phòng (gắn trên `Room`, không phải vai trò toàn hệ thống): cấp/điều chỉnh chip khi
   người đó không trong ván, đổi blind/thời gian suy nghĩ cho ván kế tiếp, kick, đóng phòng.
   Không có khái niệm club/đại lý.
+- Kick chặn **tài khoản**. Phòng private: kick đổi luôn link mời, nên người bị kick không quay lại
+  được bằng một tài khoản khách mới qua link cũ. Phòng public ai cũng vào được, nên kick không chặn
+  được người đó mở một tài khoản khách mới (trình duyệt ẩn danh). Chấp nhận giới hạn này cho bàn
+  bạn bè; không chặn theo IP (nhiều người chung một mạng nhà/quán).
 - Rate limit ở tầng API cho: đăng nhập, tạo phòng, gửi lệnh WebSocket — chống spam/brute-force ở
   quy mô nhỏ mà không cần hạ tầng riêng (không Celery/queue ngoài).
 

@@ -67,7 +67,10 @@ Lệnh sai luật, sai lượt, trùng `command_id` với nội dung khác… **
 
 ### 4. Khôi phục bằng `HandEngine.replay`
 
-Khi process khởi động (hoặc actor của một phòng được tạo lại):
+Khôi phục chạy **lười**, từng phòng: process khởi động không dựng gì cả; actor của một phòng được
+dựng lại (`get_actor`) lúc có người đầu tiên mở phòng đó (kết nối WebSocket, hoặc một thao tác bàn
+qua REST: vào/rời ghế, sit-out, cấp chip, kick…). Trước lúc đó, lobby và trang phòng chỉ đọc DB
+(ván dở hiện là `playing`). Khi dựng:
 
 1. Tìm `Hand` của phòng chưa có `completed_at` (ván dở).
 2. `HandEngine.replay(hand.replay_record())`: dựng lại từ cấu hình đã lưu (ghế, stack, button,
@@ -212,7 +215,8 @@ trùng theo `(hand, command_id)`, khôi phục mục 4 và fail-stop mục 5. Nh
 - Đồng hồ mang số lượt lúc hẹn, chỉ tác động đúng lượt đó; lệnh hết giờ tên `timeout:<hand>-<n>`
   (client không gửi được dấu `:`), ghi thất bại thì hẹn lại sau 1 giây.
 - Lỗi sau khi đã ghi lệnh (kể cả khi phát sự kiện) đều fail-stop; một kết nối bị đầy kênh
-  (`ChannelFull`) thì chỉ bỏ kết nối đó.
+  (`ChannelFull`) thì chỉ bỏ kết nối đó, rồi đóng socket của nó (mã 4408) khi kênh có chỗ để client
+  kết nối lại và nhận snapshot (sửa sau đợt kiểm tra B).
 - Snapshot lúc ván mới đã chia trong bộ nhớ mà `Hand` chưa ghi xong: coi như giữa hai ván.
 - Lệnh của ván khác ván đang chạy được tra trong `HandCommand`: gửi lại lệnh cuối sau sự cố nhận ack
   trùng (`result_version: null`).

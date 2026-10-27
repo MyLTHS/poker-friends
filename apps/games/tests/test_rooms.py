@@ -394,7 +394,9 @@ class TestKick:
             again = await alogged_in(a)
             seat = await apost(again, f"/api/rooms/{room.pk}/seats/", {"seat": 3})
             assert seat.status_code == 403 and seat.json()["code"] == "kicked"
-            join = await apost(again, "/api/rooms/join/", {"invite_token": "invite-token-for-test"})
+            # Even with the new link (the kick changed it; test_audit.py checks the old one).
+            new_link = (await Room.objects.aget(pk=room.pk)).invite_token
+            join = await apost(again, "/api/rooms/join/", {"invite_token": new_link})
             assert join.status_code == 403 and join.json()["code"] == "kicked"
 
         run_async(body)

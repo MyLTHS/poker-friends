@@ -361,7 +361,14 @@ async def kick(request: HttpRequest, room_id: int) -> JsonResponse:
         await live.kick(int(player_id))
     except actor_module.Reject as reject:
         return _reject_response(reject)
-    await log_action(room, user, OwnerAction.Kind.KICK, {"player_id": player_id})
+    details: dict[str, Any] = {"player_id": player_id}
+    if room.is_private:
+        # The ban stops the account, not the same person opening the old link as a new guest.
+        # A public room has no link to change: there a kick stops the account only (spec.md).
+        room.invite_token = new_invite_token()
+        await room.asave(update_fields=["invite_token"])
+        details["invite_rotated"] = True
+    await log_action(room, user, OwnerAction.Kind.KICK, details)
     return JsonResponse(None, status=204, safe=False)
 
 
