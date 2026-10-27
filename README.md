@@ -92,7 +92,10 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản
   hết giờ tự check/fold (đồng hồ tối thiểu, đầy đủ ở B5)
 - [x] B4a: test lệnh đồng thời, trùng `command_id`, hết giờ đua với lệnh, khôi phục sau crash
   (kể cả ván xong mà chưa lưu), fail-stop; chơi thật một ván 2 người qua Daphne
-- [ ] B4b: trang React nối backend thật; Playwright nhiều trình duyệt
+- [x] B4b: trang React nối backend thật: `/rooms/<id>/table` (REST snapshot trước để có cookie
+  phiên, rồi WebSocket Django), reducer nhận `room.updated`; thử tay một ván trọn với người chơi
+  thứ hai qua WebSocket
+- [ ] B4b: Playwright 2–3 trình duyệt (cần tải trình duyệt Chromium, chờ chủ dự án đồng ý)
 - [ ] Duyệt với chủ dự án
 
 **B5. Độ bền + staging**

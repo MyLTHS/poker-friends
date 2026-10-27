@@ -156,6 +156,9 @@ export function RoomScreen({ roomId }: { roomId: number }) {
           }}
         />
       )}
+      <Link href={`/rooms/${roomId}/table`} className="btn btn-primary text-sm">
+        Vào bàn chơi
+      </Link>
       <ChatPanel live={live} say={say} />
       <Link href={`/rooms/${roomId}/history`} className="btn btn-secondary text-sm">
         Lịch sử ván và bảng lời/lỗ

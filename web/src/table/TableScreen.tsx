@@ -21,7 +21,27 @@ function useNow(intervalMs: number) {
 
 const newCommandId = () => crypto.randomUUID();
 
-export function TableScreen({ url }: { url: string }) {
+const MOCK_HELP = (
+  <>
+    Mock server chạy chưa? Mở một terminal và chạy <code>uv run python -m mockserver</code>.
+  </>
+);
+
+/**
+ * The table over one WebSocket. `url` is the mock server's (`/table`) or Django's
+ * (`/rooms/<id>/table`, B4b); the protocol is the same.
+ */
+export function TableScreen({
+  url,
+  backHref = "/",
+  backLabel = "Chọn người chơi khác",
+  help = MOCK_HELP,
+}: {
+  url: string;
+  backHref?: string;
+  backLabel?: string;
+  help?: React.ReactNode;
+}) {
   const { model, dispatch } = useTableSocket(url);
   const now = useNow(250);
   const { table } = model;
@@ -33,7 +53,7 @@ export function TableScreen({ url }: { url: string }) {
           <p className="text-lg font-bold">Đang nối tới bàn chơi…</p>
           <p className="mt-2 text-sm text-[var(--muted)]">
             {model.status === "reconnecting" ? "Chưa nối được, đang thử lại. " : ""}
-            Mock server chạy chưa? Mở một terminal và chạy <code>uv run python -m mockserver</code>.
+            {help}
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">{url}</p>
         </div>
@@ -75,7 +95,7 @@ export function TableScreen({ url }: { url: string }) {
       <div className="game-shell">
         <div className="game-head">
           <div>
-            <Link className="icon-btn" href="/" aria-label="Chọn người chơi khác">
+            <Link className="icon-btn" href={backHref} aria-label={backLabel}>
               <ArrowLeft />
             </Link>
             <div>
