@@ -24,10 +24,10 @@ class RoomAdmin(admin.ModelAdmin):
 
 @admin.register(LedgerEntry)
 class LedgerEntryAdmin(admin.ModelAdmin):
-    list_display = ("room", "user", "kind", "amount", "hand_no", "created_at")
+    list_display = ("room", "user", "kind", "amount", "hand", "created_at")
     list_filter = ("room", "kind")
     # Append-only: the admin must not offer ways to edit or delete a settled entry.
-    readonly_fields = ("room", "user", "kind", "amount", "hand_no", "created_at")
+    readonly_fields = ("room", "user", "kind", "amount", "hand", "created_at")
 
     def has_change_permission(self, request, obj=None):
         return False

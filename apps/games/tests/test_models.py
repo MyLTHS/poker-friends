@@ -6,6 +6,7 @@ hand), they never create or destroy any.
 """
 
 import pytest
+from django.core.exceptions import ValidationError
 from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.db.models import Sum
 
@@ -48,6 +49,10 @@ def make_user(username: str, is_guest: bool = False) -> User:
     return User.objects.create_user(username=username, is_guest=is_guest)
 
 
+def make_hand(room: Room, hand_no: int = 1) -> Hand:
+    return Hand.objects.create(room=room, hand_no=hand_no, button_seat=1, config={})
+
+
 def make_grant(amount: int = 1000) -> LedgerEntry:
     return LedgerEntry.objects.create(
         room=make_room(), user=make_user("alice"), kind=LedgerKind.GRANT, amount=amount
@@ -72,10 +77,11 @@ class TestLedgerInvariant:
         granted = LedgerEntry.objects.filter(room=room).aggregate(total=Sum("amount"))["total"]
 
         # Alice wins 50 off Bob: a zero-sum pair of entries for the same hand.
+        hand = make_hand(room)
         LedgerEntry.objects.create(
-            room=room, user=alice, kind=LedgerKind.HAND, amount=50, hand_no=1
+            room=room, user=alice, kind=LedgerKind.HAND, amount=50, hand=hand
         )
-        LedgerEntry.objects.create(room=room, user=bob, kind=LedgerKind.HAND, amount=-50, hand_no=1)
+        LedgerEntry.objects.create(room=room, user=bob, kind=LedgerKind.HAND, amount=-50, hand=hand)
 
         total = LedgerEntry.objects.filter(room=room).aggregate(total=Sum("amount"))["total"]
         assert total == granted
@@ -87,11 +93,12 @@ class TestLedgerInvariant:
         LedgerEntry.objects.create(room=room, user=bob, kind=LedgerKind.GRANT, amount=1000)
         granted = LedgerEntry.objects.filter(room=room).aggregate(total=Sum("amount"))["total"]
 
+        hand = make_hand(room)
         LedgerEntry.objects.create(
-            room=room, user=alice, kind=LedgerKind.SEVEN_DEUCE, amount=50, hand_no=1
+            room=room, user=alice, kind=LedgerKind.SEVEN_DEUCE, amount=50, hand=hand
         )
         LedgerEntry.objects.create(
-            room=room, user=bob, kind=LedgerKind.SEVEN_DEUCE, amount=-50, hand_no=1
+            room=room, user=bob, kind=LedgerKind.SEVEN_DEUCE, amount=-50, hand=hand
         )
 
         total = LedgerEntry.objects.filter(room=room).aggregate(total=Sum("amount"))["total"]
@@ -179,6 +186,89 @@ class TestLedgerAppendOnly:
             with transaction.atomic():
                 LedgerEntry._base_manager.filter(pk=entry.pk).update(amount=999999)
         assert LedgerEntry.objects.get(pk=entry.pk).amount == 1000
+
+
+def assert_rejected(create) -> None:
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            create()
+
+
+class TestRoomConstraints:
+    @pytest.mark.parametrize("max_seats", [0, 1, 10])
+    def test_max_seats_is_between_2_and_9(self, max_seats):
+        assert_rejected(lambda: make_room(max_seats=max_seats))
+
+    def test_small_blind_must_be_positive(self):
+        assert_rejected(lambda: make_room(small_blind=0, big_blind=2))
+
+    @pytest.mark.parametrize("small_blind", [2, 3])
+    def test_small_blind_is_below_big_blind(self, small_blind):
+        assert_rejected(lambda: make_room(small_blind=small_blind, big_blind=2))
+
+
+class TestRoomSeatConstraints:
+    @pytest.mark.parametrize("seat", [0, 10])
+    def test_seat_is_between_1_and_9(self, seat):
+        room, alice = make_room(), make_user("alice")
+        # bulk_create skips save(), so this proves the database itself rejects the row.
+        assert_rejected(
+            lambda: RoomSeat.objects.bulk_create([RoomSeat(room=room, user=alice, seat=seat)])
+        )
+
+    def test_seat_must_fit_the_room(self):
+        room, alice = make_room(max_seats=6), make_user("alice")
+
+        with pytest.raises(ValidationError):
+            RoomSeat.objects.create(room=room, user=alice, seat=7)
+        assert not RoomSeat.objects.exists()
+
+    def test_the_last_seat_of_the_room_is_fine(self):
+        room, alice = make_room(max_seats=6), make_user("alice")
+        RoomSeat.objects.create(room=room, user=alice, seat=6)
+
+
+class TestLedgerConstraints:
+    def test_amount_cannot_be_zero(self):
+        room, alice = make_room(), make_user("alice")
+        assert_rejected(
+            lambda: LedgerEntry.objects.create(
+                room=room, user=alice, kind=LedgerKind.GRANT, amount=0
+            )
+        )
+
+    @pytest.mark.parametrize("kind", [LedgerKind.HAND, LedgerKind.SEVEN_DEUCE])
+    def test_hand_results_need_a_hand(self, kind):
+        room, alice = make_room(), make_user("alice")
+        assert_rejected(
+            lambda: LedgerEntry.objects.create(room=room, user=alice, kind=kind, amount=50)
+        )
+
+    def test_a_grant_does_not_belong_to_a_hand(self):
+        room, alice = make_room(), make_user("alice")
+        hand = make_hand(room)
+        assert_rejected(
+            lambda: LedgerEntry.objects.create(
+                room=room, user=alice, kind=LedgerKind.GRANT, amount=50, hand=hand
+            )
+        )
+
+    def test_kind_must_be_known(self):
+        room, alice = make_room(), make_user("alice")
+        assert_rejected(
+            lambda: LedgerEntry.objects.create(room=room, user=alice, kind="gift", amount=50)
+        )
+
+    @postgres_only
+    def test_the_hand_must_be_in_the_same_room(self):
+        room, other_room, alice = make_room(name="A"), make_room(name="B"), make_user("alice")
+        other_hand = make_hand(other_room)
+
+        with pytest.raises(IntegrityError, match="games_ledgerentry_hand_same_room"):
+            with transaction.atomic():
+                LedgerEntry.objects.create(
+                    room=room, user=alice, kind=LedgerKind.HAND, amount=50, hand=other_hand
+                )
 
 
 class TestRoomSeat:

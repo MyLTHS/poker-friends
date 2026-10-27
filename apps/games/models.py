@@ -6,7 +6,10 @@ chip history can always be replayed from the ledger alone.
 """
 
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
+
+MAX_SEATS = 9
 
 
 class User(AbstractUser):
@@ -33,6 +36,18 @@ class Room(models.Model):
     seven_deuce_bonus = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(max_seats__gte=2, max_seats__lte=MAX_SEATS),
+                name="room_max_seats_between_2_and_9",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(small_blind__gt=0, small_blind__lt=models.F("big_blind")),
+                name="room_small_blind_positive_and_below_big_blind",
+            ),
+        ]
+
     def __str__(self) -> str:
         return self.name
 
@@ -47,7 +62,17 @@ class RoomSeat(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["room", "seat"], name="unique_seat_per_room"),
             models.UniqueConstraint(fields=["room", "user"], name="unique_user_per_room"),
+            models.CheckConstraint(
+                condition=models.Q(seat__gte=1, seat__lte=MAX_SEATS),
+                name="roomseat_seat_between_1_and_9",
+            ),
         ]
+
+    def save(self, *args, **kwargs):
+        # The room's own limit lives in another table, so the database cannot check it.
+        if self.seat > self.room.max_seats:
+            raise ValidationError(f"Seat {self.seat} is beyond this room's {self.room.max_seats}.")
+        super().save(*args, **kwargs)
 
 
 class LedgerKind(models.TextChoices):
@@ -84,10 +109,30 @@ class LedgerEntry(models.Model):
     user = models.ForeignKey(User, on_delete=models.PROTECT, related_name="ledger_entries")
     kind = models.CharField(max_length=11, choices=LedgerKind.choices)
     amount = models.IntegerField()
-    hand_no = models.PositiveIntegerField(null=True, blank=True)
+    # Set for hand results (hand / seven_deuce), empty for grants. Migration 0004 adds a
+    # (room, hand) foreign key on PostgreSQL so the hand is always from the same room.
+    hand = models.ForeignKey(
+        "Hand", on_delete=models.PROTECT, related_name="ledger_entries", null=True, blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = LedgerEntryQuerySet.as_manager()
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(amount=0), name="ledgerentry_amount_nonzero"
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(kind=LedgerKind.GRANT, hand__isnull=True)
+                    | models.Q(
+                        kind__in=[LedgerKind.HAND, LedgerKind.SEVEN_DEUCE], hand__isnull=False
+                    )
+                ),
+                name="ledgerentry_hand_matches_kind",
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         if self.pk is not None:
@@ -111,6 +156,8 @@ class Hand(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["room", "hand_no"], name="unique_hand_no_per_room"),
+            # Target of the ledger's (room, hand) foreign key; see LedgerEntry.hand.
+            models.UniqueConstraint(fields=["room", "id"], name="unique_hand_id_per_room"),
         ]
 
 
