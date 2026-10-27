@@ -14,6 +14,7 @@ from apps.games.models import Hand, HandCommand, OwnerAction, Room, RoomMember, 
 
 from .test_actor import (  # noqa: F401 (_slow_next_hand is an autouse fixture)
     _slow_next_hand,
+    by_type,
     connect,
     drain,
     heads_up_room,
@@ -152,3 +153,33 @@ class TestRejectedCommandsAreLogged:
         for part in (f"room {room.pk}", f"hand {seen['hand_id']}", f"player {seen['waiting'].pk}"):
             assert part in line
         assert "not_your_turn" in line
+
+
+class TestSuspendedRoomMessage:
+    """room.suspended carried the internal error text to every client; it may name cards."""
+
+    def test_clients_get_a_fixed_message_and_the_log_keeps_the_cause(self, caplog):
+        room, a, b = heads_up_room()
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            conn = ca if started["payload"]["hand"]["actor"] == str(a.pk) else cb
+            table = await actor_module.get_actor(room.pk)
+
+            def broken(action):
+                raise RuntimeError("bad state, board Ah Kd 7c (test)")
+
+            table.session.current_hand.act = broken
+            await send_act(conn, room, started["hand_id"], "break-the-room", "call")
+            for messages in (await drain(ca), await drain(cb)):
+                [suspended] = by_type(messages, "room.suspended")
+                assert suspended["payload"] == {
+                    "reason": "recovery_needed",
+                    "message": actor_module.SUSPENDED_MESSAGE,
+                }
+
+        run_async(body)
+        assert any(
+            "Ah Kd 7c" in r.getMessage() for r in caplog.records if r.levelname == "CRITICAL"
+        )

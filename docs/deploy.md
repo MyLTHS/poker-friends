@@ -46,7 +46,8 @@ Sau khi khôi phục: kiểm tổng chip mỗi phòng bằng tổng chip đã c�
 ## Sự cố: "Bàn tạm dừng" (`room.suspended`)
 
 Nghĩa là server đã ghi một lệnh nhưng engine không áp được, nên dừng phòng thay vì đoán
-(ADR-001 mục 5). Các phòng khác vẫn chạy.
+(ADR-001 mục 5). Các phòng khác vẫn chạy. Người chơi chỉ thấy một câu chung; nguyên nhân nằm trong
+log server, dòng `room <room_id> suspended: ...` (mức CRITICAL).
 
 1. **Khởi động lại server**, rồi mở trang bàn của phòng đó: phòng chỉ được dựng lại bằng replay
    lúc có người mở nó (ADR-001 mục 4), không phải ngay lúc server lên. Nếu lỗi chỉ thoáng qua thì

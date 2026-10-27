@@ -389,7 +389,8 @@ không biết chắc trạng thái nên **dừng phòng** (fail-stop) thay vì �
 
 1. Lệnh đó **không** nhận `command.ack` hay `command.rejected`: kết quả chưa biết.
 2. Cả phòng nhận `room.suspended` (`reason: "recovery_needed"`). Client hiện "Bàn tạm dừng" và tắt
-   nút hành động.
+   nút hành động. `message` luôn là một câu cố định; nguyên nhân chỉ ghi ở log server (lỗi engine có
+   thể nhắc tới bộ bài hay bài tẩy).
 3. Trong lúc tạm dừng: mọi lệnh nhận `command.rejected` mã `room_suspended`; kết nối mới nhận
    `table.snapshot` với `room.status` là `"suspended"`.
    Phòng cũng mở ra ở trạng thái này nếu lúc server khởi động lại, ván dở không dựng lại được (B5).
@@ -403,7 +404,7 @@ không biết chắc trạng thái nên **dừng phòng** (fail-stop) thay vì �
   "protocol_version": 1, "type": "room.suspended", "room_id": 1, "hand_id": 41,
   "version": 23, "server_time": "2026-10-27T14:03:44.902Z",
   "payload": {"reason": "recovery_needed",
-              "message": "Chip conservation violated after a recorded command."}
+              "message": "The table stopped after a server error and waits for recovery."}
 }
 ```
 

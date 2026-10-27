@@ -144,6 +144,9 @@ class _Call:
 # Settings the owner may change (PATCH /api/rooms/{id}/); they apply between hands.
 ROOM_SETTINGS = ("name", "small_blind", "big_blind", "think_time_seconds", "seven_deuce_bonus")
 KICKED_CLOSE_CODE = 4403
+# What clients see when a room stops (fail-stop). The cause goes to the server log only: an
+# engine error can quote the deck or someone's hole cards.
+SUSPENDED_MESSAGE = "The table stopped after a server error and waits for recovery."
 
 
 class TableActor:
@@ -786,7 +789,7 @@ class TableActor:
         self.suspended = True
         await self._broadcast(
             "room.suspended",
-            lambda viewer: {"reason": "recovery_needed", "message": reason},
+            lambda viewer: {"reason": "recovery_needed", "message": SUSPENDED_MESSAGE},
             hand_id=hand_id,
         )
 
