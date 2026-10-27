@@ -7,6 +7,7 @@ import logging
 
 import pytest
 from asgiref.sync import async_to_sync
+from channels.exceptions import ChannelFull
 from django.test import AsyncClient, Client
 
 from apps.games import actor as actor_module
@@ -183,3 +184,35 @@ class TestSuspendedRoomMessage:
         assert any(
             "Ah Kd 7c" in r.getMessage() for r in caplog.records if r.levelname == "CRITICAL"
         )
+
+
+class TestFullChannel:
+    """A client whose channel filled up was dropped from the table but its socket stayed open:
+    it got nothing more and never knew to reconnect."""
+
+    def test_the_dropped_socket_is_closed_once_the_channel_has_room(self, monkeypatch):
+        room, a, b = heads_up_room()
+        monkeypatch.setattr(actor_module, "CLOSE_RETRY_SECONDS", 0.05)
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            table = await actor_module.get_actor(room.pk)
+            [stuck] = [ch for c, ch in table.channels.items() if table.connections[c] == str(b.pk)]
+            layer = actor_module.get_channel_layer()
+            real_send = layer.send
+            full_for = {"sends": 2}  # the event that drops b, then the first close attempt
+
+            async def send(channel, message):
+                if channel == stuck and full_for["sends"] > 0:
+                    full_for["sends"] -= 1
+                    raise ChannelFull()
+                return await real_send(channel, message)
+
+            monkeypatch.setattr(layer, "send", send)
+            conn = ca if started["payload"]["hand"]["actor"] == str(a.pk) else cb
+            await send_act(conn, room, started["hand_id"], "call-into-a-full-channel", "call")
+            assert await closed_with(cb, timeout=2) == actor_module.RESYNC_CLOSE_CODE
+            assert str(b.pk) not in table.connections.values()
+
+        run_async(body)

@@ -215,7 +215,8 @@ trùng theo `(hand, command_id)`, khôi phục mục 4 và fail-stop mục 5. Nh
 - Đồng hồ mang số lượt lúc hẹn, chỉ tác động đúng lượt đó; lệnh hết giờ tên `timeout:<hand>-<n>`
   (client không gửi được dấu `:`), ghi thất bại thì hẹn lại sau 1 giây.
 - Lỗi sau khi đã ghi lệnh (kể cả khi phát sự kiện) đều fail-stop; một kết nối bị đầy kênh
-  (`ChannelFull`) thì chỉ bỏ kết nối đó.
+  (`ChannelFull`) thì chỉ bỏ kết nối đó, rồi đóng socket của nó (mã 4408) khi kênh có chỗ để client
+  kết nối lại và nhận snapshot (sửa sau đợt kiểm tra B).
 - Snapshot lúc ván mới đã chia trong bộ nhớ mà `Hand` chưa ghi xong: coi như giữa hai ván.
 - Lệnh của ván khác ván đang chạy được tra trong `HandCommand`: gửi lại lệnh cuối sau sự cố nhận ack
   trùng (`result_version: null`).

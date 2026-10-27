@@ -434,6 +434,9 @@ kết nối với **4403** (tới lúc đó họ vẫn nhận tin của bàn). K
 private mà không có quyền xem: mã **4404**. Chưa đăng nhập và IP này đã tạo quá nhiều khách
 (20/giờ): mã **4429**. Server nhận bắt tay rồi mới đóng, để trình duyệt thấy được mã (đóng ngay lúc
 bắt tay thì trình duyệt chỉ thấy 1006). Client **không thử kết nối lại** khi nhận 4403 hay 4404.
+Client đọc không kịp (kênh của kết nối đầy): server bỏ kết nối đó khỏi bàn (nó đã lỡ ít nhất một sự
+kiện) rồi đóng với mã **4408** ngay khi kênh có chỗ; client kết nối lại như mất mạng và nhận
+snapshot mới.
 
 ### `chat.message` (thông báo, B8)
 
