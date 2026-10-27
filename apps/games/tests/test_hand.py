@@ -3,7 +3,7 @@ import warnings
 
 import pytest
 
-from apps.games.engine.hand import HandEngine, IllegalAction, deal_order
+from apps.games.engine.hand import HIDDEN_CARD, HandEngine, IllegalAction, deal_order
 
 from .helpers import build_hand, call, check, check_down, fold, raise_to
 
@@ -310,3 +310,101 @@ class TestReplay:
         record = self.play_sample_hand().record()
         kinds = [a["kind"] for a in record["actions"]]
         assert kinds[:8] == ["raise", "call", "raise", "call", "fold", "raise", "call", "check"]
+
+
+class TestSevenDeuceBonus:
+    """Rule #27: the bonus goes to a 7-2 holder who takes the pot because everyone folded."""
+
+    def test_a_bluff_win_with_seven_deuce_is_flagged(self):
+        engine = heads_up(holes={"A": "7c2d", "B": "AcAd"}, board="KhQs9c5d3h")
+        engine.act(raise_to("A", 6))
+        engine.act(fold("B"))
+        assert engine.seven_deuce_bluff_winner() == "A"
+
+    def test_a_showdown_win_with_seven_deuce_is_not_flagged(self):
+        # A's 7h2h plus the board makes a full house, beating B's two pair of aces and sevens.
+        engine = heads_up(holes={"A": "7h2h", "B": "AsAd"}, board="7d7c2s9h4c")
+        engine.act(call("A"))
+        check_down(engine)
+        assert engine.seven_deuce_bluff_winner() is None
+
+    def test_a_bluff_win_without_seven_deuce_is_not_flagged(self):
+        engine = heads_up(holes={"A": "7c3d", "B": "AcAd"}, board="KhQs9c5d3h")
+        engine.act(raise_to("A", 6))
+        engine.act(fold("B"))
+        assert engine.seven_deuce_bluff_winner() is None
+
+    def test_folding_seven_deuce_is_not_flagged(self):
+        engine = heads_up(holes={"A": "AcAd", "B": "7c2d"}, board="KhQs9c5d3h")
+        engine.act(raise_to("A", 6))
+        engine.act(fold("B"))
+        assert engine.seven_deuce_bluff_winner() is None
+
+    def test_a_multiway_bluff_win_is_flagged(self):
+        # B is the button and acts first preflop, then C (SB) and A (BB).
+        engine = three_handed(holes={"A": "AcAd", "B": "2s7s", "C": "KcKd"}, board="")
+        engine.act(raise_to("B", 6))
+        engine.act(fold("C"))
+        engine.act(fold("A"))
+        assert engine.seven_deuce_bluff_winner() == "B"
+
+    def test_a_walk_counts_as_a_bluff_for_now(self):
+        # Pending Lym's decision: everyone folds to the big blind, who never had to act.
+        engine = three_handed(holes={"A": "7d2c", "B": "AcAd", "C": "KcKd"}, board="")
+        engine.act(fold("B"))
+        engine.act(fold("C"))
+        assert engine.seven_deuce_bluff_winner() == "A"
+
+    def test_an_unfinished_hand_has_no_winner_yet(self):
+        engine = heads_up(holes={"A": "7c2d", "B": "AcAd"}, board="KhQs9c5d3h")
+        assert engine.seven_deuce_bluff_winner() is None
+
+
+class TestSevenDeuceReveal:
+    def bluff(self, seven_deuce_bonus: int) -> HandEngine:
+        engine = three_handed(
+            holes={"A": "AcAd", "B": "2s7s", "C": "KcKd"},
+            board="",
+            seven_deuce_bonus=seven_deuce_bonus,
+        )
+        engine.act(raise_to("B", 6))
+        engine.act(fold("C"))
+        engine.act(fold("A"))
+        return engine
+
+    @staticmethod
+    def cards(view: dict, player: str) -> list[str]:
+        return next(p["cards"] for p in view["players"] if p["player_id"] == player)
+
+    @pytest.mark.parametrize("viewer", [None, "A", "B", "C"])
+    def test_everyone_sees_the_winning_seven_deuce(self, viewer):
+        view = self.bluff(seven_deuce_bonus=50).view_for(viewer)
+        assert self.cards(view, "B") == ["2s", "7s"]
+
+    @pytest.mark.parametrize("viewer", [None, "B"])
+    def test_folded_cards_stay_hidden(self, viewer):
+        view = self.bluff(seven_deuce_bonus=50).view_for(viewer)
+        shown = {card for p in view["players"] if p["player_id"] != "B" for card in p["cards"]}
+        assert shown <= {HIDDEN_CARD}
+
+    def test_no_reveal_when_the_room_has_no_bonus(self):
+        view = self.bluff(seven_deuce_bonus=0).view_for(None)
+        assert self.cards(view, "B") == [HIDDEN_CARD, HIDDEN_CARD]
+
+    def test_no_reveal_while_the_hand_is_running(self):
+        engine = three_handed(
+            holes={"A": "AcAd", "B": "2s7s", "C": "KcKd"}, board="", seven_deuce_bonus=50
+        )
+        engine.act(raise_to("B", 6))
+        engine.act(fold("C"))
+        assert self.cards(engine.view_for("A"), "B") == [HIDDEN_CARD, HIDDEN_CARD]
+
+    def test_replay_reproduces_the_bonus_and_the_reveal(self):
+        original = self.bluff(seven_deuce_bonus=50)
+        record = json.loads(json.dumps(original.record()))
+
+        replayed = HandEngine.replay(record)
+
+        assert record["config"]["seven_deuce_bonus"] == 50
+        assert replayed.seven_deuce_bluff_winner() == "B"
+        assert replayed.view_for(None) == original.view_for(None)

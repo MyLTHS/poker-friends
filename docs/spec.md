@@ -33,14 +33,118 @@ không tiền thật, không rake. Quy mô 10–20 người, 1 server.
 | 24 | TDD | Có |
 | 25 | API | Phục vụ web của dự án, thiết kế chuẩn để dùng lại cho app mobile |
 | 26 | Dự án | Django mới hoàn toàn |
+| 27 | Luật 7-2 | Chủ phòng cấu hình theo phòng (`Room.seven_deuce_bonus`, mặc định 0 = tắt). Chỉ thưởng khi người cầm đúng hạng **7 và 2** (bất kỳ chất) **ăn pot vì mọi người khác đã fold** (bluff thành công); thắng ở showdown thì **không** thưởng, nên mỗi ván có tối đa một người nhận. Khi đó server **tự lật 2 lá 7-2** của người thắng cho cả bàn (kể cả người xem) sau khi ván xong; bài của người đã fold vẫn úp. **Mọi người khác đang ngồi bàn** (kể cả sit-out) trả người thắng `min(bonus, chip còn lại sau khi chia pot)`, không bao giờ âm; người thắng nhận đúng tổng thực trả; ai còn 0 chip thì không trả. Trường hợp *walk* (mọi người fold tới big blind, BB cầm 7-2): **chưa chốt**, tạm tính là được thưởng (quyết định 27/10/2026, thay bản cũ "thắng tại showdown") |
 
 ## Kiến trúc (tối giản cho 20 người)
 
-- Django + DRF (REST), Django Channels (WebSocket), PostgreSQL, Redis (channel layer).
-- **PokerKit** là nguồn chân lý về luật; được bọc sau `HandEngine` nội bộ.
-- Mỗi bàn có một writer duy nhất (table actor chạy trong process ASGI).
-- Bộ bài do server xáo bằng `secrets.SystemRandom` (CSPRNG), không dùng `random.shuffle` của PokerKit.
-- Ván bài replay được từ (cấu hình + thứ tự bộ bài + danh sách action).
+Stack: Django + DRF (REST), Django Channels (WebSocket), PostgreSQL 17, Redis 7 (channel layer).
+Không Celery, không Prometheus, không Redis HA — quy mô 10–20 người không cần.
+
+Backend chia 3 lớp, lớp dưới không biết lớp trên:
+
+```
+apps/games/engine/     # lõi luật chơi — thuần Python, KHÔNG import Django (đã xong, giai đoạn B1)
+apps/games/models.py   # lớp dữ liệu — Django ORM, bền vững qua Postgres (giai đoạn B2)
+apps/games/actor.py    # lớp điều phối — table actor + Channels consumer (giai đoạn B3–B4)
+```
+
+### 1. Lớp engine (đã xong — `apps/games/engine/`)
+
+- **`cards.py`** — bộ bài 52 lá, xáo bằng `secrets.SystemRandom` (CSPRNG), không dùng
+  `random.shuffle` sẵn có của PokerKit.
+- **`hand.py` — `HandEngine`** — một ván bài, bọc `pokerkit.NoLimitTexasHoldem`. PokerKit là
+  nguồn chân lý về luật; `HandEngine` thêm phần PokerKit không có: map ghế ↔ chỉ số người chơi,
+  chia bài từ bộ bài server đã xáo, validate ý định người chơi (`legal_actions`, `act`),
+  `timeout` (tự check nếu được, không thì fold), `view_for(player)` — projection che bài úp của
+  người khác, `record()`/`replay()` để tái tạo đúng kết quả từ (cấu hình + thứ tự bộ bài + danh
+  sách action). Có chốt chặn nội bộ: tổng chip đổi khác 0 sau mỗi `act()` → ném `RuntimeError`
+  ngay, không để lọt. `seven_deuce_bluff_winner()` — luật 7-2 (#27): người
+  ăn pot vì mọi người khác fold mà đang cầm đúng hạng 7 và 2 (bất kỳ chất), hoặc `None`; xác định
+  từ danh sách action nên replay luôn ra cùng kết quả. `HandConfig.seven_deuce_bonus` > 0 thì
+  `view_for` lật 2 lá đó cho mọi người sau khi ván xong.
+- **`table.py` — `TableSession`** — nhiều ván liên tiếp trên một bàn: xoay ghế/button, sit-out /
+  sit-in, cấp chip giữa các ván, ledger tạm trong bộ nhớ, bảng tổng kết. `seven_deuce_bonus`
+  (mặc định 0): khi `finish_hand()` có người thắng luật 7-2, mọi người khác đang ngồi bàn (kể cả
+  sit-out) trả `min(bonus, chip còn lại sau pot)`, người thắng nhận đúng tổng thực trả — luôn cân
+  bằng về 0 trong phòng, không ai bị âm chip. Khi lên B2, phần ledger này được thay bằng bản
+  ghi DB bền vững (xem mục 2).
+- **`simulate.py`** — bot ngẫu nhiên chạy N ván, dùng trong test + CI để kiểm bất biến (không
+  mất/sinh chip, không lộ bài) ở quy mô lớn (hàng nghìn ván) mà property test đơn lẻ khó phủ hết.
+
+Phát hiện quan trọng về PokerKit cần nhớ khi code các lớp trên (chi tiết:
+[docs/plans/phase-1-poc.md](plans/phase-1-poc.md)): PokerKit chỉ *cảnh báo* khi fold lúc được
+check miễn phí ở `Mode.CASH_GAME` — engine phải tự quyết `can_fold = call_amount > 0`, không dựa
+vào `can_fold()` của PokerKit.
+
+### 2. Lớp dữ liệu (B2 — chưa code)
+
+Model dự kiến:
+
+| Model | Vai trò | Ghi chú |
+|---|---|---|
+| `User` | Tài khoản, có cờ `is_guest` | Khách nâng cấp lên thật vẫn giữ nguyên `id` → giữ lịch sử + chip |
+| `Room` | Một bàn/phòng chơi | Trạng thái `open → playing → closed`; cấu hình blind, số ghế, thời gian suy nghĩ, `seven_deuce_bonus` (luật #27, 0 = tắt thưởng) |
+| `RoomSeat` | Một người ngồi ở một ghế của một `Room` | Gắn `User` ↔ `Room`, số ghế, trạng thái sit-out |
+| `LedgerEntry` | Bút toán chip | **Chỉ ghi thêm (append-only)** — không `UPDATE`/`DELETE` dòng cũ; mọi thay đổi chip (cấp, kết quả ván, thưởng luật 7-2) là một dòng mới. `kind`: `grant` / `hand` / `seven_deuce` |
+| `Hand` | Một ván đã chơi xong | Lưu `HandConfig` (ghế/stack/button/blind/bộ bài) + kết quả, đủ để `HandEngine.replay()` lại |
+| `HandCommand` | Một lệnh người chơi đã được áp dụng vào một `Hand` | Ghi **trước khi** áp vào engine (xem mục 3) — là nguồn phục hồi khi process chết giữa ván |
+
+Bất biến bắt buộc có test: **tổng `LedgerEntry` của một `Room` luôn bằng tổng chip đã cấp cho
+phòng đó** — không có "ví chung" giữa các phòng (chip theo từng phòng, theo quyết định #6/#22).
+Ghi `LedgerEntry` luôn trong một DB transaction cùng với bản ghi kết quả ván.
+
+### 3. Lớp điều phối — Table actor (B3–B4, ADR-001)
+
+Quyết định kiến trúc (thống nhất với Codex ở `docs/collab/`, sẽ chốt thành `ADR-001` ở B3):
+
+- Một process ASGI; **mỗi phòng (room) có một asyncio task + một hàng đợi lệnh riêng** — đây
+  chính là "writer duy nhất" cho bàn đó, tránh phải dùng khoá (lock) khi nhiều người bấm cùng lúc.
+- Thứ tự xử lý một lệnh bắt buộc là:
+  **kiểm tra hợp lệ → ghi `HandCommand` vào DB → áp vào `HandEngine` → phát sự kiện qua
+  Channels/Redis.**
+  Ghi trước-rồi-áp đảm bảo: nếu process chết giữa lúc áp dụng, khởi động lại chỉ cần
+  `HandEngine.replay()` từ các `HandCommand` đã ghi — không mất, không lặp lại hiệu ứng.
+- Lệnh bị từ chối (sai lượt, sai luật, `command_id` trùng) **chỉ ghi log**, không ghi
+  `HandCommand`, trả `command.rejected` với mã lỗi ổn định cho client.
+- Giao thức WebSocket (chi tiết đầy đủ ở `docs/api/ws-protocol.md`, làm ở B3):
+  - Envelope mỗi message: `protocol_version`, `room_id`, `hand_id`, `version` (số thứ tự sự kiện
+    tăng dần trong phòng), `server_time`.
+  - Mỗi lệnh client gửi có `command_id` riêng (client tự sinh) — server dùng để chống áp dụng
+    trùng khi client gửi lại do mạng chập.
+  - Sự kiện server phát: `command.ack` / `command.rejected`, `table.snapshot`, `action.applied`,
+    `turn.deadline`, `hand.completed`.
+  - Khi client phát hiện hụt `version` (mất gói) → gửi yêu cầu, server trả `table.snapshot` đầy
+    đủ để đồng bộ lại (resync), không cần replay toàn bộ lịch sử ở phía client.
+
+### 4. Bảo mật & độ bền (xuyên suốt B4–B5)
+
+- **Server là nguồn chân lý duy nhất; client chỉ gửi ý định** (nguyên tắc #1, xem mục dưới) —
+  mọi luật, mọi phép tính chip chạy ở `HandEngine`/table actor, không tin bất kỳ số liệu nào
+  client tự tính.
+- Projection (`view_for`) đảm bảo không lộ bài úp của người khác qua REST, WebSocket, hay log —
+  kể cả với người đã fold và spectator.
+- Đồng hồ suy nghĩ chạy ở server; hết giờ tự check (nếu được) hoặc fold — không có time bank.
+- Mất kết nối: server hiện trạng thái disconnect cho người khác thấy, đồng hồ vẫn chạy như
+  thường; khi client reconnect, đồng bộ lại bằng `table.snapshot` (không replay thủ công).
+- Process ASGI restart giữa ván: khôi phục trạng thái bàn bằng `HandEngine.replay()` từ
+  `HandCommand` đã ghi trong DB — không cần snapshot riêng cho mục đích này.
+
+### 5. Tài khoản & quyền (B6–B7)
+
+- Đăng nhập: email/mật khẩu (có xác minh + quên mật khẩu), Google OAuth, hoặc khách
+  (`is_guest=True`) — khách chơi được ngay, nâng cấp lên tài khoản thật sau mà không mất chip
+  hay lịch sử (cùng `User.id`).
+- Quyền chủ phòng (gắn trên `Room`, không phải vai trò toàn hệ thống): cấp/điều chỉnh chip khi
+  người đó không trong ván, đổi blind/thời gian suy nghĩ cho ván kế tiếp, kick, đóng phòng.
+  Không có khái niệm club/đại lý.
+- Rate limit ở tầng API cho: đăng nhập, tạo phòng, gửi lệnh WebSocket — chống spam/brute-force ở
+  quy mô nhỏ mà không cần hạ tầng riêng (không Celery/queue ngoài).
+
+### 6. Hạ tầng
+
+Repo GitHub private; 1 VPS + Docker Compose (Django/Daphne, Postgres 17, Redis 7, Caddy làm
+HTTPS reverse proxy ở staging/production). Quy mô 10–20 người/server nên cố tình **không** thêm
+Celery, Prometheus hay Redis HA — thêm sớm là over-engineering cho bài toán này.
 
 ## Ba nguyên tắc không phá vỡ
 

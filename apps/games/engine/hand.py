@@ -25,6 +25,7 @@ AUTOMATIONS = (
 )
 
 HIDDEN_CARD = "??"
+SEVEN_DEUCE_RANKS = frozenset({"7", "2"})
 
 
 class ActionKind(StrEnum):
@@ -48,6 +49,9 @@ class HandConfig:
     small_blind: int
     big_blind: int
     deck: tuple[str, ...]
+    # The room's 7-2 bonus for this hand (rule #27); only decides whether the winner's 7-2 is
+    # revealed here, the bonus itself is paid by ``TableSession``.
+    seven_deuce_bonus: int = 0
 
 
 @dataclass(frozen=True)
@@ -154,6 +158,23 @@ class HandEngine:
         net = {p: final[p] - self._starting_stacks[i] for i, p in enumerate(self.player_order)}
         return HandResult(final_stacks=final, net=net)
 
+    def seven_deuce_bluff_winner(self) -> str | None:
+        """The player who took the pot holding a 7 and a 2 (any suits) because everyone else
+        folded, or ``None``. A showdown win never counts, so there is at most one such player.
+
+        Decided from the action log (not PokerKit's statuses), so a replay always agrees.
+        A walk (everyone folds to the big blind) counts too, pending a decision on rule #27.
+        """
+        if not self.is_complete:
+            return None
+        folded = {a.player_id for a in self._actions if a.kind == ActionKind.FOLD}
+        remaining = [p for p in self.player_order if p not in folded]
+        if len(remaining) != 1:
+            return None
+        winner = remaining[0]
+        ranks = {card_code(c)[0] for c in self._state.hole_cards[self._index[winner]]}
+        return winner if ranks == SEVEN_DEUCE_RANKS else None
+
     # ---- actions -----------------------------------------------------------------------
 
     def legal_actions(self, player_id: str) -> LegalActions:
@@ -239,6 +260,8 @@ class HandEngine:
     def view_for(self, viewer: str | None) -> dict[str, Any]:
         """State as seen by ``viewer`` (``None`` for a spectator). Safe to send to clients."""
         state = self._state
+        # Rule #27: a bluff won with 7-2 is shown to the whole table when the bonus is on.
+        revealed = self.seven_deuce_bluff_winner() if self.config.seven_deuce_bonus > 0 else None
         players = []
         for i, player in enumerate(self.player_order):
             players.append(
@@ -248,7 +271,7 @@ class HandEngine:
                     "stack": state.stacks[i],
                     "bet": state.bets[i],
                     "in_hand": state.statuses[i],
-                    "cards": self._visible_cards(i, own=player == viewer),
+                    "cards": self._visible_cards(i, own=player == viewer or player == revealed),
                 }
             )
         players.sort(key=lambda p: p["seat"])
@@ -294,6 +317,7 @@ class HandEngine:
                 "small_blind": self.config.small_blind,
                 "big_blind": self.config.big_blind,
                 "deck": list(self.config.deck),
+                "seven_deuce_bonus": self.config.seven_deuce_bonus,
             },
             "actions": [
                 {"player_id": a.player_id, "kind": str(a.kind), "amount": a.amount}
@@ -311,6 +335,8 @@ class HandEngine:
                 small_blind=raw["small_blind"],
                 big_blind=raw["big_blind"],
                 deck=tuple(raw["deck"]),
+                # Records written before rule #27 changed have no bonus.
+                seven_deuce_bonus=raw.get("seven_deuce_bonus", 0),
             )
         )
         for a in record["actions"]:
