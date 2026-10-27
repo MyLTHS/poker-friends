@@ -140,3 +140,11 @@ class HandAdmin(ViewOnlyAdmin):
     list_display = ("room", "hand_no", "button_seat", "created_at", "completed_at")
     list_filter = ("room",)
     inlines = [HandCommandInline]
+
+    def get_fields(self, request, obj=None):
+        fields = super().get_fields(request, obj)
+        if obj is not None and obj.completed_at is None:
+            # A running hand's config holds the deck: every hole card and the board still to
+            # come, which nobody may see (spec.md), staff included. Shown once the hand is over.
+            return [field for field in fields if field != "config"]
+        return fields
