@@ -72,9 +72,17 @@ Khi process khởi động (hoặc actor của một phòng được tạo lại
 2. `HandEngine.replay(hand.replay_record())`: dựng lại từ cấu hình đã lưu (ghế, stack, button,
    blind, **bộ bài**, thưởng 7-2) và các `HandCommand` theo `sequence`. Kết quả giống hệt lúc trước
    khi chết, kể cả bài chưa lật, vì bộ bài đã được lưu từ đầu ván.
-3. Nạp tập `command_id` đã áp của ván đó để chống trùng tiếp.
-4. Đặt lại đồng hồ cho người đang tới lượt (B5 quyết định: cho lại đủ thời gian hay phần còn lại).
-5. Client kết nối lại nhận `table.snapshot` như bình thường.
+3. **Nếu engine sau replay đã `is_complete` mà `Hand.completed_at` còn trống** (process chết sau khi
+   ghi lệnh cuối nhưng trước `save_completed_hand()`): dựng lại các bút toán `hand` và
+   `seven_deuce` của ván rồi gọi `save_completed_hand()`. Hàm này idempotent (gọi lại cho ván đã
+   lưu thì không ghi thêm), nên chạy khôi phục bao nhiêu lần cũng chỉ có một bộ bút toán. Việc này
+   phải xong **trước khi** actor nhận kết nối hay lệnh mới; sau đó phòng ở trạng thái giữa hai ván.
+   Bút toán phải dựng bằng **đúng một hàm** dùng chung với lúc kết thúc ván bình thường (lời/lỗ từ
+   `HandEngine.result()`, thưởng 7-2 theo số dư sổ chip và các ghế đang ngồi như
+   `TableSession._apply_seven_deuce_bonus`), để hai đường không bao giờ ra kết quả khác nhau.
+4. Ván còn dở: nạp tập `command_id` đã áp của ván đó để chống trùng tiếp.
+5. Đặt lại đồng hồ cho người đang tới lượt (B5 quyết định: cho lại đủ thời gian hay phần còn lại).
+6. Client kết nối lại nhận `table.snapshot` như bình thường.
 
 Không cần lưu "ảnh chụp" trạng thái riêng: `Hand.config` + `HandCommand` là đủ. Ván xong thì đã có
 `Hand.result` để đối chiếu với kết quả replay.
@@ -151,3 +159,10 @@ process) và một worker toàn cục cho mọi bàn (một bàn chậm làm ch�
   đúng, client gửi lại lệnh đó thì nhận ack trùng chứ không áp lại.
 - Hết giờ và lệnh người chơi tới cùng lúc: chỉ một cái có hiệu lực.
 - Replay mọi ván đã xong cho đúng `Hand.result`.
+- Process "chết" sau khi ghi `HandCommand` **cuối** của ván (engine đã xong) nhưng trước
+  `save_completed_hand()`: khởi động lại thì `Hand.completed_at` và `Hand.result` được điền, ledger
+  có đúng một bộ bút toán `hand`/`seven_deuce` của ván (tổng bằng 0), kể cả ván có thưởng 7-2; chạy
+  khôi phục lần hai không ghi thêm dòng nào; actor không nhận lệnh nào trước khi xong bước này.
+- Lệnh "độc" (engine lỗi sau khi đã ghi): phòng phát `room.suspended`, từ chối lệnh sau bằng
+  `room_suspended`, không ghi thêm `HandCommand`; khôi phục bằng replay cũng hỏng thì phòng vẫn tạm
+  dừng; phòng khác vẫn chạy bình thường.
