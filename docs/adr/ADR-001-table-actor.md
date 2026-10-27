@@ -1,0 +1,133 @@
+# ADR-001: Mỗi bàn một table actor
+
+- **Trạng thái:** Đề xuất (27/10/2026), chờ chủ dự án duyệt. Cài ở B4, độ bền ở B5.
+- **Liên quan:** [docs/spec.md](../spec.md) mục 3, [giao thức WebSocket](../api/ws-protocol.md),
+  `apps/games/models.py` (`Hand`, `HandCommand`), `apps/games/services.py`
+  (`save_completed_hand`).
+
+## Bối cảnh
+
+Một bàn có tới 9 người (và người xem) gửi lệnh qua WebSocket cùng lúc, cộng thêm đồng hồ suy nghĩ
+của server tự check/fold khi hết giờ. Ta cần:
+
+1. **Một thứ tự duy nhất** cho mọi thay đổi của bàn: hai người bấm cùng lúc thì một người được xử lý
+   trước, người kia thấy kết quả đó rồi mới tới lượt mình.
+2. **Mỗi lệnh áp đúng một lần**, kể cả khi client gửi lại (`command_id`, xem giao thức mục 5).
+3. **Không mất ván khi process chết**: khởi động lại phải dựng lại đúng ván dở (nguyên tắc #3:
+   mọi ván replay được).
+4. Quy mô 10–20 người, **một server**, không Celery, không Redis HA (spec #11).
+
+`HandEngine` không an toàn khi hai luồng cùng gọi `act()`; trạng thái PokerKit nằm trong bộ nhớ và
+không có cách lưu/nạp sẵn ngoài `record()`/`replay()`.
+
+## Quyết định
+
+### 1. Một process ASGI, mỗi phòng một asyncio task
+
+- Toàn bộ WebSocket chạy trong **một process** Daphne (Django Channels).
+- Mỗi phòng đang có người có **một `TableActor`**: một asyncio task đọc lệnh từ **một
+  `asyncio.Queue`** riêng của phòng. Chỉ task này được đụng vào `TableSession`/`HandEngine` của
+  phòng: đây là "người ghi duy nhất" của bàn.
+- Process giữ một bảng `room_id → TableActor`. Actor được tạo khi người đầu tiên kết nối vào phòng
+  (hoặc khi khởi động lại mà phòng còn ván dở) và dừng khi phòng đóng hoặc trống một lúc.
+- Channels consumer (mỗi kết nối một cái) **không** đụng engine. Nó chỉ: kiểm message theo schema
+  (`apps.games.contract`), gắn người gửi (lấy từ phiên đăng nhập, không bao giờ tin `player_id` do
+  client gửi), đặt lệnh vào hàng đợi của phòng, rồi chờ actor trả `command.ack`/`command.rejected`.
+- Hết giờ suy nghĩ cũng là một lệnh trong cùng hàng đợi (actor tự đặt hẹn giờ, khi tới hạn thì
+  xếp một lệnh `timeout` vào hàng). Nhờ vậy "Lym call đúng giây cuối" và "đồng hồ hết giờ" không
+  bao giờ chạy đè nhau: cái nào vào hàng trước thì được xử lý trước, cái sau thấy lượt đã qua và
+  bị từ chối (`not_your_turn`) hoặc bị bỏ qua.
+
+### 2. Thứ tự xử lý một lệnh (bắt buộc)
+
+**kiểm tra hợp lệ → ghi `HandCommand` → áp vào engine → phát sự kiện**
+
+| Bước | Làm gì | Lỗi ở bước này thì |
+|---|---|---|
+| 1. Kiểm tra hợp lệ | `command_id` đã áp chưa (bộ nhớ, rồi ràng buộc duy nhất `(hand, command_id)` trong DB); đúng `hand_id` đang chạy; người gửi ngồi bàn; hành động hợp lệ theo `HandEngine.legal_actions` | Trả `command.rejected`, ghi log. **Không** ghi DB, không đổi gì |
+| 2. Ghi `HandCommand` | Một transaction ngắn: `HandCommand(hand, player, sequence = n + 1, command_id, kind, amount)` | Không ghi được (DB lỗi) thì trả `command.rejected` mã `internal_error`; chưa áp gì nên client gửi lại an toàn |
+| 3. Áp vào engine | `HandEngine.act(...)` | Không được xảy ra vì bước 1 đã kiểm đúng luật đó (xem Hệ quả) |
+| 4. Phát sự kiện | Tăng `version`; mỗi người một bản `view_for(người đó)`; gửi qua channel layer (Redis). Ván xong thì `save_completed_hand()` (ván + ledger trong một transaction) **trước** khi phát `hand.completed` | Người nhận mất gói thì tự resync bằng `version` |
+| 5. Trả lời | `command.ack` cho người gửi, mang `result_version` | |
+
+Vì sao **ghi trước rồi mới áp**: nếu process chết ở bất kỳ đâu sau bước 2, lệnh đã nằm trong DB nên
+replay sẽ áp lại nó đúng một lần; nếu chết trước bước 2, coi như lệnh chưa từng tới, client gửi lại
+cùng `command_id` và được xử lý như mới. Không có trường hợp nào lệnh bị áp hai lần hay mất mà
+người gửi tưởng đã xong.
+
+Lệnh hết giờ được ghi y như lệnh người chơi, với `command_id` do server tạo
+(ví dụ `timeout-<hand_id>-<sequence>`), để replay ra đúng ván.
+
+### 3. Lệnh bị từ chối chỉ ghi log
+
+Lệnh sai luật, sai lượt, trùng `command_id` với nội dung khác… **không** tạo `HandCommand`. Bảng
+`HandCommand` chỉ chứa lệnh đã áp, đúng thứ tự `sequence`, nên replay không phải lọc gì. Log có
+`room_id`, `hand_id`, người gửi, `command_id`, mã lỗi để tra khi cần.
+
+### 4. Khôi phục bằng `HandEngine.replay`
+
+Khi process khởi động (hoặc actor của một phòng được tạo lại):
+
+1. Tìm `Hand` của phòng chưa có `completed_at` (ván dở).
+2. `HandEngine.replay(hand.replay_record())`: dựng lại từ cấu hình đã lưu (ghế, stack, button,
+   blind, **bộ bài**, thưởng 7-2) và các `HandCommand` theo `sequence`. Kết quả giống hệt lúc trước
+   khi chết, kể cả bài chưa lật, vì bộ bài đã được lưu từ đầu ván.
+3. Nạp tập `command_id` đã áp của ván đó để chống trùng tiếp.
+4. Đặt lại đồng hồ cho người đang tới lượt (B5 quyết định: cho lại đủ thời gian hay phần còn lại).
+5. Client kết nối lại nhận `table.snapshot` như bình thường.
+
+Không cần lưu "ảnh chụp" trạng thái riêng: `Hand.config` + `HandCommand` là đủ. Ván xong thì đã có
+`Hand.result` để đối chiếu với kết quả replay.
+
+## Phương án đã cân nhắc: khoá trong DB
+
+Mỗi lệnh xử lý ngay trong consumer nhận nó: mở transaction, `SELECT … FOR UPDATE` trên dòng `Hand`
+(hoặc `Room`), dựng lại engine, áp lệnh, ghi `HandCommand`, commit, rồi phát sự kiện.
+
+| | Actor (chọn) | Khoá DB |
+|---|---|---|
+| Thứ tự lệnh | Tự nhiên: hàng đợi xử lý từng cái | Do khoá quyết định; người chờ khoá bị treo |
+| Trạng thái engine | Giữ sẵn trong bộ nhớ | Phải replay toàn bộ ván **mỗi lệnh** (PokerKit không lưu/nạp trạng thái sẵn), hoặc tự viết phần lưu trạng thái |
+| Thứ tự sự kiện tới client | Một task phát nên luôn đúng thứ tự `version` | Hai transaction commit A rồi B nhưng phát có thể tới B trước A; phải lấy `version` từ DB và client phải sắp lại |
+| Đồng hồ hết giờ | Lệnh trong cùng hàng đợi | Cần thêm bộ hẹn giờ chạy ngoài (không có Celery) cùng tranh khoá với người chơi |
+| Nhiều process / nhiều server | Không (một phòng phải ở đúng một process) | Có, đây là ưu điểm chính |
+| Độ phức tạp ở quy mô 20 người | Thấp | Cao hơn: khoá, chờ khoá, deadlock, replay mỗi lệnh |
+
+Lợi thế lớn nhất của khoá DB là chạy được nhiều process. Ta không cần điều đó (một server, 10–20
+người, spec #11), nên chọn actor cho đơn giản và đúng thứ tự một cách tự nhiên. Ghi `HandCommand`
+trước khi áp vẫn cho ta độ bền mà phương án khoá DB có.
+
+Cũng đã loại: khoá Redis (thêm một nơi có thể hỏng mà không thêm gì so với actor khi chỉ có một
+process) và một worker toàn cục cho mọi bàn (một bàn chậm làm chậm cả hệ thống).
+
+## Hệ quả
+
+- **Chỉ chạy một process ASGI.** Không bật nhiều worker Daphne/uvicorn cho WebSocket: hai process
+  sẽ có hai actor cho cùng một phòng. Muốn mở rộng sau này thì chia phòng theo process (sharding
+  theo `room_id`), ngoài phạm vi hiện tại. Cần ghi điều này trong tài liệu deploy (B5).
+- **Bước 1 và bước 3 phải dùng cùng một luật.** Hiện `HandEngine.act()` tự kiểm rồi mới đổi trạng
+  thái, còn bước 1 kiểm bằng `legal_actions`. B4 nên thêm `HandEngine.check(action)` dùng chung
+  đúng đoạn kiểm của `act()` (không đổi trạng thái), để "kiểm thì qua mà áp thì lỗi" không thể xảy
+  ra. Nếu vẫn xảy ra (lỗi lập trình), actor dừng phòng đó và báo lỗi, không phát gì, vì `HandCommand`
+  đã ghi mà engine không áp được nghĩa là replay cũng sẽ hỏng: cần người xử lý.
+- **Mỗi lệnh một lần ghi DB** (một dòng `HandCommand`), trong transaction ngắn, qua async ORM hoặc
+  `sync_to_async`. Ở quy mô này không đáng lo.
+- **`version` sống trong bộ nhớ của actor**, không lưu DB. Sau khi process khởi động lại có thể
+  đếm lại từ đầu; mọi kết nối cũ đã đứt nên client luôn nhận `table.snapshot` mới và lấy `version`
+  của nó làm mốc (đã ghi trong giao thức mục 6). Ack cho lệnh trùng gửi lại sau khi khởi động lại
+  mang `result_version` bằng `version` hiện tại, vì số cũ đã mất.
+- **Chống trùng `command.sit_out`/`command.sit_in` chỉ trong bộ nhớ.** Sau khởi động lại, gửi lại một
+  lệnh sit-out đã áp sẽ nhận `already_sitting_out` thay vì ack trùng; vô hại vì trạng thái ghế đã
+  nằm trong `RoomSeat.sitting_out`.
+- Một actor bị chậm (chờ DB) chỉ làm chậm phòng của nó, không ảnh hưởng phòng khác.
+- Mock server (`mockserver/`) đã làm theo đúng mô hình một-người-ghi này (một event loop, xử lý từng
+  message, một hàng đợi gửi) nhưng không có DB; nó không thay cho actor.
+
+## Test B4 phải có
+
+- Hai lệnh cùng lúc từ hai người: đúng một được áp, người kia nhận `not_your_turn`.
+- Cùng `command_id` gửi hai lần: áp một lần, lần hai nhận ack `duplicate: true`.
+- Process "chết" sau khi ghi `HandCommand` nhưng trước khi phát: dựng lại bằng replay, trạng thái
+  đúng, client gửi lại lệnh đó thì nhận ack trùng chứ không áp lại.
+- Hết giờ và lệnh người chơi tới cùng lúc: chỉ một cái có hiệu lực.
+- Replay mọi ván đã xong cho đúng `Hand.result`.

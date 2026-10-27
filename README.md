@@ -68,7 +68,8 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 - [x] [`docs/api/ws-protocol.md`](docs/api/ws-protocol.md): envelope, `command_id`, ack/rejected, resync
 - [x] JSON Schema + fixtures, OpenAPI, sinh type TypeScript, CI kiểm schema
 - [x] Mock server + trang thử ([cách chạy](docs/api/mock-server.md))
-- [ ] ADR-001 Table actor
+- [x] [ADR-001 Table actor](docs/adr/ADR-001-table-actor.md)
+- [ ] Duyệt với chủ dự án
 
 **B4. Bàn chơi realtime**
 

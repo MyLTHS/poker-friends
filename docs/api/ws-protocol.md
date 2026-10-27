@@ -146,6 +146,9 @@ Các mã `not_your_turn`, `cannot_fold`, `cannot_check`, `nothing_to_call`, `can
 - Trả lời riêng (`command.ack`…) không dùng để phát hiện hụt.
 - Kết nối lại sau khi mất mạng: server tự gửi `table.snapshot`, client làm như trên. Client không
   bao giờ phải tự phát lại lịch sử ván.
+- `version` chỉ tăng dần **trong một kết nối**. Server khởi động lại có thể đếm lại từ đầu
+  ([ADR-001](../adr/ADR-001-table-actor.md)), nên với mỗi kết nối mới, client luôn lấy `version` của
+  `table.snapshot` đầu tiên làm mốc, kể cả khi nó nhỏ hơn số cũ.
 
 ## 7. Góc nhìn (projection): ai thấy bài nào
 
@@ -256,7 +259,8 @@ rồi phát `action.applied` với `timeout: true`. Client vẽ đồng hồ the
 
 ### `hand.completed` (sự kiện)
 
-Ván đã xong và đã chia chip. Gồm `hand` (trạng thái cuối, bài đã lật), `results` (mỗi người:
+Ván đã xong và đã chia chip. Gồm `hand` (trạng thái cuối, bài đã lật), `results` (mọi người trong
+ván, cộng người ngồi bàn mà không trong ván, như sit-out, nếu họ trả thưởng 7-2; mỗi dòng:
 `hand_net` lời/lỗ trong pot, `seven_deuce_net` thưởng 7-2 nhận/trả, `stack` số dư phòng sau
 cùng) và `seven_deuce` (`null` nếu không có thưởng). Sau sự kiện này `hand_id` của các message
 tiếp theo là `null` cho tới `hand.started` kế tiếp.
