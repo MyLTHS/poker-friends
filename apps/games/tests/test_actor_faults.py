@@ -316,3 +316,104 @@ class TestOrigin:
                     await conn.disconnect()
 
         run_async(body)
+
+
+class TestSmallFixes:
+    def test_a_seat_conflict_in_the_database_is_a_409_not_a_500(self, monkeypatch):
+        from django.db import IntegrityError
+        from django.test import AsyncClient
+
+        from apps.games.models import RoomSeat
+
+        room, a, b = heads_up_room()
+
+        async def conflict(*args, **kwargs):
+            raise IntegrityError("unique_seat_per_room")
+
+        async def body():
+            monkeypatch.setattr(RoomSeat.objects, "aupdate_or_create", conflict)
+            response = await AsyncClient().post(
+                f"/api/rooms/{room.pk}/seats/", '{"seat": 5}', content_type="application/json"
+            )
+            assert response.status_code == 409
+            assert response.json()["code"] == "seat_taken"
+
+        run_async(body)
+
+    def test_a_new_connection_does_not_skip_the_pause_between_hands(self, monkeypatch):
+        room, a, b = heads_up_room()
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            conn = ca if started["payload"]["hand"]["actor"] == str(a.pk) else cb
+            await send_act(conn, room, started["hand_id"], "fold-to-end-01", "fold")
+            await drain(ca)
+            third = await connect(room, a)  # a new tab during the 60 s pause
+            assert not by_type(await drain(third), "hand.started")
+
+        run_async(body)
+
+
+class TestWholeHandThroughTheConsumer:
+    def test_no_message_of_a_hand_played_to_showdown_shows_hidden_cards(self):
+        from apps.games import contract
+
+        from .test_actor import make_user, seat
+
+        room, a, b = heads_up_room()
+        c = make_user("carol")
+        seat(room, c, 3)
+        watcher = make_user("watcher")
+
+        async def body():
+            conns = {str(u.pk): await connect(room, u) for u in (a, b, c, watcher)}
+            seen = {pid: [] for pid in conns}
+            hand_id = None
+            for _ in range(40):  # check or call every turn until the hand ends
+                for pid, conn in conns.items():
+                    seen[pid] += await drain(conn, wait=0.15)
+                messages = seen[str(a.pk)]
+                started = by_type(messages, "hand.started")
+                if started and hand_id is None:
+                    hand_id = started[0]["hand_id"]
+                if by_type(messages, "hand.completed"):
+                    break
+                hands = [m["payload"]["hand"] for m in messages if m["payload"].get("hand")]
+                if not hands:
+                    continue
+                to_act = hands[-1]["actor"]
+                if to_act is None:
+                    continue
+                legal = [m for m in seen[to_act] if m["payload"].get("hand")][-1]["payload"]["hand"]
+                kind = "check" if legal["legal_actions"]["can_check"] else "call"
+                step = len([m for m in messages if m["type"] == "action.applied"])
+                await send_act(conns[to_act], room, hand_id, f"step-{step:03d}-{to_act}", kind)
+            assert by_type(seen[str(a.pk)], "hand.completed"), "the hand did not finish"
+            for viewer, messages in seen.items():
+                for message in messages:
+                    assert contract.semantic_errors(message, viewer) == [], message["type"]
+
+        run_async(body)
+
+    def test_two_players_acting_at_the_same_instant(self):
+        room, a, b = heads_up_room()
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            hand_id = started["hand_id"]
+            await asyncio.gather(
+                send_act(ca, room, hand_id, "same-instant-a", "call"),
+                send_act(cb, room, hand_id, "same-instant-b", "call"),
+            )
+            replies = await drain(ca) + await drain(cb)
+            acks = by_type(replies, "command.ack")
+            rejected = [m["payload"]["code"] for m in by_type(replies, "command.rejected")]
+            # Whichever the actor takes first wins; the other is judged against the new state
+            # (not_your_turn, or nothing_to_call once the small blind has called).
+            assert len(acks) == 1 and len(rejected) == 1
+            assert rejected[0] in {"not_your_turn", "nothing_to_call"}
+            assert await HandCommand.objects.filter(hand_id=hand_id).acount() == 1
+
+        run_async(body)

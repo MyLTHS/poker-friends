@@ -126,6 +126,7 @@ class TableActor:
         self._applied: dict[tuple, tuple] = {}  # see _dedup_key
         self._deadline_timer = None
         self._deadline: datetime | None = None
+        self._pausing = False  # between two hands, waiting for next_hand_delay
         self._task = asyncio.create_task(self._run())
 
     # ---- public: called from consumers/views, never touches the engine directly -----------
@@ -209,6 +210,7 @@ class TableActor:
             case _Timeout():
                 await self._on_timeout(item)
             case _StartHand():
+                self._pausing = False
                 await self._maybe_start_hand()
             case _TakeSeat():
                 await self._on_take_seat(item)
@@ -404,7 +406,7 @@ class TableActor:
         """Deal a new hand when none is running, the room is healthy and someone is watching
         (like the mock: no hands played to an empty room).
         """
-        if self.hand is not None or self.suspended or not self.connections:
+        if self.hand is not None or self.suspended or self._pausing or not self.connections:
             return
         previous_button = self.session._button_seat
         try:
@@ -428,6 +430,9 @@ class TableActor:
         await self._schedule_turn()
 
     def _schedule_next_hand(self) -> None:
+        # Until _StartHand arrives, nothing else (a new connection, a seat) starts the next hand
+        # early: players get the whole pause to see the result.
+        self._pausing = True
         asyncio.get_running_loop().call_later(
             self.next_hand_delay, lambda: self._queue.put_nowait(_StartHand())
         )
@@ -515,9 +520,12 @@ class TableActor:
                 raise Reject("seat_taken")
             if not 1 <= item.seat <= self.room.max_seats:
                 raise Reject("invalid_seat")
-            await RoomSeat.objects.aupdate_or_create(
-                room=self.room, user=item.user, defaults={"seat": item.seat}
-            )
+            try:
+                await RoomSeat.objects.aupdate_or_create(
+                    room=self.room, user=item.user, defaults={"seat": item.seat}
+                )
+            except IntegrityError as error:  # the database disagrees: someone has that seat
+                raise Reject("seat_taken") from error
             self.session.take_seat(player_id, item.seat)
             self.names[player_id] = item.user.username
             await self._seat_updated(item.seat)

@@ -202,3 +202,27 @@ trùng theo `(hand, command_id)`, khôi phục mục 4 và fail-stop mục 5. Nh
   phòng, xếp sẵn N khách có chip và in `sessionid` của từng người; chạy **trước** khi server mở
   phòng đó (actor chỉ đọc sổ chip lúc khôi phục).
 - Chỉ một process ASGI: ghi ở `config/asgi.py`; tài liệu deploy ở B5.
+
+### Sửa theo review chỉ-đọc PR #10
+
+- Mọi lỗi khi lưu ván xong đều fail-stop (không chỉ `HandPersistenceError`); khôi phục duyệt **mọi**
+  `Hand` chưa xong theo `hand_no` (mục 4.1), ván cũ còn dở mà đã có ván mới thì không dựng phòng.
+- Đồng hồ mang số lượt lúc hẹn, chỉ tác động đúng lượt đó; lệnh hết giờ tên `timeout:<hand>-<n>`
+  (client không gửi được dấu `:`), ghi thất bại thì hẹn lại sau 1 giây.
+- Lỗi sau khi đã ghi lệnh (kể cả khi phát sự kiện) đều fail-stop; một kết nối bị đầy kênh
+  (`ChannelFull`) thì chỉ bỏ kết nối đó.
+- Snapshot lúc ván mới đã chia trong bộ nhớ mà `Hand` chưa ghi xong: coi như giữa hai ván.
+- Lệnh của ván khác ván đang chạy được tra trong `HandCommand`: gửi lại lệnh cuối sau sự cố nhận ack
+  trùng (`result_version: null`).
+- WebSocket kiểm Origin (`AllowedHostsOriginValidator`).
+- Vào ghế đụng ràng buộc DB trả `seat_taken` (409); kết nối mới trong lúc nghỉ giữa hai ván không
+  chia ván sớm.
+- Ai trả thưởng 7-2 được tính theo các ghế lúc ván kết thúc (kể cả sit-out), không nằm trong
+  `Hand.config`. Đã kiểm: khôi phục dùng ghế đọc từ DB đúng lúc đó, và người không trong ván rời ghế
+  trước khi ván xong thì cả lúc chơi lẫn lúc khôi phục đều không tính họ, nên hai đường cho cùng kết
+  quả.
+
+Còn để sau (B5 trở đi): ghi DB trước khi đổi bộ nhớ cho sit-out/sit-in/rời ghế; gỡ actor của phòng
+không còn ai khỏi `_actors`; `_applied` và `TableSession.history` lớn dần theo số ván; hàng đợi
+không giới hạn và chưa có rate limit lệnh; WebSocket không có cookie phiên tạo khách mới mỗi lần nối.
+
