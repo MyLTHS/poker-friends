@@ -1,6 +1,6 @@
 # web — Frontend (Next.js)
 
-Claude dựng ở đợt C2 theo [docs/roadmap.md](../docs/roadmap.md), Codex review. Hiện mới có type
+Claude dựng ở đợt C2 theo [docs/roadmap.md](../docs/roadmap.md), một Claude riêng chỉ đọc review. Hiện mới có type
 TypeScript sinh từ hợp đồng API.
 
 ## Type sinh từ hợp đồng API

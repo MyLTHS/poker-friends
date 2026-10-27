@@ -9,16 +9,18 @@ biện với Codex ([docs/collab/](collab/)). Chờ chủ dự án duyệt.
 
 - **Học theo lớp**: nền móng → backend → thiết kế + frontend → kiểm thử → vận hành → beta → nhìn lại.
   Chủ dự án học và duyệt theo đúng thứ tự này.
-- **Phân vai (Lym chốt 27/10/2026)**: các phiên **Claude** viết **toàn bộ code** — backend, mock
-  server, trang thử, thiết kế, frontend. **Codex chỉ review**, ở chế độ chỉ đọc, không sửa file.
-  Lý do: chủ dự án chốt. (Trước 27/10, Codex làm trang thử, thiết kế, frontend và mock server.)
+- **Phân vai (Lym chốt 27/10/2026, cắt Codex vì quota token hết quá nhanh)**: các phiên **Claude**
+  viết **toàn bộ code** — backend, mock server, trang thử, thiết kế, frontend (một phiên Claude
+  desktop điều phối, giao việc cho Claude CLI ở terminal). **Một Claude riêng chỉ đọc** review,
+  không sửa file. Codex chỉ dùng lại khi chủ dự án yêu cầu rõ. (Trước 27/10, Codex làm trang thử,
+  thiết kế, frontend, mock server và review.)
 - **Frontend làm trước trên dữ liệu giả**: sau khi chốt hợp đồng API (B3), Claude dựng thiết kế
   và frontend song song trên mock, nên không phải chờ backend. Phần nào nối được với backend thật
   thì nối dần. Còn bài học và cổng duyệt của phần C vẫn diễn ra sau khi xong B.
 - **Mỗi đợt backend có trang thử** (Claude làm) để chủ dự án tự bấm và thấy hệ thống chạy thật.
-- Nhánh riêng, PR vào `main`, CI xanh, Codex review (chỉ đọc). Gộp vào `main`, deploy và đổi
-  phạm vi thì luôn hỏi chủ dự án.
-- Trao đổi Claude ↔ Codex ghi ở `docs/collab/`; bài học ghi ở `docs/learning/`.
+- Nhánh riêng, PR vào `main`, CI xanh, một Claude riêng review (chỉ đọc). Gộp vào `main`, deploy
+  và đổi phạm vi thì luôn hỏi chủ dự án.
+- Trao đổi (kể cả thời còn Codex) ghi ở `docs/collab/`; bài học ghi ở `docs/learning/`.
 
 ## Nhịp học của mỗi đợt (gọn)
 
@@ -78,7 +80,7 @@ transaction; identity khách lưu DB ngay từ đầu.
 **Tự làm:** viết test chứng minh tổng ledger một phòng luôn bằng tổng chip đã cấp.
 **Trang thử:** Django Admin xem phòng, ghế, sổ chip.
 
-### B3. Hợp đồng API (1 tuần, Claude làm, Codex review)
+### B3. Hợp đồng API (1 tuần, Claude làm, một Claude riêng chỉ đọc review)
 
 **Việc:**
 - `docs/api/ws-protocol.md`: envelope (`protocol_version`, `room_id`, `hand_id`, `version`,
@@ -95,7 +97,7 @@ transaction; identity khách lưu DB ngay từ đầu.
 **Trang thử:** mock server WebSocket, thử bằng client dòng lệnh. Trang thử có giao diện làm bằng
 React trong `web/` ở đợt frontend, sau khi chốt thiết kế (Lym quyết định 27/10/2026, bỏ trang
 HTML tĩnh).
-**Song song từ đây:** Claude bắt đầu C1 (thiết kế) rồi C2 (nền frontend) trên mock; Codex review.
+**Song song từ đây:** Claude bắt đầu C1 (thiết kế) rồi C2 (nền frontend) trên mock; một Claude riêng chỉ đọc review.
 
 ### B4. Bàn chơi realtime (2 tuần)
 
@@ -156,7 +158,7 @@ bảng tổng kết lời/lỗ; Django Admin + nhật ký thao tác admin.
 
 ## C. Thiết kế + frontend
 
-Claude làm trước trên mock từ sau B3 (Codex review); mỗi màn nối backend thật khi đợt B tương ứng xong; E2E tăng
+Claude làm trước trên mock từ sau B3 (một Claude riêng chỉ đọc review); mỗi màn nối backend thật khi đợt B tương ứng xong; E2E tăng
 dần sau mỗi lát. Bài học và cổng duyệt của chủ dự án diễn ra theo thứ tự dưới đây sau khi xong B.
 
 ### C1. Thiết kế
@@ -237,7 +239,7 @@ chọn hướng tiếp (tournament, bạn bè, thống kê, app mobile).
 | Học theo lớp nên phát hiện vấn đề giao diện muộn | Trang thử mỗi đợt B; Claude làm C trước trên mock từ B3 |
 | Nhịp học quá nặng thành viết tài liệu | Mỗi đợt chỉ 1 câu hỏi + 1 bài tập + 3–5 dòng bài học |
 | Hợp đồng API đổi làm vỡ frontend | Tài liệu trước code; type sinh tự động; contract test hai phía |
-| Hai AI sửa đè code nhau | Chỉ Claude sửa code, Codex review chỉ đọc; mỗi phiên Claude một nhánh + worktree |
+| Hai phiên Claude sửa đè code nhau | Chỉ Claude sửa code, một Claude riêng review chỉ đọc; mỗi phiên Claude một nhánh + worktree |
 | PokerKit có thêm hành vi bất ngờ | Mô phỏng chạy trong CI; mọi bất thường thành test hồi quy |
 | Dịch vụ ngoài làm chậm | VPS/tên miền trước B5; Google/email trước B6 |
 | Deploy tự động làm hỏng hệ thống | Chỉ deploy khi CI xanh; health check; production theo tag + bước duyệt; rollback một lệnh |
