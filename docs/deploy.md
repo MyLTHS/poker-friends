@@ -19,7 +19,9 @@
      này thì rate limit theo IP hỏng: hoặc mọi người chung một IP, hoặc người dùng tự khai IP giả.
    - `EMAIL_URL`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: [hướng dẫn](huong-dan-google-smtp.md).
      Thêm redirect URI `https://<tên-miền>/accounts/google/login/callback/` vào Google Cloud.
-3. **Heartbeat** có sẵn: Daphne ping WebSocket khi kết nối im 20 giây, đóng nếu 30 giây không có
+3. **WebSocket kiểm Origin**: trang web phải được mở từ một tên trong `DJANGO_ALLOWED_HOSTS`. Thử
+   bản dev từ điện thoại qua địa chỉ LAN (ví dụ `192.168.1.5`) thì thêm địa chỉ đó vào biến này.
+4. **Heartbeat** có sẵn: Daphne ping WebSocket khi kết nối im 20 giây, đóng nếu 30 giây không có
    pong. Caddy phải để WebSocket đi qua (mặc định của `reverse_proxy` đã được) và không cắt kết nối
    im lặng dưới 60 giây.
 

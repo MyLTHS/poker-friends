@@ -774,8 +774,9 @@ export interface components {
             players: {
                 player_id: components["schemas"]["PlayerId"];
                 display_name: string;
-                seat: components["schemas"]["SeatNumber"];
-                /** @description Lời (+) / lỗ (−) của ván, gồm cả thưởng 7-2. */
+                /** @description `null` với người không được chia bài mà vẫn có bút toán (đang nghỉ nhưng phải trả thưởng 7-2). */
+                seat: components["schemas"]["SeatNumber"] | null;
+                /** @description Lời (+) / lỗ (−) của ván, gồm cả thưởng 7-2. Tổng cả ván bằng 0. */
                 net: number;
             }[];
         };

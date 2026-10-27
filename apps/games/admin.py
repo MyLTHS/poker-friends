@@ -33,6 +33,11 @@ class PokerUserAdmin(UserAdmin):
     fieldsets = UserAdmin.fieldsets + (("Poker Friends", {"fields": ("is_guest",)}),)
     list_display = ("username", "email", "is_guest", "is_staff")
 
+    def has_delete_permission(self, request, obj=None):
+        # Deleting cascades to seats, bans and memberships behind the table actor's back, and
+        # ledger rows protect the rest anyway. Untick "active" to lock an account instead.
+        return False
+
 
 class RoomSeatInline(admin.TabularInline):
     model = RoomSeat
@@ -97,7 +102,8 @@ class RoomMemberAdmin(ViewOnlyAdmin):
 
 @admin.register(RoomBan)
 class RoomBanAdmin(admin.ModelAdmin):
-    """Deleting a ban lets that person back in (bans are read from the database, not cached)."""
+    """Deleting a ban lets that person back in at once: the table reads bans from the database
+    on every connection and seat request."""
 
     list_display = ("room", "user", "created_at")
     list_filter = ("room",)

@@ -346,10 +346,14 @@ async def kick(request: HttpRequest, room_id: int) -> JsonResponse:
         player_id = body.get("player_id")
         if not is_player_id(player_id) or set(body) != {"player_id"}:
             raise BadRequest({"player_id": ["A player_id string."]})
-        if int(player_id) == user.pk:
-            raise BadRequest({"player_id": ["The owner cannot kick themselves."]})
+        if int(player_id) in (user.pk, room.owner_id):
+            raise BadRequest({"player_id": ["Nobody can kick the owner (or themselves)."]})
     except BadRequest as exc:
         return error("validation_error", "Invalid body.", exc.fields)
+    if await User.objects.filter(pk=int(player_id), is_staff=True).aexists():
+        # Staff act as owners everywhere; a ban would only half work for them (REST lets them
+        # in, the WebSocket would not).
+        return error("validation_error", "Staff cannot be kicked.", {"player_id": ["Staff."]})
     if not await User.objects.filter(pk=int(player_id)).aexists():
         return error("validation_error", "No such player.", {"player_id": ["No such player."]})
     live = await actor_module.get_actor(room.pk)
@@ -367,7 +371,10 @@ async def close(request: HttpRequest, room_id: int) -> JsonResponse:
         return owned
     room, user = owned
     live = await actor_module.get_actor(room.pk)
-    closed_now = await live.close()
+    try:
+        closed_now = await live.close()
+    except actor_module.Reject as reject:
+        return _reject_response(reject)
     await log_action(room, user, OwnerAction.Kind.CLOSE, {"immediately": closed_now})
     return JsonResponse(room_detail(room, user), status=200 if closed_now else 202)
 

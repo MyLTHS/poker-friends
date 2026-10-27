@@ -258,8 +258,10 @@ không giới hạn và chưa có rate limit lệnh; WebSocket không có cookie
   vậy chúng xếp thứ tự cùng ván đang chạy: cấu hình đổi giữa ván để dành (`Room.pending_settings`)
   và áp ngay sau `hand.completed`; đóng giữa ván (`Room.closing`) cũng chờ ván xong. Cả hai lưu
   trong DB nên không mất khi khởi động lại. Phòng tạm dừng từ chối các thao tác này.
-- **Người bị kick** nằm trong tập `banned` của actor (nạp từ `RoomBan`), để lệnh ngồi ghế hay kết
-  nối xếp hàng ngay sau lệnh kick cũng bị chặn.
+- **Người bị kick:** actor đọc `RoomBan` từ DB mỗi lần kết nối, vào ghế, chat. `_kick` ghi ban trước
+  mọi thứ xếp hàng sau nó, nên lệnh ngồi ghế hay kết nối chen ngay sau vẫn bị chặn; xoá ban trong
+  admin có hiệu lực ngay. Không ai kick được chủ phòng hay staff. Phòng tạm dừng vẫn kick được người
+  không ngồi ghế.
 - **Thông báo** (`chat.message`, `audience.updated`) do actor gửi nhưng không tăng `version`.
 - **Mọi lỗi khi lưu ván xong** (không chỉ `HandPersistenceError`) đều fail-stop: sổ chip trong bộ
   nhớ đã đi trước DB. Khởi động lại thì khôi phục lưu lại ván; lưu vẫn hỏng thì phòng mở tạm dừng.

@@ -41,7 +41,7 @@ export function RoomScreen({ roomId }: { roomId: number }) {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const refresh = useCallback(() => loadRoom(rooms, roomId).then(setState), [rooms, roomId]);
-  const { live, say } = useRoomLive(rooms, roomId);
+  const { live, say } = useRoomLive(rooms, roomId, state !== null && !("error" in state));
 
   useEffect(() => {
     if (live.tableChanges > 0) void loadRoom(rooms, roomId).then(setState);

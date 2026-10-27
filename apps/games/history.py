@@ -13,7 +13,7 @@ from asgiref.sync import sync_to_async
 from django.http import HttpRequest, JsonResponse
 
 from . import contract
-from .actor import iso
+from .actor import TIMEOUT_COMMAND_PREFIX, iso
 from .engine.hand import Action, ActionKind, HandEngine
 from .models import ChatMessage, Hand, LedgerEntry, LedgerKind, User
 from .rooms import access, error, visible_room
@@ -72,10 +72,16 @@ async def list_hands(request: HttpRequest, room_id: int) -> JsonResponse:
     entries = LedgerEntry.objects.filter(hand__in=hands).values("hand_id", "user_id", "amount")
     async for entry in entries:
         nets[entry["hand_id"]][str(entry["user_id"])] += entry["amount"]
-    names = await _names({p for hand in hands for p in _seats(hand)})
+    names = await _names({p for hand in hands for p in _seats(hand) | nets[hand.pk].keys()})
     rows = []
     for hand in hands:
         voided = _is_voided(hand)
+        seats = _seats(hand)
+        # Dealt-in players, plus anyone else with an entry in this hand: a player sitting out
+        # still pays the 7-2 bonus (rule #27), so the hand only sums to 0 with them.
+        involved = sorted(
+            set(seats) | set(nets[hand.pk]), key=lambda p: (p not in seats, seats.get(p, 0), int(p))
+        )
         players = (
             []
             if voided
@@ -83,10 +89,10 @@ async def list_hands(request: HttpRequest, room_id: int) -> JsonResponse:
                 {
                     "player_id": player,
                     "display_name": names.get(player, player),
-                    "seat": seat,
+                    "seat": seats.get(player),
                     "net": nets[hand.pk].get(player, 0),
                 }
-                for player, seat in sorted(_seats(hand).items(), key=lambda item: item[1])
+                for player in involved
             ]
         )
         rows.append(
@@ -101,8 +107,9 @@ async def list_hands(request: HttpRequest, room_id: int) -> JsonResponse:
     return JsonResponse({"hands": rows})
 
 
-def replay_steps(hand: Hand, viewer: str | None) -> list[dict[str, Any]]:
-    """Every state of ``hand`` as ``viewer`` saw it, from the deal to the end."""
+def replay_steps(hand: Hand, viewer: str | None) -> tuple[list[dict[str, Any]], str | None]:
+    """Every state of ``hand`` as ``viewer`` saw it, from the deal to the end, and the 7-2
+    bluff winner by rule #27 (even when nobody had chips left to pay the bonus)."""
     engine = HandEngine.replay({"config": hand.config, "actions": []})
     seated = viewer if viewer in engine.player_order else None
     seats = _seats(hand)
@@ -125,10 +132,12 @@ def replay_steps(hand: Hand, viewer: str | None) -> list[dict[str, Any]]:
             "seat": seats[player],
             "kind": command.kind,
             "amount": command.amount,
-            "timeout": command.command_id.startswith("timeout-"),
+            # Only the clock's own commands: clients cannot send ":" in a command_id.
+            "timeout": command.command_id.startswith(TIMEOUT_COMMAND_PREFIX),
         }
         steps.append({"action": applied, "hand": view()})
-    return steps
+    winner = engine.seven_deuce_bluff_winner() if hand.config.get("seven_deuce_bonus") else None
+    return steps, winner
 
 
 async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
@@ -142,7 +151,7 @@ async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
         return error("hand_voided", "This hand was voided by an admin.")
     viewer = str(user.pk) if user.is_authenticated else None
     # Replaying touches the ORM (hand.commands) and PokerKit: run it off the event loop.
-    steps = await sync_to_async(replay_steps)(hand, viewer)
+    steps, winner = await sync_to_async(replay_steps)(hand, viewer)
 
     hand_net: dict[str, int] = defaultdict(int)
     bonus_net: dict[str, int] = defaultdict(int)
@@ -160,7 +169,6 @@ async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
         }
         for p in sorted(players, key=int)
     ]
-    winner = next((p for p, amount in bonus_net.items() if amount > 0), None)
     return JsonResponse(
         {
             "hand_id": hand.pk,

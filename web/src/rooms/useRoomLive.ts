@@ -11,12 +11,19 @@ import { initialLive, liveReducer } from "./live";
 // localhost:3000 is also sent to localhost:8000.
 const SOCKET_BASE = process.env.NEXT_PUBLIC_DJANGO_WS ?? "ws://localhost:8000";
 
-/** Chat, spectators and "the table changed" for a room page (B8). Reconnects after 4 s. */
-export function useRoomLive(rooms: RoomsApi, roomId: number) {
+/**
+ * Chat, spectators and "the table changed" for a room page (B8). Reconnects after 4 s.
+ *
+ * Opens only once `ready` (the page's first REST call succeeded): that call gives a first-time
+ * visitor their guest session cookie. A socket opened earlier would make a second, throwaway
+ * guest, since a WebSocket handshake cannot set a cookie.
+ */
+export function useRoomLive(rooms: RoomsApi, roomId: number, ready: boolean) {
   const [live, dispatch] = useReducer(liveReducer, initialLive);
   const socket = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    if (!ready) return;
     let stopped = false;
     let retry: number | undefined;
     const open = () => {
@@ -31,8 +38,8 @@ export function useRoomLive(rooms: RoomsApi, roomId: number) {
       ws.onmessage = (event) => dispatch({ kind: "server", message: JSON.parse(event.data) as ServerMessage });
       ws.onclose = (event) => {
         dispatch({ kind: "closed", code: event.code });
-        // Kicked or no access: retrying cannot help.
-        if (!stopped && event.code !== 4403 && event.code !== 4404) retry = window.setTimeout(open, 4000);
+        // Kicked, no access, or too many guests from this address: retrying cannot help.
+        if (!stopped && ![4403, 4404, 4429].includes(event.code)) retry = window.setTimeout(open, 4000);
       };
     };
     open();
@@ -41,7 +48,7 @@ export function useRoomLive(rooms: RoomsApi, roomId: number) {
       window.clearTimeout(retry);
       socket.current?.close();
     };
-  }, [rooms, roomId]);
+  }, [rooms, roomId, ready]);
 
   const say = useCallback(
     (text: string) => {

@@ -166,7 +166,6 @@ class TableActor:
         self.resume_deadline: datetime | None = None  # set by _recover() for a hand in progress
         self.pending: dict[str, Any] = {}  # owner's setting changes waiting for the next hand
         self.closing = False  # the owner closed the room during a hand
-        self.banned: set[str] = set()  # kicked players (RoomBan), checked by the one writer
         self._audience: list[dict[str, str]] = []  # last spectator list sent (B8)
         self._pausing = False  # between two hands, waiting for next_hand_delay
         self._task = asyncio.create_task(self._run())
@@ -289,8 +288,6 @@ class TableActor:
                 await self._on_chat(item)
             case _Call():
                 try:
-                    if self.suspended:
-                        raise Reject("room_suspended")
                     result = await item.fn()
                 except Exception as error:
                     item.future.set_exception(error)
@@ -301,7 +298,7 @@ class TableActor:
 
     async def _on_connect(self, item: _Connect) -> None:
         player_id = item.player_id
-        if player_id in self.banned:
+        if await self._is_banned(player_id):
             # Kicked after the consumer checked, before this connection reached the queue.
             layer = get_channel_layer()
             if layer is not None:
@@ -624,7 +621,7 @@ class TableActor:
         try:
             if self.suspended:
                 raise Reject("room_suspended")
-            if player_id in self.banned:
+            if await self._is_banned(player_id):
                 raise Reject("kicked")
             if self.closed or self.closing:
                 raise Reject("room_closed")
@@ -668,7 +665,17 @@ class TableActor:
 
     # ---- owner actions (B7) ------------------------------------------------------------------
 
+    async def _is_banned(self, player_id: str) -> bool:
+        """Read from the database every time: _kick writes the ban before anything queued after
+        it runs (so no race), and deleting the row in the admin lifts it at once."""
+        return await RoomBan.objects.filter(room=self.room, user_id=int(player_id)).aexists()
+
+    def _refuse_if_suspended(self) -> None:
+        if self.suspended:
+            raise Reject("room_suspended")
+
     async def _grant_chips(self, player_id: str, amount: int) -> int:
+        self._refuse_if_suspended()
         if player_id not in self.session.seats.values():
             raise Reject("not_seated")
         before = len(self.session.ledger)
@@ -688,6 +695,7 @@ class TableActor:
         return self.session.stacks[player_id]
 
     async def _update_settings(self, changes: dict[str, Any]) -> None:
+        self._refuse_if_suspended()
         current = {key: getattr(self.room, key) for key in ROOM_SETTINGS}
         merged = {**current, **self.pending, **changes}
         if merged["small_blind"] >= merged["big_blind"]:
@@ -725,6 +733,9 @@ class TableActor:
 
     async def _kick(self, user_id: int) -> None:
         player_id = str(user_id)
+        if self.suspended and player_id in self.session.seats.values():
+            # The broken hand may involve them; a spectator can still be removed (chat abuse).
+            raise Reject("room_suspended")
         if self.session._in_hand(player_id):
             raise Reject("player_in_hand")
         seat = self._seat_of(player_id) if player_id in self.session.seats.values() else None
@@ -733,7 +744,6 @@ class TableActor:
             await RoomSeat.objects.filter(room=self.room, user_id=user_id).adelete()
         await RoomBan.objects.aget_or_create(room=self.room, user_id=user_id)
         await RoomMember.objects.filter(room=self.room, user_id=user_id).adelete()
-        self.banned.add(player_id)
         # Drop their connections first so they get nothing more, then close them.
         kicked = [conn for conn, player in self.connections.items() if player == player_id]
         layer = get_channel_layer()
@@ -746,6 +756,7 @@ class TableActor:
             await self._seat_updated(seat)
 
     async def _close(self) -> bool:
+        self._refuse_if_suspended()
         if self.closed:
             return True
         if self.hand is not None:
@@ -883,6 +894,8 @@ class TableActor:
                 await self._reply(conn, type_, payload)
 
     async def _on_chat(self, item: _Chat) -> None:
+        if not self._connected(item.player_id) or await self._is_banned(item.player_id):
+            return  # sent just before a kick closed their socket: not said in this room
         line = await ChatMessage.objects.acreate(
             room=self.room, user_id=int(item.player_id), text=item.text
         )
@@ -1110,13 +1123,11 @@ async def _recover(room_id: int) -> TableActor:
                 _asked(str(c.player_id), "command.act", payload),
                 None,
             )
-    banned = {str(user_id) async for user_id in room.bans.values_list("user_id", flat=True)}
     # No await from here on: the actor's task starts at the next one and must see all of this.
     actor = TableActor(room, session, hand_row)
     actor.names.update(names)
     actor._applied.update(applied)
     actor.suspended = poisoned
-    actor.banned = banned
     actor.pending = dict(room.pending_settings)
     actor.closing = room.closing
     if hand_row is not None:

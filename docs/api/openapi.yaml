@@ -1176,10 +1176,13 @@ components:
               display_name:
                 type: string
               seat:
-                $ref: "./schema/common.schema.json#/$defs/SeatNumber"
+                description: "`null` với người không được chia bài mà vẫn có bút toán (đang nghỉ nhưng phải trả thưởng 7-2)."
+                anyOf:
+                  - $ref: "./schema/common.schema.json#/$defs/SeatNumber"
+                  - type: "null"
               net:
                 type: integer
-                description: Lời (+) / lỗ (−) của ván, gồm cả thưởng 7-2.
+                description: Lời (+) / lỗ (−) của ván, gồm cả thưởng 7-2. Tổng cả ván bằng 0.
             required: [player_id, display_name, seat, net]
             additionalProperties: false
       required: [hand_id, hand_no, completed_at, voided, players]
