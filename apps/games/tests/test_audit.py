@@ -8,7 +8,7 @@ from asgiref.sync import async_to_sync
 from django.test import Client
 
 from apps.games import actor as actor_module
-from apps.games.models import Hand, User
+from apps.games.models import Hand, HandCommand, User
 
 from .test_actor import (  # noqa: F401 (_slow_next_hand is an autouse fixture)
     _slow_next_hand,
@@ -19,6 +19,7 @@ from .test_actor import (  # noqa: F401 (_slow_next_hand is an autouse fixture)
     send_act,
     started_hand,
 )
+from .test_rooms import closed_with
 
 pytestmark = [pytest.mark.django_db(transaction=True)]
 
@@ -66,3 +67,22 @@ class TestAdminHidesTheDeck:
         hand = Hand.objects.get(room=room)
         assert hand.completed_at is not None
         assert "deck" in self.admin_page(hand)
+
+
+class TestLockedAccount:
+    """An account locked in the admin (is_active off) kept playing through its open socket."""
+
+    def test_its_open_socket_is_closed_and_its_command_not_applied(self):
+        room, a, b = heads_up_room()
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            to_act = started["payload"]["hand"]["actor"]
+            conn, user = (ca, a) if to_act == str(a.pk) else (cb, b)
+            await User.objects.filter(pk=user.pk).aupdate(is_active=False)
+            await send_act(conn, room, started["hand_id"], "locked-account-fold", "fold")
+            assert await closed_with(conn) == actor_module.KICKED_CLOSE_CODE
+            assert not await HandCommand.objects.filter(command_id="locked-account-fold").aexists()
+
+        run_async(body)

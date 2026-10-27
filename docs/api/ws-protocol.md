@@ -422,7 +422,9 @@ trong DB nên không mất khi server khởi động lại. Đóng phòng giữa
 ```
 
 Người bị chủ phòng kick: cả bàn nhận `seat.updated` (ghế trống); mọi kết nối của người đó bị server
-đóng với mã **4403**, và người đó không vào lại được phòng (REST trả `kicked`). Kết nối vào phòng
+đóng với mã **4403**, và người đó không vào lại được phòng (REST trả `kicked`). Tài khoản bị khóa
+trong admin (bỏ "active") lúc đang kết nối: tin kế tiếp người đó gửi không được xử lý, server đóng
+kết nối với **4403** (tới lúc đó họ vẫn nhận tin của bàn). Kết nối vào phòng
 private mà không có quyền xem: mã **4404**. Chưa đăng nhập và IP này đã tạo quá nhiều khách
 (20/giờ): mã **4429**. Server nhận bắt tay rồi mới đóng, để trình duyệt thấy được mã (đóng ngay lúc
 bắt tay thì trình duyệt chỉ thấy 1006). Client **không thử kết nối lại** khi nhận 4403 hay 4404.
