@@ -11,7 +11,7 @@ Percent-encode special characters in the user or password (``@`` is ``%40``).
 
 from urllib.parse import unquote, urlsplit
 
-CONSOLE_BACKEND = "django.core.mail.backends.console.EmailBackend"
+CONSOLE_BACKEND = "apps.accounts.console_email.EmailBackend"
 SMTP_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 STARTTLS_PORT = 587
 

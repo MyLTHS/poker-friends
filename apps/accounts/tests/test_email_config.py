@@ -4,7 +4,7 @@ import pytest
 
 from apps.accounts.email_config import mailers_from_url
 
-CONSOLE = {"default": {"BACKEND": "django.core.mail.backends.console.EmailBackend"}}
+CONSOLE = {"default": {"BACKEND": "apps.accounts.console_email.EmailBackend"}}
 SMTP = "django.core.mail.backends.smtp.EmailBackend"
 
 
@@ -51,3 +51,19 @@ def test_plain_smtp_without_port_defaults_to_25_without_tls():
 def test_unknown_scheme_is_rejected():
     with pytest.raises(ValueError, match="EMAIL_URL"):
         mailers_from_url("http://example.com")
+
+
+def test_console_backend_prints_the_body_as_plain_text():
+    import io
+
+    from django.core.mail import EmailMessage
+
+    from apps.accounts.console_email import EmailBackend
+
+    stream = io.StringIO()
+    body = "Bấm link: http://localhost:3000/account/verify?token=abc&x=1"
+    EmailBackend(stream=stream, alias="test").send_messages(
+        [EmailMessage("Xác minh", body, "a@example.com", ["b@example.com"])]
+    )
+    assert body in stream.getvalue()
+    assert "Subject: Xác minh" in stream.getvalue()
