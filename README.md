@@ -128,7 +128,8 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản
   private chỉ chủ phòng, thành viên vào bằng link và người đang ngồi thấy (REST và WebSocket)
 - [x] Quyền chủ phòng qua hàng đợi của actor: cấp/trừ chip (không khi người đó đang trong ván, không
   âm), đổi blind/thời gian/thưởng 7-2 (giữa ván thì chờ ván sau, phát `room.updated`), kick (rời
-  ghế, đóng kết nối, không vào lại được), đóng phòng (giữa ván thì đóng khi ván xong)
+  ghế, đóng kết nối, không vào lại được; phòng private đổi luôn link mời, phòng public chỉ chặn
+  được tài khoản, xem [spec](docs/spec.md)), đóng phòng (giữa ván thì đóng khi ván xong)
 - [x] Rate limit tạo phòng (10/giờ mỗi người) và lệnh WebSocket (20/10 giây mỗi người chơi)
 - [x] Trang thử `web/` → `/rooms`: lobby, tạo phòng, link mời (`/rooms/join?token=`), bảng chủ phòng
   (cấp/trừ chip, kick, đổi cấu hình, đổi link, đóng phòng); ghế cập nhật qua REST mỗi 3 giây

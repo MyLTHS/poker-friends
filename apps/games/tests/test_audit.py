@@ -5,10 +5,10 @@ Each test here failed before its fix: the audit's probes asserted the faulty beh
 
 import pytest
 from asgiref.sync import async_to_sync
-from django.test import Client
+from django.test import AsyncClient, Client
 
 from apps.games import actor as actor_module
-from apps.games.models import Hand, HandCommand, User
+from apps.games.models import Hand, HandCommand, OwnerAction, Room, RoomMember, User
 
 from .test_actor import (  # noqa: F401 (_slow_next_hand is an autouse fixture)
     _slow_next_hand,
@@ -19,7 +19,7 @@ from .test_actor import (  # noqa: F401 (_slow_next_hand is an autouse fixture)
     send_act,
     started_hand,
 )
-from .test_rooms import closed_with
+from .test_rooms import _fresh_rate_limits, alogged_in, apost, closed_with, owned_one_player  # noqa: F401
 
 pytestmark = [pytest.mark.django_db(transaction=True)]
 
@@ -86,3 +86,43 @@ class TestLockedAccount:
             assert not await HandCommand.objects.filter(command_id="locked-account-fold").aexists()
 
         run_async(body)
+
+
+class TestKickRotatesThePrivateInvite:
+    """A player kicked from a private room came back as a fresh guest through the old link."""
+
+    def test_the_old_link_stops_working(self):
+        room, owner, a = owned_one_player()
+        room.is_private, room.invite_token = True, "invite-token-for-test"
+        room.save()
+        RoomMember.objects.create(room=room, user=a)
+
+        async def body():
+            client = await alogged_in(owner)
+            kick = await apost(client, f"/api/rooms/{room.pk}/kick/", {"player_id": str(a.pk)})
+            assert kick.status_code == 204
+            # The same person, logged out or in a private window: a new guest, the old link.
+            stranger = AsyncClient()
+            join = await apost(
+                stranger, "/api/rooms/join/", {"invite_token": "invite-token-for-test"}
+            )
+            assert join.status_code == 404
+
+        run_async(body)
+        room.refresh_from_db()
+        assert room.invite_token not in (None, "invite-token-for-test")
+        kick = OwnerAction.objects.get(room=room, kind=OwnerAction.Kind.KICK)
+        assert kick.details == {"player_id": str(a.pk), "invite_rotated": True}
+
+    def test_a_public_room_has_no_link_to_rotate(self):
+        room, owner, a = owned_one_player()
+
+        async def body():
+            client = await alogged_in(owner)
+            kick = await apost(client, f"/api/rooms/{room.pk}/kick/", {"player_id": str(a.pk)})
+            assert kick.status_code == 204
+
+        run_async(body)
+        room = Room.objects.get(pk=room.pk)
+        assert room.invite_token is None
+        assert OwnerAction.objects.get(room=room).details == {"player_id": str(a.pk)}

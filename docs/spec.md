@@ -146,6 +146,10 @@ Quyết định kiến trúc (thống nhất với Codex ở `docs/collab/`, s�
 - Quyền chủ phòng (gắn trên `Room`, không phải vai trò toàn hệ thống): cấp/điều chỉnh chip khi
   người đó không trong ván, đổi blind/thời gian suy nghĩ cho ván kế tiếp, kick, đóng phòng.
   Không có khái niệm club/đại lý.
+- Kick chặn **tài khoản**. Phòng private: kick đổi luôn link mời, nên người bị kick không quay lại
+  được bằng một tài khoản khách mới qua link cũ. Phòng public ai cũng vào được, nên kick không chặn
+  được người đó mở một tài khoản khách mới (trình duyệt ẩn danh). Chấp nhận giới hạn này cho bàn
+  bạn bè; không chặn theo IP (nhiều người chung một mạng nhà/quán).
 - Rate limit ở tầng API cho: đăng nhập, tạo phòng, gửi lệnh WebSocket — chống spam/brute-force ở
   quy mô nhỏ mà không cần hạ tầng riêng (không Celery/queue ngoài).
 

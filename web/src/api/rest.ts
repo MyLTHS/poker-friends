@@ -120,6 +120,9 @@ export interface paths {
          * @description Chỉ chủ phòng, không kick được chính mình. Người đó rời ghế (chip vẫn nằm trong sổ của phòng),
          *     mất quyền xem phòng private, mọi kết nối WebSocket của họ bị đóng (mã 4403), và không vào lại
          *     được (`kicked`). Đang trong ván thì từ chối `player_in_hand`: đợi ván xong.
+         *     Phòng private: link mời đổi luôn (link cũ hết hiệu lực), để người đó không quay lại bằng một
+         *     tài khoản khách mới qua link cũ; chủ phòng gửi link mới cho ai còn cần. Phòng public: chỉ chặn
+         *     được tài khoản đó, không chặn được người đó mở một tài khoản khách mới (không chặn theo IP).
          */
         post: operations["kickPlayer"];
         delete?: never;
