@@ -41,6 +41,11 @@ def iso(moment: datetime | None = None) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
 
 
+# After a restart mid-hand the player to act keeps what was left of their clock, but never less
+# than this (capped at the room's think time): the outage was not their fault (ADR-001 mục 4.5).
+RECOVERY_GRACE_SECONDS = 10
+
+
 class Reject(Exception):
     def __init__(self, code: str, message: str = ""):
         super().__init__(message or code)
@@ -114,6 +119,7 @@ class TableActor:
         self._applied: dict[tuple, tuple] = {}  # see _dedup_key
         self._deadline_timer = None
         self._deadline: datetime | None = None
+        self.resume_deadline: datetime | None = None  # set by _recover() for a hand in progress
         self._task = asyncio.create_task(self._run())
 
     # ---- public: called from consumers/views, never touches the engine directly -----------
@@ -170,9 +176,7 @@ class TableActor:
 
     async def _run(self) -> None:
         if self.hand is not None and self.session.current_hand.actor is not None:
-            # Recovered mid-hand: the player to act gets a full clock again (ADR-001 mục 4.5
-            # leaves "full time or what was left" to B5).
-            await self._schedule_turn()
+            await self._schedule_turn(self.resume_deadline)
         while True:
             item = await self._queue.get()
             try:
@@ -404,9 +408,11 @@ class TableActor:
         else:
             await self._schedule_turn()
 
-    async def _schedule_turn(self) -> None:
+    async def _schedule_turn(self, deadline: datetime | None = None) -> None:
         engine = self.session.current_hand
-        deadline = timezone.now() + timedelta(seconds=self.room.think_time_seconds)
+        now = timezone.now()
+        if deadline is None:
+            deadline = now + timedelta(seconds=self.room.think_time_seconds)
         turn = {
             "player_id": engine.actor,
             "seat": self._seat_of(engine.actor),
@@ -418,7 +424,7 @@ class TableActor:
         self._deadline = deadline
         hand_pk, player_id = self.hand.pk, engine.actor
         self._deadline_timer = asyncio.get_running_loop().call_later(
-            self.room.think_time_seconds,
+            max(0.0, (deadline - now).total_seconds()),
             lambda: self._queue.put_nowait(_Timeout(hand_pk, player_id)),
         )
         await self._broadcast("turn.deadline", lambda viewer: {"turn": turn})
@@ -722,14 +728,24 @@ async def _recover(room_id: int) -> TableActor:
     session._button_seat = last_hand.button_seat if last_hand else None
 
     hand_row: Hand | None = None
+    poisoned = False
     if last_hand is not None and last_hand.completed_at is None:
+        stored = HandCommand.objects.filter(hand=last_hand).order_by("sequence")
+        commands = [c async for c in stored]
         actions = [
-            {"player_id": str(c.player_id), "kind": c.kind, "amount": c.amount}
-            async for c in HandCommand.objects.filter(hand=last_hand).order_by("sequence")
+            {"player_id": str(c.player_id), "kind": c.kind, "amount": c.amount} for c in commands
         ]
-        engine = HandEngine.replay({"config": last_hand.config, "actions": actions})
+        try:
+            engine = HandEngine.replay({"config": last_hand.config, "actions": actions})
+        except Exception:
+            # A recorded command the engine refuses (ADR-001 mục 5.4). Open the room suspended
+            # so clients see why, and wait for an admin: void_hand, then restart the server.
+            log.exception("room %s: replay of hand %s failed", room.pk, last_hand.pk)
+            engine, poisoned = None, True
         session.current_hand = engine
-        if engine.is_complete:
+        if engine is None:
+            pass
+        elif engine.is_complete:
             # The process died after the last command but before save_completed_hand(): finish
             # the hand through the normal path so the ledger ends up with exactly one entry
             # set, computed the same way a live completion would (ADR-001 mục 4.3).
@@ -739,6 +755,12 @@ async def _recover(room_id: int) -> TableActor:
             await asave_completed_hand(room, last_hand.hand_no, engine, new_entries)
         else:
             hand_row = last_hand
+            # Only what was left of the clock, counted from the last recorded command (or the
+            # deal), plus a short grace if that already ran out while the server was down.
+            last_event = commands[-1].created_at if commands else last_hand.created_at
+            think = timedelta(seconds=room.think_time_seconds)
+            grace = timedelta(seconds=min(RECOVERY_GRACE_SECONDS, room.think_time_seconds))
+            resume_deadline = max(last_event + think, timezone.now() + grace)
 
     applied: dict[tuple, tuple] = {}
     if hand_row is not None:
@@ -752,4 +774,7 @@ async def _recover(room_id: int) -> TableActor:
     actor = TableActor(room, session, hand_row)
     actor.names.update(names)
     actor._applied.update(applied)
+    actor.suspended = poisoned
+    if hand_row is not None:
+        actor.resume_deadline = resume_deadline
     return actor

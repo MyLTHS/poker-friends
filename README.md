@@ -96,8 +96,10 @@ trang React với backend thật, Playwright) làm sau.
 
 **B5. Độ bền + staging**
 
-- [ ] Đồng hồ suy nghĩ, hết giờ tự check/fold
-- [ ] Heartbeat, disconnect, reconnect bằng snapshot, khôi phục ván dở khi restart
+- [x] Đồng hồ suy nghĩ, hết giờ tự check/fold (B4a); khôi phục giữa ván giữ phần thời gian còn lại
+- [x] Heartbeat (ping WebSocket của Daphne), disconnect, reconnect bằng snapshot, khôi phục ván dở
+  khi restart (B4a); ván không dựng lại được thì phòng mở ở trạng thái tạm dừng, huỷ bằng
+  `manage.py void_hand` ([ADR-001](docs/adr/ADR-001-table-actor.md), [deploy](docs/deploy.md))
 - [ ] Staging trên VPS (Caddy HTTPS), diễn tập backup → khôi phục
 - [ ] CD staging: gộp vào `main` + CI xanh thì tự build, migrate, deploy lên staging
 

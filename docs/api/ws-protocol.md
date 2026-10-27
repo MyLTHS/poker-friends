@@ -85,8 +85,8 @@ Phạm vi chống trùng:
 - `command.sit_out` / `command.sit_in`: khoá là `command_id` trong phạm vi **phòng**, và **chỉ nằm
   trong bộ nhớ** của server: **không bền qua khởi động lại**. Sau khi server khởi động lại, gửi lại
   một sit-out đã áp sẽ nhận `command.rejected` mã `already_sitting_out` (hoặc `not_sitting_out` với
-  sit-in) thay vì ack trùng. Client coi hai mã này là "ghế đã ở đúng trạng thái mình muốn". B5 xem
-  lại có cần lưu bền hay không.
+  sit-in) thay vì ack trùng. Client coi hai mã này là "ghế đã ở đúng trạng thái mình muốn". B5 đã
+  xem lại và giữ như vậy (không lưu bền, lý do ở ADR-001 "Ghi chú khi cài (B5)").
 
 Ví dụ bấm đúp nút Call (cả hai lần cùng `command_id`):
 
@@ -386,6 +386,7 @@ không biết chắc trạng thái nên **dừng phòng** (fail-stop) thay vì �
    nút hành động.
 3. Trong lúc tạm dừng: mọi lệnh nhận `command.rejected` mã `room_suspended`; kết nối mới nhận
    `table.snapshot` với `room.status` là `"suspended"`.
+   Phòng cũng mở ra ở trạng thái này nếu lúc server khởi động lại, ván dở không dựng lại được (B5).
 4. Khôi phục xong (dựng lại bằng replay, hoặc người quản trị xử lý ván hỏng ở B5), server **đóng mọi
    kết nối** của phòng. Client kết nối lại, nhận snapshot mới, rồi gửi lại lệnh còn treo cùng
    `command_id`: nếu lệnh đã nằm trong ván thì nhận ack trùng (`result_version: null`), nếu không
@@ -458,7 +459,9 @@ Góc nhìn Lym, ván ví dụ ở mục 8 (`v` = `version`):
 
 ## 11. Chưa có trong phiên bản 1
 
-- Heartbeat/ping và tự cập nhật `connected` khi mất kết nối: B5 (đã có trường `connected`).
+- Heartbeat ở tầng giao thức: không có và không cần. Server (Daphne) ping ở tầng WebSocket khi
+  kết nối im 20 giây và đóng nếu 30 giây không có pong; trình duyệt tự trả pong. Kết nối đóng thì
+  cả bàn nhận `seat.updated` với `connected: false` (B5).
 - Chat, emoji, vào/ra của người xem: B8.
 - Chủ phòng cấp chip, đổi blind, kick: REST ở B7, kết quả phát bằng `seat.updated`.
 
