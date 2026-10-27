@@ -39,6 +39,13 @@ export default function Home() {
             </Link>
           </li>
         </ul>
+        <Link
+          href="/account"
+          className="mt-8 flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--panel)] px-5 py-4 hover:border-[var(--accent)]"
+        >
+          <span className="font-bold">Tài khoản</span>
+          <span className="text-sm text-[var(--muted)]">đăng ký, đăng nhập, khách, nâng cấp</span>
+        </Link>
       </div>
     </main>
   );

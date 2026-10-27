@@ -30,6 +30,26 @@ cổng khác thì báo cho trang web:
 NEXT_PUBLIC_TABLE_WS_URL=ws://localhost:8775/ws/rooms/1/ npm run dev
 ```
 
+## Thử trang tài khoản (B6) với Django thật
+
+Trang `/account` gọi API tài khoản của Django. `next.config.ts` chuyển tiếp (proxy) `/api/...` và
+`/accounts/...` sang Django (mặc định `http://localhost:8000`, đổi bằng biến `DJANGO_URL`), nên trình
+duyệt chỉ thấy một địa chỉ và cookie phiên + CSRF chạy thẳng, không cần CORS.
+
+```bash
+uv run python manage.py migrate      # terminal 1, ở thư mục gốc: tạo bảng (lần đầu)
+uv run python manage.py runserver    # Django :8000
+```
+
+```bash
+cd web && npm run dev                # terminal 2: http://localhost:3000/account
+```
+
+Chưa cấu hình email thì email (link xác minh, link đặt lại mật khẩu) **in ra terminal 1**: chép
+link mở trong trình duyệt. Chưa có key Google thì nút Google ẩn. Chạy web ở cổng khác 3000 thì
+báo Django: `FRONTEND_URL=http://localhost:3100 uv run python manage.py runserver`. Cách tạo key
+Google và cấu hình gửi email thật: [docs/huong-dan-google-smtp.md](../docs/huong-dan-google-smtp.md).
+
 ## Lệnh
 
 | Lệnh | Làm gì |
@@ -45,7 +65,8 @@ NEXT_PUBLIC_TABLE_WS_URL=ws://localhost:8775/ws/rooms/1/ npm run dev
 
 | Thư mục | Nội dung |
 |---|---|
-| `src/app/` | Trang: `/` chọn người chơi, `/table?player=<id>` bàn chơi |
+| `src/app/` | Trang: `/` chọn người chơi, `/table?player=<id>` bàn chơi, `/account` tài khoản (+ `/account/verify`, `/account/reset` mở từ link trong email) |
+| `src/account/` | Màn tài khoản (B6): `api.ts` gọi `/api/auth/` kèm CSRF, `messages.ts` câu thông báo theo mã lỗi; có test |
 | `src/club/` | Component hướng A (bàn, ghế, lá bài, chip, thanh hành động) và `club.css`, **chép** từ `design/mockups/src/` (không import chéo thư mục). Sửa mockup thì chép lại tay |
 | `src/table/reducer.ts` | Trạng thái bàn: snapshot + áp sự kiện theo `version`, hụt thì xin resync, lệnh chờ ack. Hàm thuần, có test |
 | `src/table/useTableSocket.ts` | Giữ một WebSocket, tự nối lại khi mất, gửi những gì reducer xếp vào `outbox` |
