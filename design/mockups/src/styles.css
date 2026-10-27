@@ -3886,3 +3886,150 @@ select {
     max-width: none;
   }
 }
+
+/* Round 5: overlay menu that is clickable the moment it opens and never sits under the top bar.
+   The old slide-in moved the panel with a transform transition, so a click made before the
+   transition finished (or while the tab was throttled) landed on the table behind it. */
+.app { --bar-h: 58px; }
+.app.theme-grid { --bar-h: 64px; }
+.nav-backdrop { display: none; }
+@keyframes nav-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 480px) {
+  .app.theme-grid { --bar-h: 58px; }
+}
+@media (max-width: 1050px) {
+  .app .prototype-layout .screen-nav {
+    position: fixed; left: 0; top: var(--bar-h); bottom: auto; z-index: 120;
+    height: calc(100vh - var(--bar-h)); overflow-y: auto;
+    display: none; transform: none; transition: none;
+  }
+  .app .prototype-layout .screen-nav.open { display: flex; animation: nav-fade-in .15s ease-out; }
+  .app .prototype-layout .nav-backdrop.open {
+    display: block; position: fixed; inset: var(--bar-h) 0 0 0; z-index: 110;
+    border: 0; padding: 0; background: #0009;
+  }
+}
+.app.table-mode .prototype-layout .screen-nav {
+  position: fixed; left: 0; top: var(--bar-h); bottom: auto; z-index: 120;
+  height: calc(100vh - var(--bar-h)); overflow-y: auto;
+  display: none; transform: none; transition: none;
+}
+.app.table-mode .prototype-layout .screen-nav.open { display: flex; animation: nav-fade-in .15s ease-out; }
+.app.table-mode .prototype-layout .nav-backdrop.open {
+  display: block; position: fixed; inset: var(--bar-h) 0 0 0; z-index: 110;
+  border: 0; padding: 0; background: #0009;
+}
+
+/* Round 5: landscape handset A, laid out at 844 x 390 and scaled as one block.
+   Rules: every text >= 11px, every button >= 44px tall, action labels on one line,
+   and no seat touching the table rail (positions come from COMPACT_RADII). */
+.landscape-wrap { padding: 24px; display: grid; place-items: center; overflow: auto; }
+.landscape-fit { position: relative; flex: none; }
+.landscape-fit .landscape-phone {
+  position: absolute; left: 0; top: 0;
+  width: 844px; height: 390px; max-width: none; max-height: none; min-height: 0;
+  aspect-ratio: auto; transform-origin: 0 0;
+}
+.landscape-fit .landscape-topbar { height: 44px; padding: 0 10px 0 26px; gap: 10px; font-size: 13px; }
+.landscape-fit .landscape-topbar > span { font-size: 11px; }
+.landscape-fit .landscape-topbar .landscape-blinds { font-size: 12px; }
+.landscape-fit .landscape-topbar button { width: 44px; height: 44px; display: grid; place-items: center; flex: none; }
+.landscape-fit .landscape-topbar button:first-child { margin-right: -6px; }
+.landscape-fit .landscape-topbar button i { right: 4px; top: 5px; width: 16px; height: 16px; font: 800 11px/16px sans-serif; }
+.landscape-fit .landscape-play { height: calc(100% - 44px); grid-template-columns: minmax(0, 1fr) 280px; }
+
+/* Table stage: about 535 x 332, kept clear of the handset notch on the left */
+.landscape-fit .phone-notch { width: 14px; height: 96px; }
+.landscape-fit .landscape-table { padding-left: 14px; }
+.landscape-fit .landscape-table .table-stage { width: 100%; height: 100%; min-height: 0; max-width: none; }
+.landscape-fit .landscape-table .poker-table { width: 60%; height: 58%; left: 20%; top: 21%; border-width: 8px; box-shadow: 0 0 0 2px #a57a43, 0 0 0 5px #15100c, 0 18px 40px #000c, inset 0 0 50px #001b12cc; }
+.landscape-fit .landscape-table .poker-table:before { inset: 6px; font-size: 12px; color: #f6d58c0d; }
+.landscape-fit .landscape-table .table-rail { inset: 3px; }
+.landscape-fit .landscape-table .pot-label { top: 56%; flex-direction: row; align-items: center; gap: 6px; }
+.landscape-fit .landscape-table .pot-label:before { display: none; }
+.landscape-fit .landscape-table .pot-label span { font-size: 11px; letter-spacing: .08em; }
+.landscape-fit .landscape-table .pot-label .chip-amount { margin: 0; font-size: 14px; }
+.landscape-fit .landscape-table .community-cards { top: 33%; gap: 4px; }
+.landscape-fit .landscape-table .playing-card,
+.landscape-fit .landscape-table .card-slot { width: 32px; height: 45px; padding: 3px 4px; font-size: 12px; border-radius: 5px; }
+.landscape-fit .landscape-table .playing-card b { font-size: 12px; }
+.landscape-fit .landscape-table .playing-card span { font-size: 13px; }
+.landscape-fit .landscape-table .playing-card:after { display: none; }
+.landscape-fit .landscape-table .last-action { top: 70%; bottom: auto; padding: 2px 8px; font-size: 11px; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.landscape-fit .landscape-table .last-action .chip-amount { font-size: 11px; }
+
+/* Seats: one row (avatar + name/stack), about 86 x 36 */
+.landscape-fit .landscape-table .seat { width: 86px; min-height: 36px; flex-direction: row; align-items: center; gap: 3px; text-align: left; }
+.landscape-fit .landscape-table .seat .avatar { width: 32px; height: 32px; border-width: 2px; font-size: 11px; }
+.landscape-fit .landscape-table .seat-info { min-width: 0; margin: 0; padding: 2px 5px; align-items: flex-start; border-radius: 7px; }
+.landscape-fit .landscape-table .seat-info strong { max-width: 50px; font-size: 11px; }
+.landscape-fit .landscape-table .seat-info .chip-amount { margin: 0; font-size: 11px; gap: 3px; }
+.landscape-fit .landscape-table .seat-info .poker-chip-icon { width: 11px; height: 11px; flex-basis: 11px; border-width: 1.5px; }
+.landscape-fit .landscape-table .seat:not(.seat-empty):not(.seat-hero):before,
+.landscape-fit .landscape-table .seat:not(.seat-empty):not(.seat-hero):after { width: 12px; height: 17px; top: -9px; left: 4px; border-width: 1px; font-size: 0; }
+.landscape-fit .landscape-table .seat:not(.seat-empty):not(.seat-hero):after { left: 14px; }
+.landscape-fit .landscape-table .seat-empty .seat-avatar { width: 32px; height: 32px; }
+.landscape-fit .landscape-table .seat-empty .seat-avatar svg { width: 16px; }
+.landscape-fit .landscape-table .state-badge { left: 36px; right: auto; top: -11px; bottom: auto; transform: none; padding: 0 4px; font-size: 11px; line-height: 14px; }
+.landscape-fit .landscape-table .state-badge svg { width: 10px; }
+.landscape-fit .landscape-table .seat-countdown { top: -6px; left: -6px; width: 20px; height: 20px; font-size: 11px; }
+.landscape-fit .landscape-table .seat-turn .avatar { box-shadow: 0 0 0 2px #12231d, 0 0 0 4px #f1c86c; }
+.landscape-fit .landscape-table .seat-turn:after { display: none; }
+.landscape-fit .landscape-table .dealer,
+.landscape-fit .landscape-table .blind-marker { transform: none; width: 20px; height: 20px; font-size: 11px; border-width: 1.5px; }
+.landscape-fit .landscape-table .dealer { left: -7px; right: auto; bottom: -7px; }
+.landscape-fit .landscape-table .blind-marker { left: 21px; right: auto; top: auto; bottom: -6px; }
+.landscape-fit .landscape-table .seat-hero .seat-cards { display: none; }
+.landscape-fit .landscape-table .table-wager,
+.landscape-fit .landscape-table .table-wager .chip-amount { font-size: 11px; }
+.landscape-fit .landscape-table .table-wager::before { width: 16px; height: 6px; }
+
+/* Controls column: 280 x 332 */
+.landscape-fit .landscape-controls .your-hand { height: 96px; padding: 6px 12px; gap: 10px; }
+.landscape-fit .landscape-controls .your-hand .playing-card { width: 50px; height: 70px; padding: 5px; font-size: 15px; }
+.landscape-fit .landscape-controls .your-hand .playing-card b { font-size: 15px; margin: 0; color: inherit; }
+.landscape-fit .landscape-controls .your-hand .playing-card span { font-size: 17px; }
+.landscape-fit .landscape-controls .your-hand > span { font-size: 11px; gap: 3px; }
+.landscape-fit .landscape-controls .your-hand > span .chip-amount { font-size: 13px; color: var(--ink); }
+.landscape-fit .landscape-controls .your-hand .timer { width: 42px; height: 42px; }
+.landscape-fit .landscape-controls .your-hand .timer span { font-size: 13px; }
+.landscape-fit .landscape-controls .actionbar-mobile { width: 100%; min-height: 0; margin: 0; height: calc(100% - 96px); padding: 8px 10px 10px; gap: 6px; }
+.landscape-fit .landscape-controls .quick-bets { gap: 4px; }
+.landscape-fit .landscape-controls .quick-bets button { min-height: 44px; padding: 0 2px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.landscape-fit .landscape-controls .range-row { min-height: 28px; gap: 8px; }
+.landscape-fit .landscape-controls .range-row input { flex: 1; min-width: 0; }
+.landscape-fit .landscape-controls .raise-value { font-size: 13px; }
+.landscape-fit .landscape-controls .action-buttons { margin-top: auto; gap: 5px; grid-template-columns: 0.9fr 0.9fr 1.2fr; }
+.landscape-fit .landscape-controls .action-buttons .btn { min-height: 48px; padding: 0 4px; font-size: 12px; white-space: nowrap; gap: 4px; }
+.landscape-fit .landscape-controls .action-buttons .btn .chip-amount { font-size: 12px; gap: 3px; }
+.landscape-fit .landscape-controls .action-buttons .btn .poker-chip-icon { width: 12px; height: 12px; flex-basis: 12px; border-width: 1.5px; }
+.landscape-fit .landscape-controls .toast { top: auto; bottom: 66px; right: 10px; font-size: 11px; }
+.landscape-fit .mobile-chat-sheet { inset: 12% 0 0 52%; border-radius: 18px 0 0; }
+
+/* Round 5: desktop table A, larger wager stacks and hero cards (checked at 1280x720, 1440x900, 1920x1080) */
+.game-main .table-wager { font-size: 13px; font-weight: 800; text-shadow: 0 1px 3px #000c; }
+.game-main .table-wager::before {
+  width: 30px; height: 15px; margin-bottom: 1px;
+  background:
+    radial-gradient(ellipse at 50% 30%, #f3d778 0 30%, transparent 32%),
+    repeating-linear-gradient(to bottom, #e5c55f 0 3px, #9f2030 3px 5px);
+}
+.game-main .seat-hero .seat-cards { top: -14px; left: 80px; gap: 4px; }
+.game-main .seat-hero .seat-cards .playing-card { width: 50px; height: 70px; padding: 5px; font-size: 18px; }
+.game-main .seat-hero .seat-cards .playing-card span { font-size: 20px; }
+@media (min-width: 1700px) and (min-height: 1000px) {
+  .game-main .table-wager { font-size: 15px; }
+  .game-main .table-wager::before { width: 36px; height: 17px; }
+  .game-main .seat-hero .seat-cards .playing-card { width: 58px; height: 80px; font-size: 20px; }
+  .game-main .seat-hero .seat-cards .playing-card span { font-size: 23px; }
+}
+/* Short desktop windows (e.g. 1280x720): pot above the board, hero seat lifted off the action bar */
+@media (max-height: 780px) and (min-width: 900px) {
+  .game-main .pot-label { top: 11%; }
+  .game-main .community-cards .playing-card.card-large,
+  .game-main .community-cards .card-slot { width: 50px; height: 70px; }
+  .game-main .community-cards .playing-card.card-large { font-size: 18px; }
+  .game-main .community-cards .playing-card.card-large span { font-size: 21px; }
+  .game-main .seat-hero { transform: translate(-50%, -64%); }
+  .game-main .table-wager-hero { margin-top: -12px; }
+}

@@ -2,7 +2,7 @@ import { ChipAmount } from "../chips";
 import { ChipStack } from "./ChipStack";
 import { PlayingCard } from "./PlayingCard";
 import { Seat, type ClubPlayer } from "./Seat";
-import { getSeatLayout } from "./seatLayout";
+import { COMPACT_RADII, DESKTOP_RADII, getSeatLayout } from "./seatLayout";
 
 type TableProps = {
   players: ClubPlayer[];
@@ -19,6 +19,7 @@ type TableProps = {
 
 export function Table({ players, board, pot, lastAction, heroIndex = players.findIndex((player) => player.cards), dealerIndex, smallBlindIndex, bigBlindIndex, compact = false, children }: TableProps) {
   const resolvedHeroIndex = heroIndex >= 0 ? heroIndex : players.length - 1;
+  const radii = compact ? COMPACT_RADII : DESKTOP_RADII;
   return (
     <div className={`table-stage ${compact ? "table-stage-mobile" : ""}`}>
       <div className="poker-table">
@@ -28,11 +29,11 @@ export function Table({ players, board, pot, lastAction, heroIndex = players.fin
         {lastAction && <div className="last-action">{lastAction.player} {lastAction.label} <ChipAmount value={lastAction.amount} /></div>}
       </div>
       {players.map((player, index) => {
-        const layout = getSeatLayout(index, players.length, resolvedHeroIndex);
+        const layout = getSeatLayout(index, players.length, resolvedHeroIndex, radii);
         const blind = index === smallBlindIndex ? "SB" : index === bigBlindIndex ? "BB" : undefined;
         return <Seat key={`${player.name}-${index}`} player={player} position={layout.seat} isHero={index === resolvedHeroIndex} dealer={index === dealerIndex} blind={blind} compact={compact} />;
       })}
-      {players.map((player, index) => player.bet && player.state !== "empty" ? <div className="table-wager" style={getSeatLayout(index, players.length, resolvedHeroIndex).wager} key={`bet-${player.name}-${index}`}><ChipStack amount={player.bet} /></div> : null)}
+      {players.map((player, index) => player.bet && player.state !== "empty" ? <div className={index === resolvedHeroIndex ? "table-wager table-wager-hero" : "table-wager"} style={getSeatLayout(index, players.length, resolvedHeroIndex, radii).wager} key={`bet-${player.name}-${index}`}><ChipStack amount={player.bet} /></div> : null)}
       {children}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Bell,
@@ -412,18 +412,50 @@ function DesktopTable({ celebration = false }: { celebration?: boolean }) {
   );
 }
 
+// The handset is laid out at its real size (844 x 390) and scaled as a whole, so text and
+// touch targets keep their designed proportions. Grows with the available width, up to 1.4x.
+const PHONE_W = 844;
+const PHONE_H = 390;
+const PHONE_MAX_SCALE = 1.4;
+
+function useFitScale(ref: React.RefObject<HTMLElement>) {
+  const [scale, setScale] = useState(1);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const cs = getComputedStyle(el);
+      const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const h = window.innerHeight - el.getBoundingClientRect().top - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      setScale(Math.max(1, Math.min(PHONE_MAX_SCALE, w / PHONE_W, h / PHONE_H)));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [ref]);
+  return scale;
+}
+
 function MobileTable() {
   const [chatOpen, setChatOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const scale = useFitScale(wrapRef);
   return (
-    <div className="phone-wrap landscape-wrap">
-      <div className="phone landscape-phone">
+    <div className="phone-wrap landscape-wrap" ref={wrapRef}>
+      <div className="landscape-fit" style={{ width: PHONE_W * scale, height: PHONE_H * scale }}>
+      <div className="phone landscape-phone" style={{ transform: `scale(${scale})` }}>
         <div className="phone-notch" aria-hidden="true" />
         <div className="landscape-topbar">
-          <ArrowLeft />
+          <button aria-label="Rời bàn"><ArrowLeft /></button>
           <b>Thứ Sáu Vui Vẻ</b>
           <span>Ván #1843</span>
           <span className="landscape-blinds"><ChipAmount value={10} /> / <ChipAmount value={20} /></span>
-          <button onClick={() => setChatOpen(!chatOpen)}><MessageCircle /><i>3</i></button>
+          <button aria-label="Mở chat" onClick={() => setChatOpen(!chatOpen)}><MessageCircle /><i>3</i></button>
         </div>
         <div className="landscape-play">
           <div className="landscape-table"><TableSurface mobile /></div>
@@ -445,6 +477,7 @@ function MobileTable() {
             </button>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
@@ -1154,6 +1187,14 @@ export default function App() {
     setScreen(next);
     setNavOpen(false);
   };
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
   const tableMode = ["desktop", "mobile", "seven"].includes(screen);
   const content = () => {
     switch (screen) {
@@ -1184,7 +1225,12 @@ export default function App() {
   return (
     <div className={cn("app", `theme-${direction}`, tableMode && "table-mode")} style={themes[direction]}>
       <div className="prototype-bar">
-        <button className="nav-trigger" onClick={() => setNavOpen(!navOpen)}>
+        <button
+          className="nav-trigger"
+          aria-label={navOpen ? "Đóng menu" : "Mở menu"}
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen(!navOpen)}
+        >
           <Menu />
         </button>
         <div className="proto-title">
@@ -1209,6 +1255,12 @@ export default function App() {
         <Pill tone="neutral">MOCKUP TƯƠNG TÁC</Pill>
       </div>
       <div className="prototype-layout">
+        <button
+          className={cn("nav-backdrop", navOpen && "open")}
+          aria-label="Đóng menu"
+          tabIndex={navOpen ? 0 : -1}
+          onClick={() => setNavOpen(false)}
+        />
         <aside className={cn("screen-nav", navOpen && "open")}>
           <div className="nav-brand">
             <Logo />
