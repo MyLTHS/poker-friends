@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CommandAckMessage",
-  "description": "Reply to the sender only: the command was applied. duplicate is true when this command_id had already been applied and nothing was applied again. result_version is the version of the first state event the command caused.",
+  "description": "Reply to the sender only: the command was applied. duplicate is true when this command_id had already been applied and nothing was applied again. result_version is the version of the first state event the command caused; for a duplicate it is null when the server restarted since (versions are not kept across restarts), and the client relies on its snapshot instead.",
   "type": "object",
   "properties": {
     "protocol_version": {
@@ -23,24 +23,57 @@
       "$ref": "../common.schema.json#/$defs/ServerTime"
     },
     "payload": {
-      "type": "object",
-      "properties": {
-        "command_id": {
-          "$ref": "../common.schema.json#/$defs/CommandId"
+      "oneOf": [
+        {
+          "description": "Applied now.",
+          "type": "object",
+          "properties": {
+            "command_id": {
+              "$ref": "../common.schema.json#/$defs/CommandId"
+            },
+            "duplicate": {
+              "const": false
+            },
+            "result_version": {
+              "$ref": "../common.schema.json#/$defs/Version"
+            }
+          },
+          "required": [
+            "command_id",
+            "duplicate",
+            "result_version"
+          ],
+          "additionalProperties": false
         },
-        "duplicate": {
-          "type": "boolean"
-        },
-        "result_version": {
-          "$ref": "../common.schema.json#/$defs/Version"
+        {
+          "description": "Applied before; nothing applied again.",
+          "type": "object",
+          "properties": {
+            "command_id": {
+              "$ref": "../common.schema.json#/$defs/CommandId"
+            },
+            "duplicate": {
+              "const": true
+            },
+            "result_version": {
+              "anyOf": [
+                {
+                  "$ref": "../common.schema.json#/$defs/Version"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "command_id",
+            "duplicate",
+            "result_version"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "command_id",
-        "duplicate",
-        "result_version"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   "required": [

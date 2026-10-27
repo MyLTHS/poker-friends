@@ -57,7 +57,7 @@ Message **client gửi** có `protocol_version`, `type`, `room_id`, `payload`; l
 
 | Loại | Gồm | Gửi cho | `version` |
 |---|---|---|---|
-| **Sự kiện trạng thái** | `hand.started`, `action.applied`, `turn.deadline`, `hand.completed`, `seat.updated` | Cả bàn (mỗi người một bản đã che bài theo góc nhìn của họ) | Tăng đúng **1** mỗi sự kiện |
+| **Sự kiện trạng thái** | `hand.started`, `action.applied`, `turn.deadline`, `hand.completed`, `seat.updated`, `room.suspended` | Cả bàn (mỗi người một bản đã che bài theo góc nhìn của họ) | Tăng đúng **1** mỗi sự kiện |
 | **Trả lời riêng** | `table.snapshot`, `command.ack`, `command.rejected`, `protocol.error` | Chỉ người gửi lệnh / người kết nối | Không tăng; mang `version` hiện tại của phòng |
 
 Cùng một sự kiện trạng thái thì mọi người nhận cùng `version`, chỉ khác phần bài được che.
@@ -73,7 +73,7 @@ một lần thử lại.
 
 | Tình huống | Server làm gì |
 |---|---|
-| Lệnh này đã được áp dụng, nội dung giống hệt | Không áp lại. Trả `command.ack` với `duplicate: true` và cùng `result_version` lần đầu |
+| Lệnh này đã được áp dụng, nội dung giống hệt | Không áp lại. Trả `command.ack` với `duplicate: true` và cùng `result_version` lần đầu. Nếu server đã khởi động lại kể từ lần đầu (số `version` cũ không còn), `result_version` là `null`: client không ghép được với sự kiện nào, chỉ cần dựa vào `table.snapshot` của kết nối mới |
 | Cùng `command_id` nhưng nội dung khác (ví dụ raise 30 rồi raise 60) | Trả `command.rejected` mã `command_id_reused`. Không áp gì |
 | Lần trước lệnh này bị từ chối | Lệnh bị từ chối không được lưu (ADR-001), nên được xét lại như lệnh mới; thường sẽ bị từ chối lại cùng mã |
 
@@ -123,7 +123,8 @@ bỏ mã là đổi phá vỡ. Trường `message` đi kèm chỉ để đọc l
 | `already_sitting_out` | `command.sit_out` khi đã sit-out |
 | `not_sitting_out` | `command.sit_in` khi đang chơi |
 | `rate_limited` | Gửi lệnh quá nhanh (B7) |
-| `internal_error` | Lỗi phía server; lệnh **không** được áp dụng, có thể gửi lại cùng `command_id` |
+| `room_suspended` | Phòng đang tạm dừng chờ khôi phục (xem mục 8, `room.suspended`) |
+| `internal_error` | Lỗi phía server xảy ra **trước khi** lệnh được ghi (`HandCommand`): lệnh chưa áp dụng, gửi lại cùng `command_id` là an toàn. Lỗi **sau khi** đã ghi không bao giờ trả mã này (xem `room.suspended`) |
 
 Các mã `not_your_turn`, `cannot_fold`, `cannot_check`, `nothing_to_call`, `cannot_raise`,
 `invalid_amount` lấy nguyên từ `IllegalAction.code` của `HandEngine`; `hand_complete` của engine
@@ -360,6 +361,8 @@ thì bị check/fold như thường). Người sit-out vẫn phải trả thư�
 
 `result_version` là `version` của sự kiện đầu tiên lệnh gây ra, để client ghép ack với sự kiện.
 Ack và sự kiện có thể tới theo bất kỳ thứ tự nào; client không được dựa vào thứ tự giữa chúng.
+Lệnh vừa áp (`duplicate: false`) luôn có `result_version`; ack trùng sau khi server khởi động lại
+mang `result_version: null` ([ví dụ](fixtures/server/valid/command.ack.duplicate-after-restart.json)).
 
 ### `command.rejected` (trả lời riêng)
 
@@ -369,6 +372,31 @@ Ack và sự kiện có thể tới theo bất kỳ thứ tự nào; client khô
   "version": 15, "server_time": "2026-10-27T14:03:11.250Z",
   "payload": {"command_id": "b3e0d7c4-1f2a-4c6b-8d9e-0a1b2c3d4e5f",
               "code": "not_your_turn", "message": "It is player 2's turn."}
+}
+```
+
+### `room.suspended` (sự kiện): lỗi sau khi đã ghi lệnh
+
+Server ghi lệnh vào DB (`HandCommand`) **trước** khi áp vào engine ([ADR-001](../adr/ADR-001-table-actor.md)).
+Nếu có lỗi **sau** bước ghi (engine từ chối một lệnh đã ghi, chốt bảo toàn chip báo lỗi…), server
+không biết chắc trạng thái nên **dừng phòng** (fail-stop) thay vì đoán:
+
+1. Lệnh đó **không** nhận `command.ack` hay `command.rejected`: kết quả chưa biết.
+2. Cả phòng nhận `room.suspended` (`reason: "recovery_needed"`). Client hiện "Bàn tạm dừng" và tắt
+   nút hành động.
+3. Trong lúc tạm dừng: mọi lệnh nhận `command.rejected` mã `room_suspended`; kết nối mới nhận
+   `table.snapshot` với `room.status` là `"suspended"`.
+4. Khôi phục xong (dựng lại bằng replay, hoặc người quản trị xử lý ván hỏng ở B5), server **đóng mọi
+   kết nối** của phòng. Client kết nối lại, nhận snapshot mới, rồi gửi lại lệnh còn treo cùng
+   `command_id`: nếu lệnh đã nằm trong ván thì nhận ack trùng (`result_version: null`), nếu không
+   thì được xử lý như lệnh mới.
+
+```json
+{
+  "protocol_version": 1, "type": "room.suspended", "room_id": 1, "hand_id": 41,
+  "version": 23, "server_time": "2026-10-27T14:03:44.902Z",
+  "payload": {"reason": "recovery_needed",
+              "message": "Chip conservation violated after a recorded command."}
 }
 ```
 

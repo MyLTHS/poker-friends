@@ -11,6 +11,7 @@ export type ServerMessage =
   | TurnDeadlineMessage
   | HandCompletedMessage
   | SeatUpdatedMessage
+  | RoomSuspendedMessage
   | CommandAckMessage
   | CommandRejectedMessage
   | ProtocolErrorMessage;
@@ -89,6 +90,7 @@ export type RejectCode =
   | "already_sitting_out"
   | "not_sitting_out"
   | "rate_limited"
+  | "room_suspended"
   | "internal_error";
 /**
  * Why a message without a usable command_id could not be handled.
@@ -144,7 +146,7 @@ export interface TableState {
 export interface RoomInfo {
   room_id: RoomId;
   name: string;
-  status: "open" | "playing" | "closed";
+  status: "open" | "playing" | "suspended" | "closed";
   max_seats: number;
   small_blind: number;
   big_blind: number;
@@ -351,7 +353,28 @@ export interface SeatUpdatedMessage {
   };
 }
 /**
- * Reply to the sender only: the command was applied. duplicate is true when this command_id had already been applied and nothing was applied again. result_version is the version of the first state event the command caused.
+ * State event: something failed after a command was recorded (fail-stop). The room accepts no command until it is recovered; then the server closes every connection of the room and clients reconnect to a fresh table.snapshot. See ADR-001.
+ */
+export interface RoomSuspendedMessage {
+  protocol_version: ProtocolVersion;
+  type: "room.suspended";
+  room_id: RoomId;
+  hand_id: HandIdOrNull;
+  version: Version;
+  server_time: ServerTime;
+  payload: {
+    /**
+     * recovery_needed: a recorded command could not be applied; the room must be recovered.
+     */
+    reason: "recovery_needed";
+    /**
+     * For logs and developers, not for players.
+     */
+    message: string;
+  };
+}
+/**
+ * Reply to the sender only: the command was applied. duplicate is true when this command_id had already been applied and nothing was applied again. result_version is the version of the first state event the command caused; for a duplicate it is null when the server restarted since (versions are not kept across restarts), and the client relies on its snapshot instead.
  */
 export interface CommandAckMessage {
   protocol_version: ProtocolVersion;
@@ -360,11 +383,17 @@ export interface CommandAckMessage {
   hand_id: HandIdOrNull;
   version: Version;
   server_time: ServerTime;
-  payload: {
-    command_id: CommandId;
-    duplicate: boolean;
-    result_version: Version;
-  };
+  payload:
+    | {
+        command_id: CommandId;
+        duplicate: false;
+        result_version: Version;
+      }
+    | {
+        command_id: CommandId;
+        duplicate: true;
+        result_version: Version | null;
+      };
 }
 /**
  * Reply to the sender only: the command was refused and nothing changed.

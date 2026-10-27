@@ -160,7 +160,7 @@ export interface components {
             room_id: components["schemas"]["RoomId"];
             name: string;
             /** @enum {string} */
-            status: "open" | "playing" | "closed";
+            status: "open" | "playing" | "suspended" | "closed";
             max_seats: number;
             small_blind: number;
             big_blind: number;

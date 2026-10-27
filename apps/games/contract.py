@@ -28,6 +28,7 @@ MESSAGE_TYPES: dict[Direction, list[str]] = {
         "turn.deadline",
         "hand.completed",
         "seat.updated",
+        "room.suspended",
         "command.ack",
         "command.rejected",
         "protocol.error",
@@ -38,7 +39,14 @@ MESSAGE_TYPES: dict[Direction, list[str]] = {
 # Server messages that change the room and add 1 to its version; every other server message
 # is a reply to one connection and carries the current version unchanged.
 STATE_EVENTS = frozenset(
-    {"hand.started", "action.applied", "turn.deadline", "hand.completed", "seat.updated"}
+    {
+        "hand.started",
+        "action.applied",
+        "turn.deadline",
+        "hand.completed",
+        "seat.updated",
+        "room.suspended",
+    }
 )
 
 

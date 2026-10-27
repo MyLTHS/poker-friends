@@ -46,7 +46,7 @@ không có cách lưu/nạp sẵn ngoài `record()`/`replay()`.
 |---|---|---|
 | 1. Kiểm tra hợp lệ | `command_id` đã áp chưa (bộ nhớ, rồi ràng buộc duy nhất `(hand, command_id)` trong DB); đúng `hand_id` đang chạy; người gửi ngồi bàn; hành động hợp lệ theo `HandEngine.legal_actions` | Trả `command.rejected`, ghi log. **Không** ghi DB, không đổi gì |
 | 2. Ghi `HandCommand` | Một transaction ngắn: `HandCommand(hand, player, sequence = n + 1, command_id, kind, amount)` | Không ghi được (DB lỗi) thì trả `command.rejected` mã `internal_error`; chưa áp gì nên client gửi lại an toàn |
-| 3. Áp vào engine | `HandEngine.act(...)` | Không được xảy ra vì bước 1 đã kiểm đúng luật đó (xem Hệ quả) |
+| 3. Áp vào engine | `HandEngine.act(...)` | Không được xảy ra vì bước 1 đã kiểm đúng luật đó. Nếu vẫn xảy ra: **fail-stop** (mục 5) |
 | 4. Phát sự kiện | Tăng `version`; mỗi người một bản `view_for(người đó)`; gửi qua channel layer (Redis). Ván xong thì `save_completed_hand()` (ván + ledger trong một transaction) **trước** khi phát `hand.completed` | Người nhận mất gói thì tự resync bằng `version` |
 | 5. Trả lời | `command.ack` cho người gửi, mang `result_version` | |
 
@@ -79,6 +79,26 @@ Khi process khởi động (hoặc actor của một phòng được tạo lại
 Không cần lưu "ảnh chụp" trạng thái riêng: `Hand.config` + `HandCommand` là đủ. Ván xong thì đã có
 `Hand.result` để đối chiếu với kết quả replay.
 
+### 5. Lỗi sau khi đã ghi `HandCommand`: fail-stop
+
+Từ lúc `HandCommand` đã commit, lệnh **đã thuộc về ván**: replay sẽ áp nó. Vì vậy mọi lỗi từ bước 3
+trở đi (engine ném `IllegalAction`, chốt bảo toàn chip ném `RuntimeError`, lỗi lập trình) **không**
+được trả `command.rejected` mã `internal_error`: mã đó hứa "chưa áp, gửi lại an toàn", sai ở đây.
+Actor làm như sau:
+
+1. Không trả ack hay rejected cho lệnh đó (kết quả chưa biết).
+2. Phát `room.suspended` (`reason: "recovery_needed"`) cho cả phòng, ghi log mức nghiêm trọng kèm
+   `room_id`, `hand_id`, `sequence`, `command_id`.
+3. Ngừng nhận lệnh: mọi lệnh sau nhận `command.rejected` mã `room_suspended`; snapshot cho kết nối
+   mới có `room.status = "suspended"`. Phòng khác không bị ảnh hưởng.
+4. Thử khôi phục bằng replay (mục 4). Replay thành công thì đóng mọi kết nối của phòng để client vào
+   lại với snapshot mới. Replay hỏng cùng chỗ (lệnh "độc") thì phòng **giữ trạng thái tạm dừng**
+   cho tới khi người quản trị xử lý (huỷ ván và trả lại chip theo `Hand.config`, hoặc cách khác):
+   quy trình chốt ở B5. Không bao giờ tự xoá `HandCommand` để "chữa".
+
+Lỗi **trước** khi ghi (DB không ghi được ở bước 2) thì chưa có gì thay đổi: trả `internal_error`,
+client gửi lại cùng `command_id` an toàn.
+
 ## Phương án đã cân nhắc: khoá trong DB
 
 Mỗi lệnh xử lý ngay trong consumer nhận nó: mở transaction, `SELECT … FOR UPDATE` trên dòng `Hand`
@@ -108,14 +128,14 @@ process) và một worker toàn cục cho mọi bàn (một bàn chậm làm ch�
 - **Bước 1 và bước 3 phải dùng cùng một luật.** Hiện `HandEngine.act()` tự kiểm rồi mới đổi trạng
   thái, còn bước 1 kiểm bằng `legal_actions`. B4 nên thêm `HandEngine.check(action)` dùng chung
   đúng đoạn kiểm của `act()` (không đổi trạng thái), để "kiểm thì qua mà áp thì lỗi" không thể xảy
-  ra. Nếu vẫn xảy ra (lỗi lập trình), actor dừng phòng đó và báo lỗi, không phát gì, vì `HandCommand`
-  đã ghi mà engine không áp được nghĩa là replay cũng sẽ hỏng: cần người xử lý.
+  ra. Nếu vẫn xảy ra (lỗi lập trình) thì fail-stop như mục 5.
 - **Mỗi lệnh một lần ghi DB** (một dòng `HandCommand`), trong transaction ngắn, qua async ORM hoặc
   `sync_to_async`. Ở quy mô này không đáng lo.
 - **`version` sống trong bộ nhớ của actor**, không lưu DB. Sau khi process khởi động lại có thể
   đếm lại từ đầu; mọi kết nối cũ đã đứt nên client luôn nhận `table.snapshot` mới và lấy `version`
   của nó làm mốc (đã ghi trong giao thức mục 6). Ack cho lệnh trùng gửi lại sau khi khởi động lại
-  mang `result_version` bằng `version` hiện tại, vì số cũ đã mất.
+  mang `result_version: null`: số cũ đã mất, và trả `version` hiện tại thì sẽ trỏ nhầm sang một sự
+  kiện khác. Client dựa vào snapshot của kết nối mới.
 - **Chống trùng `command.sit_out`/`command.sit_in` chỉ trong bộ nhớ.** Sau khởi động lại, gửi lại một
   lệnh sit-out đã áp sẽ nhận `already_sitting_out` thay vì ack trùng; vô hại vì trạng thái ghế đã
   nằm trong `RoomSeat.sitting_out`.
