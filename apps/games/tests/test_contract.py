@@ -1,12 +1,15 @@
 """The WebSocket contract in docs/api/: schemas, fixtures and the protocol document agree."""
 
 import json
+import random
 import re
 
 import pytest
 from jsonschema import Draft202012Validator
 
 from apps.games import contract
+from apps.games.engine.cards import shuffled_deck
+from apps.games.engine.hand import Action, ActionKind, HandConfig, HandEngine, Seat
 
 FIXTURES = contract.API_DIR / "fixtures"
 PROTOCOL_DOC = (contract.API_DIR / "ws-protocol.md").read_text()
@@ -84,3 +87,84 @@ def test_errors_reports_an_unknown_type_without_crashing():
     message = {"protocol_version": 1, "type": "command.nope", "room_id": 1, "payload": {}}
     assert contract.errors(message, "client") != []
     assert contract.errors("not even an object", "client") != []
+
+
+# ---- semantics: what a message may show depends on who receives it --------------------------
+
+VIEWERS = json.loads((FIXTURES / "server" / "viewers.json").read_text())
+
+
+def server_fixtures(kind: str):
+    return [
+        pytest.param(path, VIEWERS[kind][path.stem], id=path.stem)
+        for path in sorted((FIXTURES / "server" / kind).glob("*.json"))
+    ]
+
+
+@pytest.mark.parametrize("kind", ["valid", "leaks"])
+def test_every_server_fixture_names_its_receiver(kind):
+    names = {p.stem for p in (FIXTURES / "server" / kind).glob("*.json")}
+    assert names == set(VIEWERS[kind])
+
+
+@pytest.mark.parametrize(("path", "viewer"), server_fixtures("valid"))
+def test_valid_server_fixture_passes_the_semantic_check(path, viewer):
+    assert contract.semantic_errors(load(path), viewer) == []
+
+
+@pytest.mark.parametrize(("path", "viewer"), server_fixtures("leaks"))
+def test_leak_fixture_fits_the_schema_but_fails_the_semantic_check(path, viewer):
+    message = load(path)
+    assert contract.errors(message, "server") == []
+    assert contract.semantic_errors(message, viewer) != []
+    with pytest.raises(contract.ContractError):
+        contract.validate_outgoing(message, viewer)
+
+
+def _random_hands(count: int, seed: int):
+    """Engines after every action of random hands, all-ins included."""
+    rng = random.Random(seed)
+    for _ in range(count):
+        size = rng.randint(2, 6)
+        seats = tuple(
+            Seat(seat=i + 1, player_id=str(i + 1), stack=rng.choice([40, 100, 250, 1000]))
+            for i in range(size)
+        )
+        engine = HandEngine(
+            HandConfig(
+                seats=seats,
+                button_seat=rng.randint(1, size),
+                small_blind=5,
+                big_blind=10,
+                deck=shuffled_deck(rng),
+                seven_deuce_bonus=rng.choice([0, 50]),
+            )
+        )
+        yield engine
+        while not engine.is_complete:
+            actor = engine.actor
+            legal = engine.legal_actions(actor)
+            roll = rng.random()
+            if legal.max_raise_to is not None and roll < 0.2:
+                engine.act(Action(actor, ActionKind.RAISE, legal.max_raise_to))
+            elif legal.min_raise_to is not None and roll < 0.35:
+                engine.act(Action(actor, ActionKind.RAISE, legal.min_raise_to))
+            elif legal.can_fold and roll < 0.55:
+                engine.act(Action(actor, ActionKind.FOLD))
+            else:
+                engine.act(Action(actor, ActionKind.CHECK if legal.can_check else ActionKind.CALL))
+            yield engine
+
+
+def test_every_projection_of_random_hands_passes_the_semantic_check():
+    checked = 0
+    for engine in _random_hands(300, seed=27):
+        for viewer in (*engine.player_order, "99"):
+            view = {
+                "hand_id": 1,
+                "hand_no": 1,
+                **engine.view_for(viewer if viewer != "99" else None),
+            }
+            assert contract.hand_view_errors(view, viewer) == [], (viewer, view)
+            checked += 1
+    assert checked > 5000

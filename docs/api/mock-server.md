@@ -55,7 +55,9 @@ Lym (ghế 1), An (ghế 3), Bình (ghế 5), mỗi người 1000 chip, blind 5/
 ## Mọi message đều được kiểm theo schema
 
 Mọi message mock server gửi đi đều qua một chỗ (`MockTable._send`) kiểm bằng
-`apps.games.contract.validate` trước khi gửi; sai schema thì ném lỗi chứ không gửi. Message client
+`apps.games.contract.validate_outgoing(message, người nhận)` trước khi gửi: đúng schema **và**
+đúng ngữ nghĩa với người nhận (không lộ bài người khác, chip cộng lại khớp). Sai thì ném lỗi chứ
+không gửi. Message client
 gửi tới cũng được kiểm: sai thì trả `command.rejected` (`invalid_command`) hoặc `protocol.error`.
 
 ## Code

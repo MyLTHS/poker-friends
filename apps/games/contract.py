@@ -110,3 +110,136 @@ def validate(message: Any, direction: Direction) -> None:
     found = errors(message, direction)
     if found:
         raise ContractError(direction, found)
+
+
+# ---- semantics ---------------------------------------------------------------------------
+#
+# JSON Schema checks the shape of a message, not whether it is safe to send to one person: a
+# snapshot showing an opponent's hole cards has a perfectly valid shape. These checks know who
+# the receiver is. They are a second lock behind HandEngine.view_for, run on every message
+# before it leaves the server; they are not a substitute for building messages with view_for.
+
+HIDDEN = "??"
+SECRET_KEYS = frozenset({"deck", "burn", "burned", "burn_cards", "undealt"})
+
+
+def hand_view_errors(hand: dict[str, Any], viewer: str) -> list[str]:
+    """What ``viewer`` must not see, or must see, in one ``HandView``."""
+    found = []
+    complete = hand["complete"]
+    seen: list[str] = list(hand["board"])
+    for player in hand["players"]:
+        pid, cards = player["player_id"], player["cards"]
+        where = f"hand/players/{pid}"
+        if not player["in_hand"]:
+            if cards:
+                found.append(f"{where}: folded or mucked cards must be [], got {cards}")
+        elif pid == viewer:
+            if HIDDEN in cards:
+                found.append(f"{where}: the receiver's own cards must be face up")
+        elif not complete and any(card != HIDDEN for card in cards):
+            found.append(f"{where}: another player's cards shown while the hand runs")
+        elif complete and HIDDEN in cards and any(card != HIDDEN for card in cards):
+            found.append(f"{where}: cards are half shown")
+        seen += [card for card in cards if card != HIDDEN]
+    duplicates = sorted({card for card in seen if seen.count(card) > 1})
+    if duplicates:
+        found.append(f"hand: cards appear twice: {duplicates}")
+    actor = hand["actor"]
+    if complete and actor is not None:
+        found.append("hand: a complete hand has no actor")
+    is_actor = actor == viewer and not complete
+    if hand["legal_actions"] is not None and not is_actor:
+        found.append("hand/legal_actions: only the player to act gets legal_actions")
+    if is_actor and hand["legal_actions"] is None:
+        found.append("hand/legal_actions: the player to act needs legal_actions")
+    return found
+
+
+def _secret_keys(value: Any, path: str = "") -> list[str]:
+    if isinstance(value, dict):
+        found = [f"{path}/{key}: never send {key}" for key in value if key in SECRET_KEYS]
+        for key, item in value.items():
+            found += _secret_keys(item, f"{path}/{key}")
+        return found
+    if isinstance(value, list):
+        return [
+            error for i, item in enumerate(value) for error in _secret_keys(item, f"{path}/{i}")
+        ]
+    return []
+
+
+def _settlement_errors(payload: dict[str, Any]) -> list[str]:
+    """hand.completed must move chips without creating or losing any."""
+    found = []
+    hand, results, bonus = payload["hand"], payload["results"], payload["seven_deuce"]
+    if not hand["complete"]:
+        found.append("hand: hand.completed carries a hand that is not complete")
+    if sum(r["hand_net"] for r in results) != 0:
+        found.append("results: hand_net does not add up to 0")
+    if sum(r["seven_deuce_net"] for r in results) != 0:
+        found.append("results: seven_deuce_net does not add up to 0")
+    by_player = {r["player_id"]: r for r in results}
+    for player in hand["players"]:
+        result = by_player.get(player["player_id"])
+        if result is None:
+            found.append(f"results: no row for {player['player_id']}, who played the hand")
+        elif result["stack"] - result["seven_deuce_net"] != player["stack"]:
+            found.append(f"results/{player['player_id']}: stack does not match the hand's end")
+    if bonus is None:
+        if any(r["seven_deuce_net"] for r in results):
+            found.append("results: seven_deuce_net without a seven_deuce award")
+        return found
+    paid = {p["player_id"]: p["amount"] for p in bonus["payments"]}
+    if bonus["total"] != sum(paid.values()):
+        found.append("seven_deuce/total: is not the sum of payments")
+    if any(amount > bonus["bonus"] for amount in paid.values()):
+        found.append("seven_deuce/payments: nobody pays more than the bonus")
+    for pid, result in by_player.items():
+        expected = bonus["total"] if pid == bonus["player_id"] else -paid.get(pid, 0)
+        if result["seven_deuce_net"] != expected:
+            found.append(f"results/{pid}: seven_deuce_net does not match seven_deuce")
+    winner = next((p for p in hand["players"] if p["player_id"] == bonus["player_id"]), None)
+    if winner is None or winner["cards"] != bonus["cards"]:
+        found.append("seven_deuce/cards: the winner's 7-2 must be shown in the hand")
+    return found
+
+
+def semantic_errors(message: dict[str, Any], viewer: str) -> list[str]:
+    """Problems with sending this schema-valid server ``message`` to player ``viewer``."""
+    found = _secret_keys(message)
+    payload = message["payload"]
+    match message["type"]:
+        case "table.snapshot":
+            table = payload["table"]
+            hand = table["hand"]
+            if table["you"]["player_id"] != viewer:
+                found.append("table/you: the snapshot is for another player")
+            seat = next((s["seat"] for s in table["seats"] if s["player_id"] == viewer), None)
+            if table["you"]["seat"] != seat:
+                found.append("table/you/seat: does not match the receiver's seat")
+            if message["hand_id"] != (hand["hand_id"] if hand else None):
+                found.append("hand_id: differs from the snapshot's hand")
+            if hand is not None:
+                found += hand_view_errors(hand, viewer)
+        case "hand.started" | "action.applied" | "hand.completed":
+            hand = payload["hand"]
+            if message["hand_id"] != hand["hand_id"]:
+                found.append("hand_id: differs from payload/hand/hand_id")
+            found += hand_view_errors(hand, viewer)
+            if message["type"] == "action.applied":
+                action = payload["action"]
+                seats = {p["player_id"]: p["seat"] for p in hand["players"]}
+                if seats.get(action["player_id"]) != action["seat"]:
+                    found.append("action: the player is not in that seat of this hand")
+            if message["type"] == "hand.completed":
+                found += _settlement_errors(payload)
+    return found
+
+
+def validate_outgoing(message: Any, viewer: str) -> None:
+    """Schema, then semantics: raise unless ``message`` is safe to send to ``viewer``."""
+    validate(message, "server")
+    found = semantic_errors(message, viewer)
+    if found:
+        raise ContractError("server", found)

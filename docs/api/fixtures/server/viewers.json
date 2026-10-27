@@ -1,0 +1,34 @@
+{
+  "_about": "Who each server fixture is sent to (player_id). The semantic check needs it: what a message may show depends on the receiver.",
+  "valid": {
+    "action.applied.raise": "1",
+    "action.applied.timeout-fold": "2",
+    "action.applied.with-legal-actions": "3",
+    "command.ack": "1",
+    "command.ack.duplicate": "1",
+    "command.rejected.not-your-turn": "1",
+    "hand.completed.seven-deuce": "2",
+    "hand.completed.showdown": "2",
+    "hand.started": "1",
+    "protocol.error": "1",
+    "seat.updated.left": "1",
+    "seat.updated.sit-out": "1",
+    "table.snapshot.between-hands": "1",
+    "table.snapshot.mid-hand": "3",
+    "table.snapshot.spectator": "4",
+    "turn.deadline": "1"
+  },
+  "leaks": {
+    "action.applied.legal-actions-to-non-actor": "1",
+    "action.applied.opponent-cards-visible": "1",
+    "hand.completed.bonus-net-not-zero": "2",
+    "hand.completed.bonus-total-not-payments": "2",
+    "hand.completed.folded-cards-visible": "2",
+    "hand.completed.hand-net-not-zero": "2",
+    "hand.completed.stack-not-settled": "2",
+    "hand.started.duplicate-card": "1",
+    "hand.started.envelope-hand-id-mismatch": "1",
+    "table.snapshot.sent-to-wrong-player": "1",
+    "table.snapshot.spectator-sees-hole-cards": "4"
+  }
+}

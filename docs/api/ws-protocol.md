@@ -15,7 +15,7 @@ Các file đi kèm:
 | REST (tạo phòng, vào ghế, lấy snapshot) | [`openapi.yaml`](openapi.yaml) |
 | Type TypeScript sinh từ schema | [`web/src/api/`](../../web/src/api/) |
 | Mock server | [`mockserver/`](../../mockserver/), cách chạy ở [README mock](mock-server.md) |
-| Kiểm schema bằng Python | [`apps/games/contract.py`](../../apps/games/contract.py) |
+| Kiểm schema và kiểm ngữ nghĩa theo người nhận (Python) | [`apps/games/contract.py`](../../apps/games/contract.py) |
 
 ## 1. Ba nguyên tắc
 
@@ -167,6 +167,25 @@ Mọi trường `hand` là `HandView` = `HandEngine.view_for(người nhận)` c
 `legal_actions` chỉ có trong `HandView` gửi cho đúng người đang tới lượt; mọi người khác nhận
 `null`. Client không tự tính luật: nút nào bấm được, raise tối thiểu/tối đa bao nhiêu đều lấy từ
 `legal_actions`.
+
+### Chặn lộ bài: JSON Schema **không** phải lớp bảo mật
+
+JSON Schema chỉ kiểm **hình dạng** message. Một snapshot cho người xem thấy bài tẩy của người khác
+vẫn đúng hình dạng, nên vẫn qua schema. Hai lớp chặn thật, theo thứ tự:
+
+1. **`HandEngine.view_for(người nhận)`**: mọi trạng thái ván gửi đi đều dựng từ đây, không bao giờ
+   từ trạng thái đầy đủ của engine.
+2. **Kiểm ngữ nghĩa theo người nhận** (`apps.games.contract.validate_outgoing(message, viewer)`),
+   chạy với **mọi** message ngay trước khi gửi (mock server: `MockTable._send`; B4: actor/consumer).
+   Nó biết người nhận là ai và từ chối gửi khi: bài tẩy người khác lộ lúc ván đang chạy; người nhận
+   không thấy bài mình; người đã fold còn bài; `legal_actions` tới người không đang tới lượt; một lá
+   xuất hiện hai lần; có khoá như `deck`/`burn`; `hand_id` của phong bì khác của ván; snapshot gửi
+   nhầm người; `hand.completed` làm sinh/mất chip (tổng `hand_net` khác 0, tổng `seven_deuce_net`
+   khác 0, `seven_deuce.total` khác tổng `payments`, `stack` không khớp kết quả ván).
+
+Ví dụ những message đúng schema mà phải bị chặn: [`fixtures/server/leaks/`](fixtures/server/leaks/)
+(người nhận của từng file ghi trong [`fixtures/server/viewers.json`](fixtures/server/viewers.json)).
+Test chơi 300 ván ngẫu nhiên (có all-in) và kiểm góc nhìn của mọi người sau mỗi hành động.
 
 `stack` có hai nghĩa, cần phân biệt:
 - `HandView.players[].stack`: chip còn trước mặt trong ván (đã trừ cược).

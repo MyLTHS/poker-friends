@@ -6,7 +6,8 @@ frontend can be built against docs/api/ws-protocol.md today. It keeps everything
 
 Every method returns the messages to send as ``(connection_id, message)`` pairs; the caller
 owns the sockets. Every message goes through ``_send``, which checks it against the JSON Schema
-first, so the mock can never send something the contract does not allow.
+and then against the receiver (``contract.validate_outgoing``: no one else's hole cards, chips
+that add up), so the mock can never send something the contract does not allow.
 
 Players with no open connection are bots: they act ``bot_delay`` seconds into their turn,
 following the scenario's ``bot_script`` for the hand when it has a legal move left, otherwise
@@ -438,5 +439,5 @@ class MockTable:
             "server_time": iso(self.clock()),
             "payload": payload,
         }
-        contract.validate(message, "server")
+        contract.validate_outgoing(message, self.connections[conn])
         return conn, message

@@ -270,3 +270,15 @@ def test_a_message_breaking_the_schema_is_never_sent(table, monkeypatch):
     monkeypatch.setattr(table, "_room_info", lambda: {"room_id": 1})
     with pytest.raises(contract.ContractError):
         table.connect("lym", "1")
+
+
+def test_a_projection_for_the_wrong_player_is_never_sent(table, monkeypatch):
+    # A bug that builds every view as player 3 would show Bình's cards to Lym.
+    def wrong_view(viewer):
+        hand = table.session.current_hand
+        return {"hand_id": table._hand_id(), "hand_no": 1, **hand.view_for("3")}
+
+    table.connect("lym", "1")
+    monkeypatch.setattr(table, "_hand_view", wrong_view)
+    with pytest.raises(contract.ContractError, match="another player's cards"):
+        table.tick()
