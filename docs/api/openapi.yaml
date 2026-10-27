@@ -1198,13 +1198,28 @@ components:
             additionalProperties: false
         results:
           type: array
+          description: |
+            Mọi người có bút toán trong ván này, kể cả người đang nghỉ (sit-out) mà phải trả thưởng
+            7-2. Tổng `hand_net + seven_deuce_net` của cả ván luôn bằng 0.
           items:
-            $ref: "./schema/common.schema.json#/$defs/PlayerResult"
-        seven_deuce:
+            type: object
+            properties:
+              player_id:
+                $ref: "./schema/common.schema.json#/$defs/PlayerId"
+              display_name:
+                type: string
+              hand_net:
+                type: integer
+              seven_deuce_net:
+                type: integer
+            required: [player_id, display_name, hand_net, seven_deuce_net]
+            additionalProperties: false
+        seven_deuce_winner:
+          description: Người ăn thưởng luật 7-2 ở ván này (#27), `null` nếu không có.
           anyOf:
-            - $ref: "./schema/common.schema.json#/$defs/SevenDeuceAward"
+            - $ref: "./schema/common.schema.json#/$defs/PlayerId"
             - type: "null"
-      required: [hand_id, hand_no, room_id, completed_at, steps, results, seven_deuce]
+      required: [hand_id, hand_no, room_id, completed_at, steps, results, seven_deuce_winner]
       additionalProperties: false
     RoomSummary:
       type: object

@@ -28,6 +28,7 @@ from .engine.table import LedgerEntry as EngineLedgerEntry
 from .engine.table import LedgerKind as EngineLedgerKind
 from .engine.table import TableError, TableSession
 from .models import (
+    ChatMessage,
     Hand,
     HandCommand,
     LedgerEntry,
@@ -75,6 +76,13 @@ class _Connect:
     conn: str
     channel: str
     player_id: str
+    name: str = ""
+
+
+@dataclass
+class _Chat:
+    player_id: str
+    text: str
 
 
 @dataclass
@@ -146,12 +154,16 @@ class TableActor:
         self.resume_deadline: datetime | None = None  # set by _recover() for a hand in progress
         self.pending: dict[str, Any] = {}  # owner's setting changes waiting for the next hand
         self.closing = False  # the owner closed the room during a hand
+        self._audience: list[dict[str, str]] = []  # last spectator list sent (B8)
         self._task = asyncio.create_task(self._run())
 
     # ---- public: called from consumers/views, never touches the engine directly -----------
 
-    def connect(self, conn: str, channel: str, player_id: str) -> None:
-        self._queue.put_nowait(_Connect(conn, channel, player_id))
+    def connect(self, conn: str, channel: str, player_id: str, name: str = "") -> None:
+        self._queue.put_nowait(_Connect(conn, channel, player_id, name))
+
+    def chat(self, player_id: str, text: str) -> None:
+        self._queue.put_nowait(_Chat(player_id, text))
 
     def disconnect(self, conn: str) -> None:
         self._queue.put_nowait(_Disconnect(conn))
@@ -254,6 +266,8 @@ class TableActor:
                 await self._on_take_seat(item)
             case _LeaveSeat():
                 await self._on_leave_seat(item)
+            case _Chat():
+                await self._on_chat(item)
             case _Call():
                 try:
                     result = await item.fn()
@@ -269,9 +283,13 @@ class TableActor:
         was_connected = self._connected(player_id)
         self.connections[item.conn] = player_id
         self.channels[item.conn] = item.channel
+        if item.name:
+            self.names.setdefault(player_id, item.name)
         if player_id in self.session.seats.values() and not was_connected:
             await self._seat_updated(self._seat_of(player_id), exclude=item.conn)
         await self._reply(item.conn, "table.snapshot", {"table": self._table_state(player_id)})
+        await self._reply(item.conn, "audience.updated", {"spectators": self._spectators()})
+        await self._audience_changed(exclude=item.conn)
         await self._maybe_start_hand()
 
     async def _on_disconnect(self, item: _Disconnect) -> None:
@@ -283,6 +301,7 @@ class TableActor:
             and not self._connected(player_id)
         ):
             await self._seat_updated(self._seat_of(player_id))
+        await self._audience_changed()
 
     def _connected(self, player_id: str) -> bool:
         return player_id in self.connections.values()
@@ -728,6 +747,45 @@ class TableActor:
         await self._broadcast(
             "seat.updated", lambda viewer: {"seat": seat, "occupant": occupant}, exclude=exclude
         )
+        # Someone sat down or stood up: the spectator list may have changed too.
+        await self._audience_changed()
+
+    # ---- notices (B8): sent to everyone, version unchanged -----------------------------------
+
+    def _spectators(self) -> list[dict[str, str]]:
+        seated = set(self.session.seats.values())
+        watching = {p for p in self.connections.values() if p not in seated}
+        return [
+            {"player_id": p, "display_name": self.names.get(p, p)}
+            for p in sorted(watching, key=int)
+        ]
+
+    async def _audience_changed(self, exclude: str | None = None) -> None:
+        spectators = self._spectators()
+        if spectators == self._audience:
+            return
+        self._audience = spectators
+        await self._notice("audience.updated", {"spectators": spectators}, exclude=exclude)
+
+    async def _notice(
+        self, type_: str, payload: dict[str, Any], exclude: str | None = None
+    ) -> None:
+        for conn in list(self.connections):
+            if conn != exclude:
+                await self._reply(conn, type_, payload)
+
+    async def _on_chat(self, item: _Chat) -> None:
+        line = await ChatMessage.objects.acreate(
+            room=self.room, user_id=int(item.player_id), text=item.text
+        )
+        message = {
+            "message_id": line.pk,
+            "player_id": item.player_id,
+            "display_name": self.names.get(item.player_id, item.player_id),
+            "text": line.text,
+            "sent_at": iso(line.created_at),
+        }
+        await self._notice("chat.message", {"message": message})
 
     async def _broadcast(self, type_, payload_for, hand_id=None, exclude=None) -> None:
         self.version += 1

@@ -18,7 +18,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
-from apps.games import rooms
+from apps.games import history, rooms
 from apps.games import views as games_views
 
 urlpatterns = [
@@ -30,6 +30,10 @@ urlpatterns = [
     path("api/rooms/<int:room_id>/kick/", rooms.kick),
     path("api/rooms/<int:room_id>/close/", rooms.close),
     path("api/rooms/<int:room_id>/invite/", rooms.rotate_invite),
+    path("api/rooms/<int:room_id>/chat/", history.chat_history),
+    path("api/rooms/<int:room_id>/hands/", history.list_hands),
+    path("api/rooms/<int:room_id>/summary/", history.room_summary),
+    path("api/hands/<int:hand_id>/replay/", history.hand_replay),
     path("api/rooms/<int:room_id>/seats/", games_views.take_seat),
     path("api/rooms/<int:room_id>/seats/me/", games_views.leave_seat),
     path("api/rooms/<int:room_id>/snapshot/", games_views.get_snapshot),

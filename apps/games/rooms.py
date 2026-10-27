@@ -17,11 +17,12 @@ from apps.accounts.ratelimit import RateLimit, RateLimited
 
 from . import actor as actor_module
 from .accounts import player_for_request
-from .models import Room, RoomBan, RoomMember, RoomSeat, User
+from .models import OwnerAction, Room, RoomBan, RoomMember, RoomSeat, User
 
 ROOMS_PER_USER = RateLimit("rooms-user", limit=10, window=60 * 60)
 # Commands over WebSocket, per player (consumers.py): far above what a person clicks.
 COMMANDS_PER_PLAYER = RateLimit("ws-commands", limit=20, window=10)
+CHAT_PER_PLAYER = RateLimit("ws-chat", limit=5, window=10)
 
 STATUS = {
     "validation_error": 400,
@@ -30,6 +31,7 @@ STATUS = {
     "forbidden": 403,
     "kicked": 403,
     "room_not_found": 404,
+    "hand_not_found": 404,
     "method_not_allowed": 405,
     "seat_taken": 409,
     "already_seated": 409,
@@ -37,6 +39,7 @@ STATUS = {
     "player_in_hand": 409,
     "room_closed": 409,
     "negative_balance": 409,
+    "hand_voided": 409,
     "rate_limited": 429,
 }
 
@@ -111,6 +114,8 @@ async def access(room: Room, user) -> str:
     """``"ok"``, ``"kicked"`` or ``"hidden"`` (a private room this user may not see)."""
     if not user.is_authenticated:
         return "hidden" if room.is_private else "ok"
+    if user.is_staff:
+        return "ok"  # staff may act as the owner of any room (B8)
     if await RoomBan.objects.filter(room=room, user=user).aexists():
         return "kicked"
     if not room.is_private or room.owner_id == user.pk:
@@ -245,9 +250,16 @@ async def _owned_room(request: HttpRequest, room_id: int) -> tuple[Room, Any] | 
     room = await visible_room(room_id, user)
     if isinstance(room, JsonResponse):
         return room
-    if room.owner_id != user.pk:
+    if room.owner_id != user.pk and not user.is_staff:
         return error("forbidden", "Only the room's owner can do this.")
     return room, user
+
+
+async def log_action(room: Room, user, kind: str, details: dict[str, Any]) -> None:
+    """Record an owner power used, by the owner or by staff (B8 audit log)."""
+    await OwnerAction.objects.acreate(
+        room=room, user=user, by_staff=room.owner_id != user.pk, kind=kind, details=details
+    )
 
 
 def _reject_response(reject: actor_module.Reject) -> JsonResponse:
@@ -272,6 +284,7 @@ async def _update(request: HttpRequest, room_id: int) -> JsonResponse:
         await live.update_settings(changes)
     except actor_module.Reject as reject:
         return _reject_response(reject)
+    await log_action(room, user, OwnerAction.Kind.SETTINGS, changes)
     return JsonResponse(room_detail(room, user))
 
 
@@ -279,7 +292,7 @@ async def grant_chips(request: HttpRequest, room_id: int) -> JsonResponse:
     owned = await _owned_room(request, room_id)
     if isinstance(owned, JsonResponse):
         return owned
-    room, _ = owned
+    room, user = owned
     try:
         body = read_json(request)
         player_id, amount = body.get("player_id"), body.get("amount")
@@ -297,6 +310,7 @@ async def grant_chips(request: HttpRequest, room_id: int) -> JsonResponse:
         balance = await live.grant_chips(player_id, amount)
     except actor_module.Reject as reject:
         return _reject_response(reject)
+    await log_action(room, user, OwnerAction.Kind.GRANT, {"player_id": player_id, "amount": amount})
     return JsonResponse({"player_id": player_id, "amount": amount, "balance": balance})
 
 
@@ -321,6 +335,7 @@ async def kick(request: HttpRequest, room_id: int) -> JsonResponse:
         await live.kick(int(player_id))
     except actor_module.Reject as reject:
         return _reject_response(reject)
+    await log_action(room, user, OwnerAction.Kind.KICK, {"player_id": player_id})
     return JsonResponse(None, status=204, safe=False)
 
 
@@ -331,6 +346,7 @@ async def close(request: HttpRequest, room_id: int) -> JsonResponse:
     room, user = owned
     live = await actor_module.get_actor(room.pk)
     closed_now = await live.close()
+    await log_action(room, user, OwnerAction.Kind.CLOSE, {"immediately": closed_now})
     return JsonResponse(room_detail(room, user), status=200 if closed_now else 202)
 
 
@@ -341,6 +357,7 @@ async def rotate_invite(request: HttpRequest, room_id: int) -> JsonResponse:
     room, user = owned
     room.invite_token = new_invite_token()
     await room.asave(update_fields=["invite_token"])
+    await log_action(room, user, OwnerAction.Kind.INVITE, {})
     return JsonResponse(room_detail(room, user))
 
 

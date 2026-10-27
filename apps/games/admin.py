@@ -1,7 +1,31 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import Hand, HandCommand, LedgerEntry, Room, RoomSeat, User
+from .models import (
+    ChatMessage,
+    Hand,
+    HandCommand,
+    LedgerEntry,
+    OwnerAction,
+    Room,
+    RoomBan,
+    RoomMember,
+    RoomSeat,
+    User,
+)
+
+
+class ViewOnlyAdmin(admin.ModelAdmin):
+    """Shown, never changed here: the table actor or an append-only rule owns these rows."""
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(User)
@@ -14,12 +38,75 @@ class RoomSeatInline(admin.TabularInline):
     model = RoomSeat
     extra = 0
 
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(Room)
-class RoomAdmin(admin.ModelAdmin):
-    list_display = ("name", "status", "small_blind", "big_blind", "owner", "created_at")
-    list_filter = ("status",)
+class RoomAdmin(ViewOnlyAdmin):
+    """Read-only: settings, status and seats live in the room's table actor, which would not see
+    an edit made here. Staff change a room through the owner's page (web /rooms/<id>), which goes
+    through the actor and is logged in OwnerAction."""
+
+    list_display = (
+        "name",
+        "status",
+        "is_private",
+        "small_blind",
+        "big_blind",
+        "owner",
+        "created_at",
+    )
+    list_filter = ("status", "is_private")
+    exclude = ("invite_token",)
     inlines = [RoomSeatInline]
+
+
+@admin.register(OwnerAction)
+class OwnerActionAdmin(ViewOnlyAdmin):
+    list_display = ("created_at", "room", "user", "by_staff", "kind", "details")
+    list_filter = ("kind", "by_staff", "room")
+
+
+@admin.register(ChatMessage)
+class ChatMessageAdmin(admin.ModelAdmin):
+    """Abusive lines may be deleted; nothing else."""
+
+    list_display = ("created_at", "room", "user", "text")
+    list_filter = ("room",)
+    search_fields = ("text", "user__username")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(RoomMember)
+class RoomMemberAdmin(ViewOnlyAdmin):
+    list_display = ("room", "user", "created_at")
+    list_filter = ("room",)
+
+
+@admin.register(RoomBan)
+class RoomBanAdmin(admin.ModelAdmin):
+    """Deleting a ban lets that person back in (bans are read from the database, not cached)."""
+
+    list_display = ("room", "user", "created_at")
+    list_filter = ("room",)
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(LedgerEntry)
@@ -43,7 +130,7 @@ class HandCommandInline(admin.TabularInline):
 
 
 @admin.register(Hand)
-class HandAdmin(admin.ModelAdmin):
+class HandAdmin(ViewOnlyAdmin):
     list_display = ("room", "hand_no", "button_seat", "created_at", "completed_at")
     list_filter = ("room",)
     inlines = [HandCommandInline]

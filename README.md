@@ -11,7 +11,7 @@ No-Limit Texas Hold'em chip ảo cho nhóm bạn. Backend Django + PokerKit.
 Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đoán, bài tập) ở [docs/roadmap.md](docs/roadmap.md).
 
 **Đang ở:** A và B1 đã được chủ dự án duyệt; B2 và B3 đã gộp vào `main`, chờ duyệt. B4a và B6
-xong code, chờ duyệt; B5 xong phần code. Đang làm **B7**, rồi B8 và ba bản thiết kế cho C1; B4b
+xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản thiết kế cho C1; B4b
 (nối trang React với backend thật, Playwright) làm sau.
 
 | Giai đoạn | Nội dung | Trạng thái |
@@ -24,7 +24,7 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B7**, rồi B8 và b
 | B5 | Độ bền + staging | 🟡 Phần code xong, chờ duyệt; staging chờ VPS |
 | B6 | Tài khoản | ✅ Xong code, chờ duyệt |
 | B7 | Phòng và quyền | ✅ Xong code, chờ duyệt |
-| B8 | Xã hội và quản trị | ⬜ Chưa bắt đầu |
+| B8 | Xã hội và quản trị | 🟡 Backend xong, trang thử đang làm |
 | C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, một Claude riêng chỉ đọc review) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
@@ -131,9 +131,15 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B7**, rồi B8 và b
 
 **B8. Xã hội và quản trị**
 
-- [ ] Chat + emoji, spectator
-- [ ] Lịch sử + replay, bảng lời/lỗ
-- [ ] Django Admin + nhật ký thao tác admin
+- [x] Chat + emoji (`chat.send` → `chat.message`, 5 dòng/10 giây, lịch sử 50 dòng), danh sách người
+  xem (`audience.updated`); hai loại này là "thông báo", không tăng `version`
+- [x] Lịch sử ván + replay từng bước theo góc nhìn người xem (test: không bao giờ lộ bài úp của người
+  khác ở bất kỳ bước nào), bảng lời/lỗ từ sổ chip (`apps/games/history.py`)
+- [x] Admin: staff có quyền chủ phòng ở mọi phòng (qua đúng API của chủ phòng); mọi thao tác chủ
+  phòng/admin ghi vào `OwnerAction` (chỉ ghi thêm, trigger PostgreSQL); Django Admin chỉ xem phần
+  do actor nắm, xoá được chat, bỏ kick được
+- [ ] Trang thử: chat, xem bàn, xem lại ván, bảng lời/lỗ
+- [ ] Duyệt với chủ dự án
 
 ### C. Thiết kế + frontend
 

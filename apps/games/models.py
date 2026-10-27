@@ -248,3 +248,40 @@ class HandCommand(AppendOnlyModel):
             ),
             models.UniqueConstraint(fields=["hand", "sequence"], name="unique_sequence_per_hand"),
         ]
+
+
+class ChatMessage(models.Model):
+    """One chat line in a room (B8)."""
+
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="chat_messages")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="chat_messages")
+    text = models.CharField(max_length=300)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["room_id", "id"]
+
+
+class OwnerAction(AppendOnlyModel):
+    """Log of every owner power used in a room, by its owner or by staff (B8).
+
+    Staff may act as the owner of any room through the same API, so this is also the admin's
+    audit log. Append-only like the ledger, so nobody can tidy it up afterwards.
+    """
+
+    class Kind(models.TextChoices):
+        GRANT = "grant", "Grant chips"
+        SETTINGS = "settings", "Change settings"
+        KICK = "kick", "Kick"
+        CLOSE = "close", "Close room"
+        INVITE = "invite", "Rotate invite link"
+
+    room = models.ForeignKey(Room, on_delete=models.PROTECT, related_name="owner_actions")
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name="owner_actions")
+    by_staff = models.BooleanField(help_text="Done by staff in a room they do not own.")
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    details = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-id"]

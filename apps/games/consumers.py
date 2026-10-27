@@ -39,7 +39,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
         self.conn = uuid.uuid4().hex
         await self.accept()
         self.actor = await actor_module.get_actor(self.room_id)
-        self.actor.connect(self.conn, self.channel_name, self.player_id)
+        self.actor.connect(self.conn, self.channel_name, self.player_id, user.username)
 
     async def disconnect(self, code):
         if hasattr(self, "actor"):
@@ -70,11 +70,22 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 await self._protocol_error("invalid_message", "; ".join(errors))
             return
         if message["room_id"] != self.room_id:
-            await self._rejected(command_id, "invalid_command", "Wrong room.")
+            if command_id is not None:
+                await self._rejected(command_id, "invalid_command", "Wrong room.")
+            else:
+                await self._protocol_error("invalid_message", "Wrong room.")
             return
 
         if message["type"] == "resync.request":
             await self.send(text_data=json.dumps(self.actor.snapshot_message(self.player_id)))
+            return
+        if message["type"] == "chat.send":
+            try:
+                rooms.CHAT_PER_PLAYER.hit(self.player_id)
+            except RateLimited:
+                await self._protocol_error("rate_limited", "Too many chat lines.")
+                return
+            self.actor.chat(self.player_id, message["payload"]["text"].strip())
             return
         try:
             # The default cache is in-process memory, so this does not block the event loop.

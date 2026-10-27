@@ -787,8 +787,18 @@ export interface components {
                 action: components["schemas"]["AppliedAction"] | null;
                 hand: components["schemas"]["HandView"];
             }[];
-            results: components["schemas"]["PlayerResult"][];
-            seven_deuce: components["schemas"]["SevenDeuceAward"] | null;
+            /**
+             * @description Mọi người có bút toán trong ván này, kể cả người đang nghỉ (sit-out) mà phải trả thưởng
+             *     7-2. Tổng `hand_net + seven_deuce_net` của cả ván luôn bằng 0.
+             */
+            results: {
+                player_id: components["schemas"]["PlayerId"];
+                display_name: string;
+                hand_net: number;
+                seven_deuce_net: number;
+            }[];
+            /** @description Người ăn thưởng luật 7-2 ở ván này (#27), `null` nếu không có. */
+            seven_deuce_winner: components["schemas"]["PlayerId"] | null;
         };
         RoomSummary: {
             players: {
@@ -985,40 +995,6 @@ export interface components {
             kind: "raise";
             amount: number;
             timeout: boolean;
-        };
-        /**
-         * PlayerResult
-         * @description One player's outcome. stack is the room balance after the hand and the 7-2 bonus.
-         */
-        PlayerResult: {
-            player_id: components["schemas"]["PlayerId"];
-            seat: components["schemas"]["SeatNumber"];
-            /** @description Chips won (+) or lost (-) in the pot. */
-            hand_net: number;
-            /** @description Seven-deuce bonus received (+) or paid (-); 0 when none. */
-            seven_deuce_net: number;
-            stack: components["schemas"]["Chips"];
-        };
-        /** SevenDeucePayment */
-        SevenDeucePayment: {
-            player_id: components["schemas"]["PlayerId"];
-            seat: components["schemas"]["SeatNumber"];
-            /** @description What this player actually paid: min(bonus, chips left after the pot). */
-            amount: number;
-        };
-        /**
-         * SevenDeuceAward
-         * @description Rule #27: the pot was taken holding 7-2 after everyone else folded. The two cards are shown to the whole table. total is the sum of payments: exactly what the winner received.
-         */
-        SevenDeuceAward: {
-            player_id: components["schemas"]["PlayerId"];
-            seat: components["schemas"]["SeatNumber"];
-            cards: components["schemas"]["VisibleCard"][];
-            /** @description The room's bonus for this hand. */
-            bonus: number;
-            /** @description One row per player who paid; players with 0 chips left are absent. */
-            payments: components["schemas"]["SevenDeucePayment"][];
-            total: components["schemas"]["Chips"];
         };
     };
     responses: {

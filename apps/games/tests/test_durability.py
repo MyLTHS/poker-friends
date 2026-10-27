@@ -33,7 +33,7 @@ THINK = 30
 def unfinished_hand(room, a, b, commands=()):
     """A hand stored as if the process died mid-hand. ``a`` acts first (small blind)."""
     deck = make_deck([str(b.pk), str(a.pk)], holes={str(b.pk): "7h2c", str(a.pk): "AsKd"})
-    session = TableSession(1, 2, shuffle=lambda: deck)
+    session = TableSession(1, 2, shuffle=lambda: deck, seven_deuce_bonus=room.seven_deuce_bonus)
     session.take_seat(str(a.pk), 1)
     session.take_seat(str(b.pk), 2)
     session.grant_chips(str(a.pk), CHIPS)
