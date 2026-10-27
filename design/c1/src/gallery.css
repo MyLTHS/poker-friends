@@ -32,7 +32,7 @@ body.artboard-only {
 }
 .directions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 24px;
   margin: 32px 0 48px;
 }
@@ -44,6 +44,7 @@ body.artboard-only {
 }
 .direction-card .preview {
   display: flex;
+  flex-wrap: wrap; /* the phone frame goes under the desktop one when the card is narrow */
   gap: 8px;
   align-items: flex-start;
 }

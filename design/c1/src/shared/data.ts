@@ -75,7 +75,7 @@ export const TABLE_SHOWDOWN = {
   handNo: 38,
   pot: 1840,
   board: ["9h", "4h", "Kh", "2c", "7h"].map(card),
-  winner: { name: "Chi", amount: 1840, hand: "Thùng (flush) già K" },
+  winner: { name: "Chi", amount: 1840, hand: "Thùng (flush) già A" },
   spectators: ["Mai", "Tùng", "Ngọc"],
   seats: [
     { seat: 1, name: "Lym", stack: 1460, cards: ["Ks", "Kd"].map(card), state: "waiting", isMe: true, hand: "Bộ ba K" },
@@ -140,7 +140,7 @@ export const HANDS = [
 /** replay: step 4 of 7 of hand 37, seen by Lym (Bình's cards stay face down until the end). */
 export const REPLAY = {
   handNo: 37,
-  step: 4,
+  step: 4, // index into `timeline` (0-based): the screen shows "Bước 5/7"
   steps: 7,
   action: "Bình tố lên 120",
   board: ["Qs", "9c", "3d"].map(card),
