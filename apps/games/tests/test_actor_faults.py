@@ -182,3 +182,58 @@ class TestClock:
             assert any(c.command_id.startswith("timeout:") for c in commands) or table.hand is None
 
         run_async(body)
+
+
+class TestAfterTheCommandIsRecorded:
+    """Point 4: once a command is in the log, any failure stops the room (ADR-001 mục 5)."""
+
+    def test_an_error_while_announcing_the_action_suspends_the_room(self, monkeypatch):
+        room, a, b = heads_up_room()
+
+        async def broken(self, action, timeout):
+            raise RuntimeError("broadcast failed (test)")
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            conn = ca if started["payload"]["hand"]["actor"] == str(a.pk) else cb
+            monkeypatch.setattr(actor_module.TableActor, "_after_action", broken)
+            await send_act(conn, room, started["hand_id"], "call-then-break", "call")
+            messages = await drain(conn)
+            assert by_type(messages, "room.suspended")
+            assert not by_type(messages, "command.ack")
+            assert (await actor_module.get_actor(room.pk)).suspended is True
+
+        run_async(body)
+
+    def test_one_full_channel_does_not_stop_the_room(self, monkeypatch):
+        from channels.exceptions import ChannelFull
+
+        room, a, b = heads_up_room()
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            table = await actor_module.get_actor(room.pk)
+            stuck = next(
+                ch for conn, ch in table.channels.items() if table.connections[conn] == str(b.pk)
+            )
+            layer = actor_module.get_channel_layer()
+            real_send = layer.send
+
+            async def send(channel, message):
+                if channel == stuck:
+                    raise ChannelFull()
+                return await real_send(channel, message)
+
+            monkeypatch.setattr(layer, "send", send)
+            conn = ca if started["payload"]["hand"]["actor"] == str(a.pk) else cb
+            command_id = "call-with-full-channel"
+            await send_act(conn, room, started["hand_id"], command_id, "call")
+            await asyncio.sleep(0.3)
+            assert table.suspended is False
+            assert str(b.pk) not in table.connections.values()  # dropped, it can reconnect
+            assert await HandCommand.objects.filter(command_id=command_id).aexists()
+
+        run_async(body)
+

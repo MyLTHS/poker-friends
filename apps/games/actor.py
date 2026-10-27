@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from channels.db import database_sync_to_async
+from channels.exceptions import ChannelFull
 from channels.layers import get_channel_layer
 from django.db import IntegrityError
 from django.utils import timezone
@@ -350,7 +351,16 @@ class TableActor:
         except Exception as error:
             await self._fail_stop(f"act() failed on an already-recorded command: {error}")
             raise RoomSuspended from error
-        await self._after_action(action, timeout=timeout)
+        try:
+            await self._after_action(action, timeout=timeout)
+        except RoomSuspended:
+            raise
+        except Exception as error:
+            # Applied but not (fully) announced, or the next turn not scheduled: the clients
+            # and the clock no longer match the engine. Same rule as above: stop the room.
+            log.exception("room %s: error after applying a recorded command", self.room.pk)
+            await self._fail_stop(f"error after a recorded command: {error}")
+            raise RoomSuspended from error
 
     async def _on_timeout(self, item: _Timeout) -> None:
         if self.hand is None or self.hand.pk != item.hand_pk or self.suspended:
@@ -603,8 +613,16 @@ class TableActor:
         self.version += 1
         hand_id = hand_id if hand_id is not None else (self.hand.pk if self.hand else None)
         for conn, viewer in list(self.connections.items()):
-            if conn != exclude:
+            if conn == exclude:
+                continue
+            try:
                 await self._send(conn, type_, payload_for(viewer), hand_id)
+            except ChannelFull:
+                # That client stopped reading: drop it (it resyncs from a snapshot when it
+                # reconnects) rather than fail the whole room for one slow socket.
+                log.warning("room %s: channel full, dropping connection %s", self.room.pk, conn)
+                self.connections.pop(conn, None)
+                self.channels.pop(conn, None)
 
     async def _reply(self, conn: str, type_: str, payload: dict[str, Any]) -> None:
         await self._send(conn, type_, payload, self.hand.pk if self.hand else None)
