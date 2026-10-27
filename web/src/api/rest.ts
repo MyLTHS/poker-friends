@@ -160,7 +160,8 @@ export interface paths {
          * Đăng ký bằng email và mật khẩu
          * @description Tạo tài khoản chưa xác minh và gửi email có link xác minh
          *     (`FRONTEND_URL/account/verify?token=...`). **Không** đăng nhập luôn: phải xác minh email
-         *     trước. Khách muốn giữ chip thì dùng `upgrade`, không dùng `signup`.
+         *     trước. Khách muốn giữ chip thì dùng `upgrade`, không dùng `signup`. Server mail lỗi thì
+         *     vẫn trả 201 (đã tạo tài khoản); người dùng xin gửi lại link bằng `resend`.
          */
         post: operations["signup"];
         delete?: never;
@@ -200,7 +201,7 @@ export interface paths {
         put?: never;
         /**
          * Gửi lại link xác minh
-         * @description Luôn trả 202, có tài khoản chưa xác minh với email đó hay không (không lộ email nào đã đăng ký).
+         * @description Luôn trả 202, có tài khoản chưa xác minh với email đó hay không.
          */
         post: operations["resendVerificationEmail"];
         delete?: never;
@@ -221,8 +222,9 @@ export interface paths {
         /**
          * Đăng nhập bằng email và mật khẩu
          * @description Sai email hay sai mật khẩu đều trả `invalid_credentials`. Email chưa xác minh:
-         *     `email_not_verified` (403). Giới hạn: 20 lần/10 phút mỗi IP, 5 lần sai/15 phút mỗi email
-         *     (quá thì `rate_limited` kể cả khi mật khẩu đúng).
+         *     `email_not_verified` (403). Giới hạn: 20 lần/10 phút mỗi IP; 5 lần sai/15 phút cho một
+         *     email từ một IP; 30 lần sai/giờ cho một email từ mọi IP. Quá thì `rate_limited`, kể cả khi
+         *     mật khẩu đúng.
          */
         post: operations["login"];
         delete?: never;
@@ -262,7 +264,7 @@ export interface paths {
         put?: never;
         /**
          * Quên mật khẩu — gửi link đặt lại
-         * @description Luôn trả 202 (không lộ email nào đã đăng ký). Link `FRONTEND_URL/account/reset?uid=...&token=...`
+         * @description Luôn trả 202, có tài khoản hay không. Link `FRONTEND_URL/account/reset?uid=...&token=...`
          *     dùng một lần, hết hạn sau 1 giờ. Giới hạn: 5 lần/giờ mỗi IP, 3 lần/giờ mỗi email.
          */
         post: operations["forgotPassword"];
@@ -350,14 +352,10 @@ export interface paths {
          * Bắt đầu đăng nhập (hoặc nâng cấp khách) bằng Google
          * @description **Form của trình duyệt, không phải fetch**: trang web submit một `<form method="post">`
          *     (có `csrfmiddlewaretoken`), server chuyển trình duyệt sang Google rồi Google chuyển về
-         *     `/accounts/google/login/callback/`. Cuối cùng trình duyệt về `FRONTEND_URL/account` với:
-         *
-         *     - `?google=ok` — đã đăng nhập (tài khoản mới hoặc cũ), hoặc khách đã nâng cấp.
-         *     - `?error=google_disabled` — server chưa có key Google.
-         *     - `?error=google_failed` — người dùng huỷ ở Google hoặc Google báo lỗi.
-         *     - `?error=email_taken` — email Google đã thuộc tài khoản email/mật khẩu khác (không gộp).
-         *     - `?error=social_account_taken` — (nâng cấp) tài khoản Google này đã gắn với người khác.
-         *     - `?error=not_guest` — (nâng cấp) người đang đăng nhập không phải khách.
+         *     `/accounts/google/login/callback/`. Cuối cùng trình duyệt về `FRONTEND_URL/account` với
+         *     `?google=ok` (đã đăng nhập, tài khoản mới hoặc cũ, hoặc khách đã nâng cấp) hoặc
+         *     `?error=<GoogleError>`. Mở thẳng URL này bằng GET thì chỉ quay về `FRONTEND_URL/account`.
+         *     Chỉ nhận email Google đánh dấu đã xác minh.
          *
          *     `process=connect` khi khách đang đăng nhập muốn nâng cấp: Google được gắn vào chính `User`
          *     khách (giữ `id`, chip, lịch sử), email Google coi như đã xác minh.
@@ -466,12 +464,25 @@ export interface components {
             /** @description Giá trị cookie `csrftoken`. */
             csrfmiddlewaretoken: string;
         };
+        /**
+         * @description Mã trong `FRONTEND_URL/account?error=<mã>` khi luồng Google không xong.
+         *
+         *     - `google_disabled` — server chưa có key Google.
+         *     - `google_failed` — người dùng huỷ ở Google, Google báo lỗi, hoặc form sai `process`.
+         *     - `email_taken` — email Google đã thuộc một tài khoản khác (không gộp tài khoản).
+         *     - `email_not_verified` — Google chưa xác minh email của tài khoản Google đó.
+         *     - `social_account_taken` — (nâng cấp) tài khoản Google này đã gắn với người khác.
+         *     - `not_guest` — (nâng cấp) người đang đăng nhập không phải khách.
+         *     - `account_inactive` — tài khoản đã bị admin khoá.
+         * @enum {string}
+         */
+        GoogleError: "google_disabled" | "google_failed" | "email_taken" | "email_not_verified" | "social_account_taken" | "not_guest" | "account_inactive";
         ApiError: {
             /**
              * @description Mã ổn định, client được phép `switch` theo mã.
              * @enum {string}
              */
-            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest";
+            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed";
             /** @description Để đọc log, không hiện cho người chơi. */
             message: string;
             /** @description Chỉ có khi `validation_error`, lỗi theo từng trường của body. */
@@ -885,6 +896,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
         };
@@ -912,6 +924,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
         };
     };
     resendVerificationEmail: {
@@ -935,6 +948,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
         };
     };
@@ -1005,6 +1019,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
         };
     };
@@ -1029,6 +1044,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
         };
     };
     createGuest: {
@@ -1063,6 +1079,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
         };
@@ -1091,6 +1108,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
         };

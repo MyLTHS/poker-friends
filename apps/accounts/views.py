@@ -40,15 +40,18 @@ ERROR_STATUS = {
     "email_taken": 409,
     "username_taken": 409,
     "not_guest": 409,
+    "method_not_allowed": 405,
     "rate_limited": 429,
 }
 
 
-def error_response(code: str, message: str, fields: dict | None = None) -> Response:
+def error_response(
+    code: str, message: str, fields: dict | None = None, http_status: int | None = None
+) -> Response:
     body = {"code": code, "message": message}
     if fields:
         body["fields"] = fields
-    return Response(body, status=ERROR_STATUS[code])
+    return Response(body, status=http_status or ERROR_STATUS[code])
 
 
 def _field_errors(detail) -> dict[str, list[str]]:
@@ -69,8 +72,10 @@ def api_exception_handler(exc, context):
         return response
     if isinstance(exc, exceptions.ValidationError):
         return error_response("validation_error", "Invalid body.", _field_errors(exc.detail))
-    if isinstance(exc, exceptions.ParseError):
-        return error_response("validation_error", str(exc.detail))
+    if isinstance(exc, exceptions.ParseError | exceptions.UnsupportedMediaType):
+        return error_response("validation_error", str(exc.detail), http_status=exc.status_code)
+    if isinstance(exc, exceptions.MethodNotAllowed):
+        return error_response("method_not_allowed", str(exc.detail))
     if isinstance(exc, exceptions.NotAuthenticated | exceptions.AuthenticationFailed):
         return error_response("not_authenticated", "Log in first.")
     if isinstance(exc, exceptions.PermissionDenied):
@@ -85,7 +90,17 @@ class CsrfSessionAuthentication(SessionAuthentication):
 
 
 def client_ip(request) -> str:
-    # Behind a reverse proxy this is the proxy's address; see docs (B6) before deploying.
+    """The caller's IP address, for rate limits.
+
+    Behind N trusted reverse proxies (``TRUSTED_PROXIES`` in .env), each one appends the address
+    it saw to X-Forwarded-For, so the N-th entry from the right is the real client. Entries
+    further left were sent by the client itself and are ignored.
+    """
+    proxies = settings.ACCOUNTS_TRUSTED_PROXIES
+    forwarded = [ip.strip() for ip in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")]
+    forwarded = [ip for ip in forwarded if ip]
+    if proxies and forwarded:
+        return forwarded[-min(proxies, len(forwarded))]
     return request.META.get("REMOTE_ADDR", "")
 
 
@@ -171,7 +186,7 @@ class ResetPasswordView(AccountView):
         data = self.valid(ResetPasswordSerializer)
         user = services.user_for_reset(data["uid"], data["token"])
         check_password(data["password"], user)
-        services.reset_password(user, data["password"])
+        services.reset_password(user, data["password"], client_ip(request))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

@@ -1,5 +1,8 @@
 """Guests play straight away; upgrading keeps the same User row, so chips and history stay."""
 
+from smtplib import SMTPException
+from unittest.mock import patch
+
 import pytest
 from allauth.account.models import EmailAddress
 from django.core import mail
@@ -118,6 +121,26 @@ class TestUpgradeWithEmail:
         assert guest.is_guest is True
         assert not guest.has_usable_password()
         assert EmailAddress.objects.filter(user=other).count() == 1
+
+    def test_name_taken_in_a_race_is_refused_and_nothing_changes(self, client):
+        guest_id = create_guest(client).json()["id"]
+        User.objects.create_user(username="teo")
+        with patch("apps.accounts.services.username_in_use", return_value=False):
+            response = upgrade(client, username="teo")
+
+        assert response.status_code == 409
+        assert response.json()["code"] == "username_taken"
+        guest = User.objects.get(pk=guest_id)
+        assert guest.is_guest is True
+        assert guest.email == ""
+        assert not EmailAddress.objects.filter(user=guest).exists()
+
+    def test_mail_server_failure_still_upgrades(self, client):
+        guest_id = create_guest(client).json()["id"]
+        with patch("apps.accounts.services.send_mail", side_effect=SMTPException("down")):
+            response = upgrade(client)
+        assert response.status_code == 200
+        assert User.objects.get(pk=guest_id).is_guest is False
 
     def test_only_guests_can_upgrade(self, client):
         make_verified_user()

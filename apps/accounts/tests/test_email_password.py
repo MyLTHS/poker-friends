@@ -4,6 +4,9 @@ The API is JSON over the Django session cookie (docs/api/openapi.yaml). Errors a
 ``{"code": ..., "message": ...}`` so the web app can switch on ``code``.
 """
 
+from smtplib import SMTPException
+from unittest.mock import patch
+
 import pytest
 from allauth.account.models import EmailAddress
 from django.core import mail
@@ -87,6 +90,13 @@ class TestSignup:
         body = response.json()
         assert body["code"] == "validation_error"
         assert "password" in body["fields"]
+
+    def test_mail_server_failure_still_creates_the_account(self, client):
+        # The person can ask for the link again; a 500 would leave them unable to sign up.
+        with patch("apps.accounts.services.send_mail", side_effect=SMTPException("down")):
+            response = signup(client)
+        assert response.status_code == 201
+        assert User.objects.filter(email="binh@example.com").exists()
 
     def test_bad_email_is_a_validation_error(self, client):
         response = signup(client, email="not-an-email")
@@ -253,3 +263,20 @@ class TestPasswordReset:
         self.request_reset(client, email="binh@example.com")
         self.reset(client, last_link_params())
         assert EmailAddress.objects.get(email="binh@example.com").verified
+
+
+class TestErrorShape:
+    def test_wrong_method_is_an_api_error(self, client):
+        response = client.get("/api/auth/login/")
+        assert response.status_code == 405
+        assert response.json()["code"] == "method_not_allowed"
+
+    def test_wrong_content_type_is_a_validation_error(self, client):
+        response = client.post("/api/auth/login/", "email=a", content_type="text/plain")
+        assert response.status_code == 415
+        assert response.json()["code"] == "validation_error"
+
+    def test_malformed_json_is_a_validation_error(self, client):
+        response = client.post("/api/auth/login/", "{", content_type="application/json")
+        assert response.status_code == 400
+        assert response.json()["code"] == "validation_error"

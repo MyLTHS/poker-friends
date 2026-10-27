@@ -126,6 +126,10 @@ AUTHENTICATION_BACKENDS = [
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
+# Reverse proxies (Caddy, ...) in front of Django; rate limits then read the client IP from
+# X-Forwarded-For. 0 = none, use the connection's address.
+ACCOUNTS_TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "0"))
+
 # Links in emails and the end of the Google flow point at the web app, not at Django.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 if FRONTEND_URL not in CSRF_TRUSTED_ORIGINS:

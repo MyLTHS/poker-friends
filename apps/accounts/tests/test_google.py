@@ -13,6 +13,7 @@ from allauth.account.models import EmailAddress
 from allauth.socialaccount.models import SocialAccount
 from django.db.models import Sum
 
+from apps.accounts.services import AccountError
 from apps.games.models import LedgerEntry, LedgerKind, Room, User
 
 from .conftest import make_verified_user
@@ -47,8 +48,8 @@ def google_off(settings):
         setattr(settings, name, value)
 
 
-def profile(email="gmail@example.com", uid="g-1"):
-    return {"id": uid, "email": email, "verified_email": True, "given_name": "Gà"}
+def profile(email="gmail@example.com", uid="g-1", verified=True):
+    return {"id": uid, "email": email, "verified_email": verified, "given_name": "Gà"}
 
 
 def google_flow(client, process="login", google_profile=None):
@@ -122,6 +123,31 @@ class TestGoogleLogin:
         assert client.get("/api/auth/me/").status_code == 401
         assert not SocialAccount.objects.exists()
 
+    def test_unverified_google_email_is_refused(self, client):
+        # Otherwise anyone could pre-create an account under someone else's address.
+        response = google_flow(client, google_profile=profile(verified=False))
+
+        assert result(response) == {"error": "email_not_verified"}
+        assert not User.objects.exists()
+        assert not SocialAccount.objects.exists()
+
+    def test_deactivated_user_is_sent_back_with_an_error(self, client):
+        google_flow(client)
+        client.post("/api/auth/logout/")
+        User.objects.update(is_active=False)
+
+        response = google_flow(client)
+
+        assert result(response) == {"error": "account_inactive"}
+        assert client.get("/api/auth/me/").status_code == 401
+
+    def test_opening_the_start_url_directly_goes_back_to_the_web_app(self, client):
+        assert result(client.get("/accounts/google/login/")) == {}
+
+    def test_only_login_and_connect_processes_are_accepted(self, client):
+        response = client.post("/accounts/google/login/", {"process": "redirect"})
+        assert result(response) == {"error": "google_failed"}
+
     def test_cancel_on_google_comes_back_with_an_error(self, client):
         start = client.post("/accounts/google/login/")
         state = parse_qs(urlparse(start["Location"]).query)["state"][0]
@@ -173,6 +199,30 @@ class TestGuestUpgradeWithGoogle:
         assert result(response) == {"error": "social_account_taken"}
         assert SocialAccount.objects.get().user_id == owner
         assert User.objects.get(pk=guest_id).is_guest is True
+
+    def test_unverified_google_email_cannot_upgrade_a_guest(self, client):
+        guest_id = client.post("/api/auth/guest/").json()["id"]
+
+        response = google_flow(client, process="connect", google_profile=profile(verified=False))
+
+        assert result(response) == {"error": "email_not_verified"}
+        guest = User.objects.get(pk=guest_id)
+        assert guest.is_guest is True
+        assert guest.email == ""
+        assert not SocialAccount.objects.exists()
+
+    def test_a_failed_upgrade_does_not_leave_google_attached(self, client):
+        # e.g. another tab upgraded the same guest with this email a moment earlier.
+        guest_id = client.post("/api/auth/guest/").json()["id"]
+        with patch(
+            "apps.accounts.signals.finish_google_upgrade",
+            side_effect=AccountError("email_taken"),
+        ):
+            response = google_flow(client, process="connect")
+
+        assert result(response) == {"error": "email_taken"}
+        assert User.objects.get(pk=guest_id).is_guest is True
+        assert not SocialAccount.objects.exists()
 
     def test_only_guests_can_connect(self, client):
         make_verified_user()

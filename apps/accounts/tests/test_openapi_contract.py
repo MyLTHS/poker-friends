@@ -26,6 +26,12 @@ def test_every_error_code_is_in_the_contract():
     assert set(ERROR_STATUS) <= set(SCHEMAS["ApiError"]["properties"]["code"]["enum"])
 
 
+def test_every_google_result_code_is_in_the_contract():
+    from apps.accounts.adapters import GOOGLE_ERRORS
+
+    assert set(GOOGLE_ERRORS) == set(SCHEMAS["GoogleError"]["enum"])
+
+
 def test_every_auth_path_is_in_the_contract():
     from apps.accounts.urls import api
 

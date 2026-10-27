@@ -54,8 +54,11 @@ class RateLimit:
 
 # Every login attempt from one IP, whatever the outcome.
 LOGIN_ATTEMPTS_PER_IP = RateLimit("login-ip", limit=20, window=10 * 60)
-# Failed logins for one email: stops password guessing against a single account.
-LOGIN_FAILURES_PER_EMAIL = RateLimit("login-email", limit=5, window=15 * 60)
+# Failed logins for one email from one IP: stops one person guessing a friend's password,
+# without letting that person lock the friend out everywhere else.
+LOGIN_FAILURES_PER_EMAIL_AND_IP = RateLimit("login-email-ip", limit=5, window=15 * 60)
+# Failed logins for one email from anywhere: a looser cap on guessing from many IPs.
+LOGIN_FAILURES_PER_EMAIL = RateLimit("login-email", limit=30, window=60 * 60)
 PASSWORD_RESET_PER_IP = RateLimit("reset-ip", limit=5, window=60 * 60)
 PASSWORD_RESET_PER_EMAIL = RateLimit("reset-email", limit=3, window=60 * 60)
 # Sign-up, guest upgrade and "send the link again" all send an email.

@@ -11,12 +11,16 @@ info:
 
     Đăng nhập dùng cookie phiên của Django (`sessionid`). Mọi request không phải GET gửi header
     `X-CSRFToken` bằng giá trị cookie `csrftoken` (gọi `GET /api/auth/config/` để có cookie này),
-    **kể cả khi chưa đăng nhập**. Đăng nhập/đăng xuất làm cookie `csrftoken` đổi giá trị, nên đọc
-    lại cookie trước mỗi request.
+    **kể cả khi chưa đăng nhập**; thiếu hoặc sai thì 403 `forbidden`. Mỗi lần đăng nhập (mật
+    khẩu, tạo khách, Google) cookie `csrftoken` đổi giá trị, nên đọc lại cookie trước mỗi request.
 
     Đăng nhập Google không phải JSON mà là luồng chuyển trang của trình duyệt
     (`/accounts/google/login/`), cuối luồng trình duyệt về trang web
-    `FRONTEND_URL/account?google=ok` hoặc `FRONTEND_URL/account?error=<mã>`.
+    `FRONTEND_URL/account?google=ok` hoặc `FRONTEND_URL/account?error=<mã>` (mã: `GoogleError`).
+
+    Dò email: `signup`, `upgrade` và Google trả thẳng `email_taken`, nên ai cũng biết được một
+    email đã đăng ký hay chưa (chấp nhận được cho nhóm bạn). `resend` và `password/forgot` trả
+    cùng một câu trả lời, nhưng không cố che chênh lệch thời gian khi có gửi email.
 
     Kiểu dữ liệu dùng chung với WebSocket (`RoomInfo`, `SeatOccupant`, `TableState`) lấy thẳng từ
     `schema/common.schema.json` để hai phía không lệch nhau. Giao thức WebSocket:
@@ -200,7 +204,8 @@ paths:
       description: |
         Tạo tài khoản chưa xác minh và gửi email có link xác minh
         (`FRONTEND_URL/account/verify?token=...`). **Không** đăng nhập luôn: phải xác minh email
-        trước. Khách muốn giữ chip thì dùng `upgrade`, không dùng `signup`.
+        trước. Khách muốn giữ chip thì dùng `upgrade`, không dùng `signup`. Server mail lỗi thì
+        vẫn trả 201 (đã tạo tài khoản); người dùng xin gửi lại link bằng `resend`.
       x-phase: B6
       security: [{}]
       requestBody:
@@ -218,6 +223,8 @@ paths:
                 $ref: "#/components/schemas/Me"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
         "429":
@@ -245,12 +252,14 @@ paths:
                 $ref: "#/components/schemas/Me"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/auth/verify-email/resend/:
     post:
       tags: [auth]
       operationId: resendVerificationEmail
       summary: Gửi lại link xác minh
-      description: Luôn trả 202, có tài khoản chưa xác minh với email đó hay không (không lộ email nào đã đăng ký).
+      description: Luôn trả 202, có tài khoản chưa xác minh với email đó hay không.
       x-phase: B6
       security: [{}]
       requestBody:
@@ -264,6 +273,8 @@ paths:
           description: Đã nhận
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
   /api/auth/login/:
@@ -273,8 +284,9 @@ paths:
       summary: Đăng nhập bằng email và mật khẩu
       description: |
         Sai email hay sai mật khẩu đều trả `invalid_credentials`. Email chưa xác minh:
-        `email_not_verified` (403). Giới hạn: 20 lần/10 phút mỗi IP, 5 lần sai/15 phút mỗi email
-        (quá thì `rate_limited` kể cả khi mật khẩu đúng).
+        `email_not_verified` (403). Giới hạn: 20 lần/10 phút mỗi IP; 5 lần sai/15 phút cho một
+        email từ một IP; 30 lần sai/giờ cho một email từ mọi IP. Quá thì `rate_limited`, kể cả khi
+        mật khẩu đúng.
       x-phase: B6
       security: [{}]
       requestBody:
@@ -315,7 +327,7 @@ paths:
       operationId: forgotPassword
       summary: Quên mật khẩu — gửi link đặt lại
       description: |
-        Luôn trả 202 (không lộ email nào đã đăng ký). Link `FRONTEND_URL/account/reset?uid=...&token=...`
+        Luôn trả 202, có tài khoản hay không. Link `FRONTEND_URL/account/reset?uid=...&token=...`
         dùng một lần, hết hạn sau 1 giờ. Giới hạn: 5 lần/giờ mỗi IP, 3 lần/giờ mỗi email.
       x-phase: B6
       security: [{}]
@@ -330,6 +342,8 @@ paths:
           description: Đã nhận
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
   /api/auth/password/reset/:
@@ -351,6 +365,8 @@ paths:
           description: Đã đổi mật khẩu
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/auth/guest/:
     post:
       tags: [auth]
@@ -383,6 +399,8 @@ paths:
                 $ref: "#/components/schemas/Me"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
         "429":
@@ -415,6 +433,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
         "429":
@@ -427,14 +447,10 @@ paths:
       description: |
         **Form của trình duyệt, không phải fetch**: trang web submit một `<form method="post">`
         (có `csrfmiddlewaretoken`), server chuyển trình duyệt sang Google rồi Google chuyển về
-        `/accounts/google/login/callback/`. Cuối cùng trình duyệt về `FRONTEND_URL/account` với:
-
-        - `?google=ok` — đã đăng nhập (tài khoản mới hoặc cũ), hoặc khách đã nâng cấp.
-        - `?error=google_disabled` — server chưa có key Google.
-        - `?error=google_failed` — người dùng huỷ ở Google hoặc Google báo lỗi.
-        - `?error=email_taken` — email Google đã thuộc tài khoản email/mật khẩu khác (không gộp).
-        - `?error=social_account_taken` — (nâng cấp) tài khoản Google này đã gắn với người khác.
-        - `?error=not_guest` — (nâng cấp) người đang đăng nhập không phải khách.
+        `/accounts/google/login/callback/`. Cuối cùng trình duyệt về `FRONTEND_URL/account` với
+        `?google=ok` (đã đăng nhập, tài khoản mới hoặc cũ, hoặc khách đã nâng cấp) hoặc
+        `?error=<GoogleError>`. Mở thẳng URL này bằng GET thì chỉ quay về `FRONTEND_URL/account`.
+        Chỉ nhận email Google đánh dấu đã xác minh.
 
         `process=connect` khi khách đang đăng nhập muốn nâng cấp: Google được gắn vào chính `User`
         khách (giữ `id`, chip, lịch sử), email Google coi như đã xác minh.
@@ -644,6 +660,26 @@ components:
           type: string
           description: Giá trị cookie `csrftoken`.
       required: [csrfmiddlewaretoken]
+    GoogleError:
+      type: string
+      description: |
+        Mã trong `FRONTEND_URL/account?error=<mã>` khi luồng Google không xong.
+
+        - `google_disabled` — server chưa có key Google.
+        - `google_failed` — người dùng huỷ ở Google, Google báo lỗi, hoặc form sai `process`.
+        - `email_taken` — email Google đã thuộc một tài khoản khác (không gộp tài khoản).
+        - `email_not_verified` — Google chưa xác minh email của tài khoản Google đó.
+        - `social_account_taken` — (nâng cấp) tài khoản Google này đã gắn với người khác.
+        - `not_guest` — (nâng cấp) người đang đăng nhập không phải khách.
+        - `account_inactive` — tài khoản đã bị admin khoá.
+      enum:
+        - google_disabled
+        - google_failed
+        - email_taken
+        - email_not_verified
+        - social_account_taken
+        - not_guest
+        - account_inactive
     ApiError:
       type: object
       properties:
@@ -667,6 +703,7 @@ components:
             - username_taken
             - invalid_token
             - not_guest
+            - method_not_allowed
           description: Mã ổn định, client được phép `switch` theo mã.
         message:
           type: string
