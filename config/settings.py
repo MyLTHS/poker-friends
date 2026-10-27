@@ -107,3 +107,60 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --- Accounts (B6) ------------------------------------------------------------------------
+# Kept in one block, appended rather than edited in place, so it merges cleanly with other
+# phases that touch the lists above. Details: apps/accounts/ and docs/huong-dan-google-smtp.md.
+from apps.accounts.email_config import mailers_from_url  # noqa: E402
+
+INSTALLED_APPS += [
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
+    "apps.accounts",
+]
+MIDDLEWARE += ["allauth.account.middleware.AccountMiddleware"]
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+# Reverse proxies (Caddy, ...) in front of Django; rate limits then read the client IP from
+# X-Forwarded-For. 0 = none, use the connection's address.
+ACCOUNTS_TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "0"))
+
+# Links in emails and the end of the Google flow point at the web app, not at Django.
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+if FRONTEND_URL not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append(FRONTEND_URL)
+
+# No EMAIL_URL: emails are printed to the console (dev). See apps/accounts/email_config.py.
+MAILERS = mailers_from_url(os.environ.get("EMAIL_URL", ""))
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Poker Friends <no-reply@localhost>")
+PASSWORD_RESET_TIMEOUT = 60 * 60
+
+# Google sign-in is on only when both values are set; the web app hides the button otherwise.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "APPS": (
+            [{"client_id": GOOGLE_CLIENT_ID, "secret": GOOGLE_CLIENT_SECRET}]
+            if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET
+            else []
+        ),
+        "SCOPE": ["profile", "email"],
+    }
+}
+# allauth only runs the Google flow; email/password, verification and guests live in our own
+# JSON API (apps/accounts/views.py), so allauth's own email handling stays off.
+ACCOUNT_ADAPTER = "apps.accounts.adapters.AccountAdapter"
+SOCIALACCOUNT_ADAPTER = "apps.accounts.adapters.SocialAccountAdapter"
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*"]
+ACCOUNT_EMAIL_VERIFICATION = "none"
+SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_STORE_TOKENS = False

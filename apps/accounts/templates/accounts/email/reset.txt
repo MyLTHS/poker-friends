@@ -1,0 +1,9 @@
+{% autoescape off %}Chào {{ user.username }},
+
+Có người (hy vọng là bạn) vừa yêu cầu đặt lại mật khẩu Poker Friends. Bấm link dưới đây để đặt
+mật khẩu mới:
+
+{{ link }}
+
+Link dùng được một lần, trong {{ hours }} giờ. Nếu không phải bạn yêu cầu, cứ bỏ qua email này:
+mật khẩu cũ vẫn dùng được.{% endautoescape %}

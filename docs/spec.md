@@ -134,6 +134,12 @@ Quyết định kiến trúc (thống nhất với Codex ở `docs/collab/`, s�
 
 ### 5. Tài khoản & quyền (B6–B7)
 
+> **Tiến độ B6 (27/10/2026):** đã có code, chờ duyệt — app `apps/accounts/`, API `/api/auth/`
+> ([openapi.yaml](api/openapi.yaml), tag `auth`), trang thử `web/` → `/account`. Trạng thái "email
+> đã xác minh" lưu ở bảng `EmailAddress` của django-allauth (không thêm cột vào `User`); đăng nhập
+> bằng mật khẩu cần email đã xác minh. Google chỉ bật khi có key
+> ([hướng dẫn](huong-dan-google-smtp.md)).
+
 - Đăng nhập: email/mật khẩu (có xác minh + quên mật khẩu), Google OAuth, hoặc khách
   (`is_guest=True`) — khách chơi được ngay, nâng cấp lên tài khoản thật sau mà không mất chip
   hay lịch sử (cùng `User.id`).

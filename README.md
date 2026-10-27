@@ -10,9 +10,9 @@ No-Limit Texas Hold'em chip ảo cho nhóm bạn. Backend Django + PokerKit.
 
 Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đoán, bài tập) ở [docs/roadmap.md](docs/roadmap.md).
 
-**Đang ở:** A và B1 đã được chủ dự án duyệt; B2 và B3 đã gộp vào `main`, chờ duyệt. Đang làm
-**B4a — backend bàn chơi realtime** (table actor, WebSocket, REST ghế); B4b (nối trang React với
-backend thật, Playwright) làm sau.
+**Đang ở:** A và B1 đã được chủ dự án duyệt; B2 và B3 đã gộp vào `main`, chờ duyệt. B4a và B6
+xong code, chờ duyệt. Đang làm **B5 (phần code)**, rồi B7, B8 và ba bản thiết kế cho C1; B4b (nối
+trang React với backend thật, Playwright) làm sau.
 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
@@ -20,8 +20,10 @@ backend thật, Playwright) làm sau.
 | B1 | Engine luật chơi | ✅ Đã duyệt |
 | B2 | Dữ liệu | ✅ Xong code, chờ duyệt |
 | B3 | Hợp đồng API | ✅ Xong code, chờ duyệt |
-| B4 | Bàn chơi realtime | 🟡 Đang làm B4a (backend); B4b (nối React, Playwright) chưa bắt đầu |
-| B5–B8 | Độ bền, tài khoản, phòng, xã hội | ⬜ Chưa bắt đầu |
+| B4 | Bàn chơi realtime | 🟡 B4a (backend) xong code, chờ duyệt; B4b (nối React, Playwright) chưa bắt đầu |
+| B5 | Độ bền + staging | 🟡 Đang làm phần code; staging chờ VPS |
+| B6 | Tài khoản | ✅ Xong code, chờ duyệt |
+| B7–B8 | Phòng, xã hội | ⬜ Chưa bắt đầu |
 | C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, một Claude riêng chỉ đọc review) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
@@ -99,10 +101,18 @@ backend thật, Playwright) làm sau.
 - [ ] Staging trên VPS (Caddy HTTPS), diễn tập backup → khôi phục
 - [ ] CD staging: gộp vào `main` + CI xanh thì tự build, migrate, deploy lên staging
 
-**B6. Tài khoản**
+**B6. Tài khoản** — app `apps/accounts/`, API `/api/auth/` trong [openapi.yaml](docs/api/openapi.yaml)
 
-- [ ] Email/mật khẩu (xác minh, quên mật khẩu), Google
-- [ ] Nâng cấp khách giữ nguyên lịch sử và chip; rate limit đăng nhập
+- [x] Email/mật khẩu: đăng ký, xác minh email (link hết hạn sau 3 ngày), đăng nhập/đăng xuất,
+  quên mật khẩu (link dùng một lần, 1 giờ); cookie phiên Django + CSRF
+- [x] Google qua `django-allauth`, chỉ bật khi có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+- [x] Khách (`is_guest`) và nâng cấp khách bằng email hoặc Google: cùng `User.id`, chip và lịch sử
+  ván ở mọi phòng giữ nguyên; email đã thuộc người khác thì từ chối, không gộp tài khoản
+- [x] Rate limit đăng nhập, quên mật khẩu (theo IP và theo email), gửi email, tạo khách — cache Django
+- [x] Email in ra console khi chưa có `EMAIL_URL`; [hướng dẫn tạo key Google + SMTP](docs/huong-dan-google-smtp.md)
+- [x] Trang thử React `/account` ([cách chạy](web/README.md))
+- [ ] Lym tạo key Google + SMTP thật và thử lại
+- [ ] Duyệt với chủ dự án
 
 **B7. Phòng và quyền**
 
