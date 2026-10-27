@@ -29,6 +29,7 @@ MESSAGE_TYPES: dict[Direction, list[str]] = {
         "hand.completed",
         "seat.updated",
         "room.suspended",
+        "room.updated",
         "command.ack",
         "command.rejected",
         "protocol.error",
@@ -46,6 +47,7 @@ STATE_EVENTS = frozenset(
         "hand.completed",
         "seat.updated",
         "room.suspended",
+        "room.updated",
     }
 )
 

@@ -25,6 +25,9 @@
       "$ref": "messages/room.suspended.schema.json"
     },
     {
+      "$ref": "messages/room.updated.schema.json"
+    },
+    {
       "$ref": "messages/command.ack.schema.json"
     },
     {

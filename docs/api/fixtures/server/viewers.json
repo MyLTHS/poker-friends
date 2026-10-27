@@ -13,6 +13,7 @@
     "hand.started": "1",
     "protocol.error": "1",
     "room.suspended": "1",
+    "room.updated.blinds": "1",
     "seat.updated.left": "1",
     "seat.updated.sit-out": "1",
     "table.snapshot.between-hands": "1",

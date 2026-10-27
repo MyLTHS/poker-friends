@@ -57,7 +57,7 @@ Message **client gửi** có `protocol_version`, `type`, `room_id`, `payload`; l
 
 | Loại | Gồm | Gửi cho | `version` |
 |---|---|---|---|
-| **Sự kiện trạng thái** | `hand.started`, `action.applied`, `turn.deadline`, `hand.completed`, `seat.updated`, `room.suspended` | Cả bàn (mỗi người một bản đã che bài theo góc nhìn của họ) | Tăng đúng **1** mỗi sự kiện |
+| **Sự kiện trạng thái** | `hand.started`, `action.applied`, `turn.deadline`, `hand.completed`, `seat.updated`, `room.suspended`, `room.updated` | Cả bàn (mỗi người một bản đã che bài theo góc nhìn của họ) | Tăng đúng **1** mỗi sự kiện |
 | **Trả lời riêng** | `table.snapshot`, `command.ack`, `command.rejected`, `protocol.error` | Chỉ người gửi lệnh / người kết nối | Không tăng; mang `version` hiện tại của phòng |
 
 Cùng một sự kiện trạng thái thì mọi người nhận cùng `version`, chỉ khác phần bài được che.
@@ -401,6 +401,28 @@ không biết chắc trạng thái nên **dừng phòng** (fail-stop) thay vì �
 }
 ```
 
+### `room.updated` (sự kiện): cấu hình hoặc trạng thái phòng đổi (B7)
+
+Chủ phòng đổi blind, thời gian suy nghĩ, thưởng 7-2 hay tên phòng (REST `PATCH /api/rooms/{id}/`),
+hoặc đóng phòng. `room` là `RoomInfo` mới, thay nguyên cục. Đổi lúc đang có ván thì **ván đó giữ
+cấu hình cũ**; sự kiện này được phát khi cấu hình mới bắt đầu có hiệu lực (ngay trước
+`hand.started` của ván sau). Đóng phòng giữa ván cũng chờ ván xong; sau đó `room.status` là
+`"closed"`, server không chia ván mới, vào ghế bị từ chối `room_closed`.
+
+```json
+{
+  "protocol_version": 1, "type": "room.updated", "room_id": 1, "hand_id": null,
+  "version": 31, "server_time": "2026-10-27T15:10:02.000Z",
+  "payload": {"room": {"room_id": 1, "name": "Bàn bạn bè", "status": "open", "max_seats": 9,
+              "small_blind": 10, "big_blind": 20, "think_time_seconds": 30,
+              "seven_deuce_bonus": 50}}
+}
+```
+
+Người bị chủ phòng kick: cả bàn nhận `seat.updated` (ghế trống); mọi kết nối của người đó bị server
+đóng với mã **4403**, và người đó không vào lại được phòng (REST trả `kicked`). Kết nối vào phòng
+private mà không có quyền xem: server đóng ngay khi bắt tay với mã **4404**.
+
 ### `protocol.error` (trả lời riêng)
 
 Message hỏng tới mức không tìm được `command_id`. Server không đóng kết nối.
@@ -463,6 +485,7 @@ Góc nhìn Lym, ván ví dụ ở mục 8 (`v` = `version`):
   kết nối im 20 giây và đóng nếu 30 giây không có pong; trình duyệt tự trả pong. Kết nối đóng thì
   cả bàn nhận `seat.updated` với `connected: false` (B5).
 - Chat, emoji, vào/ra của người xem: B8.
-- Chủ phòng cấp chip, đổi blind, kick: REST ở B7, kết quả phát bằng `seat.updated`.
+- (Đã có từ B7) Chủ phòng cấp chip, kick: REST, kết quả phát bằng `seat.updated`; đổi cấu hình
+  và đóng phòng: `room.updated`.
 
 Các thứ này sẽ là **thêm message mới** (đổi tương thích), không đổi message đã có.

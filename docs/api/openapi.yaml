@@ -7,7 +7,7 @@ info:
 
     - `B4`: cần để chơi realtime (vào ghế, rời ghế, lấy snapshot).
     - `B6`: tài khoản (`/api/auth/`, tag `auth`) — **đã cài**.
-    - `B7`: phòng và quyền (tạo phòng, xem phòng; quyền chủ phòng, phòng private, link mời).
+    - `B7`: phòng và quyền (lobby, tạo/xem phòng, link mời, quyền chủ phòng) — **đã cài**.
 
     Đăng nhập dùng cookie phiên của Django (`sessionid`). Mọi request không phải GET gửi header
     `X-CSRFToken` bằng giá trị cookie `csrftoken` (gọi `GET /api/auth/config/` để có cookie này),
@@ -39,11 +39,31 @@ tags:
     description: Tài khoản (B6) — email/mật khẩu, khách, nâng cấp khách, Google
 paths:
   /api/rooms/:
+    get:
+      tags: [rooms]
+      operationId: listRooms
+      summary: Lobby
+      description: |
+        Phòng chưa đóng mà người gọi được thấy: mọi phòng public, cộng phòng private mà người gọi là
+        chủ hoặc đã vào bằng link mời. Mới tạo trước. Không cần đăng nhập (chưa đăng nhập thì chỉ
+        thấy phòng public).
+      x-phase: B7
+      security: [{}, {session: []}]
+      responses:
+        "200":
+          description: Danh sách phòng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lobby"
     post:
       tags: [rooms]
       operationId: createRoom
-      summary: Tạo phòng (dự kiến B7)
-      description: Người gọi thành chủ phòng. Phòng mới ở trạng thái `open`, chưa ai ngồi.
+      summary: Tạo phòng
+      description: |
+        Người gọi (kể cả khách) thành chủ phòng. Phòng mới ở trạng thái `open`, chưa ai ngồi, chưa ai
+        có chip: chủ phòng cấp chip bằng `grantChips` sau khi người chơi vào ghế. Phòng private chỉ
+        người có link mời (`invite_token`) mới thấy. Giới hạn 10 phòng/giờ mỗi người.
       x-phase: B7
       requestBody:
         required: true
@@ -58,36 +78,228 @@ paths:
               big_blind: 10
               think_time_seconds: 20
               seven_deuce_bonus: 50
+              is_private: true
       responses:
         "201":
           description: Đã tạo
           content:
             application/json:
               schema:
-                $ref: "./schema/common.schema.json#/$defs/RoomInfo"
+                $ref: "#/components/schemas/RoomDetail"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/rooms/join/:
+    post:
+      tags: [rooms]
+      operationId: joinRoom
+      summary: Vào phòng bằng link mời
+      description: |
+        Trang web mở link `FRONTEND_URL/rooms/join?token=...` rồi gọi API này. Người gọi thành thành
+        viên của phòng (thấy phòng private, vào ghế được). Chưa đăng nhập thì server tạo khách và đăng
+        nhập luôn, như khi mở bàn. Mã sai hoặc đã bị chủ phòng đổi: `room_not_found`.
+      x-phase: B7
+      security: [{}, {session: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinRoomRequest"
+      responses:
+        "200":
+          description: Đã vào phòng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /api/rooms/{room_id}/:
     parameters:
       - $ref: "#/components/parameters/RoomId"
     get:
       tags: [rooms]
       operationId: getRoom
-      summary: Xem cấu hình phòng (dự kiến B7)
+      summary: Xem phòng
+      description: Phòng private mà người gọi không có quyền xem thì trả `room_not_found` như phòng không tồn tại.
       x-phase: B7
+      security: [{}, {session: []}]
       responses:
         "200":
-          description: Cấu hình phòng
+          description: Phòng
           content:
             application/json:
               schema:
-                $ref: "./schema/common.schema.json#/$defs/RoomInfo"
+                $ref: "#/components/schemas/RoomDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [rooms]
+      operationId: updateRoom
+      summary: Chủ phòng đổi cấu hình
+      description: |
+        Chỉ chủ phòng (`forbidden` với người khác). Đang có ván thì ván đó giữ cấu hình cũ: thay đổi
+        nằm trong `pending` và có hiệu lực từ ván sau; cả bàn nhận `room.updated` lúc đó. Không có ván
+        thì có hiệu lực ngay. `small_blind` phải nhỏ hơn `big_blind` (tính cả giá trị đang có).
+      x-phase: B7
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoomRequest"
+            example:
+              small_blind: 10
+              big_blind: 20
+      responses:
+        "200":
+          description: Đã nhận; xem `room` (đang áp dụng) và `pending` (chờ ván sau)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/rooms/{room_id}/chips/:
+    parameters:
+      - $ref: "#/components/parameters/RoomId"
+    post:
+      tags: [rooms]
+      operationId: grantChips
+      summary: Chủ phòng cấp hoặc điều chỉnh chip
+      description: |
+        Chỉ chủ phòng. Ghi một bút toán `grant` vào sổ chip của phòng; `amount` âm là trừ bớt (không
+        được làm số dư âm: `negative_balance`). Người nhận phải đang ngồi ghế (`not_seated`) và không ở
+        trong ván đang chạy (`player_in_hand`). Cả bàn nhận `seat.updated` với `stack` mới.
+      x-phase: B7
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrantChipsRequest"
+            example:
+              player_id: "7"
+              amount: 1000
+      responses:
+        "200":
+          description: Đã ghi sổ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrantChipsResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/rooms/{room_id}/kick/:
+    parameters:
+      - $ref: "#/components/parameters/RoomId"
+    post:
+      tags: [rooms]
+      operationId: kickPlayer
+      summary: Chủ phòng mời một người ra khỏi phòng
+      description: |
+        Chỉ chủ phòng, không kick được chính mình. Người đó rời ghế (chip vẫn nằm trong sổ của phòng),
+        mất quyền xem phòng private, mọi kết nối WebSocket của họ bị đóng (mã 4403), và không vào lại
+        được (`kicked`). Đang trong ván thì từ chối `player_in_hand`: đợi ván xong.
+      x-phase: B7
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayerRequest"
+      responses:
+        "204":
+          description: Đã kick
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/rooms/{room_id}/close/:
+    parameters:
+      - $ref: "#/components/parameters/RoomId"
+    post:
+      tags: [rooms]
+      operationId: closeRoom
+      summary: Chủ phòng đóng phòng
+      description: |
+        Chỉ chủ phòng. Không có ván thì đóng ngay (200). Đang có ván thì đóng khi ván xong (202,
+        `closing: true`). Phòng đóng: không chia ván mới, không vào ghế được, biến khỏi lobby; sổ chip
+        và lịch sử giữ nguyên. Cả bàn nhận `room.updated` với `status: "closed"`.
+      x-phase: B7
+      responses:
+        "200":
+          description: Đã đóng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomDetail"
+        "202":
+          description: Sẽ đóng khi ván đang chạy xong
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomDetail"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/rooms/{room_id}/invite/:
+    parameters:
+      - $ref: "#/components/parameters/RoomId"
+    post:
+      tags: [rooms]
+      operationId: rotateInvite
+      summary: Chủ phòng đổi link mời
+      description: Tạo `invite_token` mới; link cũ hết hiệu lực ngay (người đã vào phòng vẫn giữ quyền).
+      x-phase: B7
+      responses:
+        "200":
+          description: Link mới
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomDetail"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
   /api/rooms/{room_id}/seats/:
@@ -99,7 +311,8 @@ paths:
       summary: Vào ghế (dự kiến B4)
       description: |
         Người gọi ngồi vào một ghế trống. Được dealt từ ván kế tiếp nếu có chip trong phòng.
-        Cả bàn nhận `seat.updated` qua WebSocket.
+        Cả bàn nhận `seat.updated` qua WebSocket. Phòng private cần quyền xem (`room_not_found`);
+        người đã bị kick nhận `kicked`; phòng đã đóng nhận `room_closed`.
       x-phase: B4
       requestBody:
         required: true
@@ -120,6 +333,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -509,7 +724,125 @@ components:
           minimum: 0
           default: 0
           description: Thưởng luật 7-2 (#27); 0 là tắt.
+        is_private:
+          type: boolean
+          default: false
+          description: Phòng private không hiện ở lobby; chỉ chủ phòng và người có link mời thấy.
       required: [name, small_blind, big_blind]
+      additionalProperties: false
+    Lobby:
+      type: object
+      properties:
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/LobbyRoom"
+      required: [rooms]
+      additionalProperties: false
+    LobbyRoom:
+      type: object
+      properties:
+        room:
+          $ref: "./schema/common.schema.json#/$defs/RoomInfo"
+        is_private:
+          type: boolean
+        owner_name:
+          type: [string, "null"]
+        seated:
+          type: integer
+          minimum: 0
+          maximum: 9
+          description: Số ghế đang có người.
+      required: [room, is_private, owner_name, seated]
+      additionalProperties: false
+    RoomDetail:
+      type: object
+      properties:
+        room:
+          $ref: "./schema/common.schema.json#/$defs/RoomInfo"
+        is_private:
+          type: boolean
+        owner_id:
+          type: [string, "null"]
+          description: Cùng dạng `player_id` ở WebSocket.
+        owner_name:
+          type: [string, "null"]
+        is_owner:
+          type: boolean
+          description: Người gọi có phải chủ phòng không.
+        invite_token:
+          type: [string, "null"]
+          description: Chỉ chủ phòng thấy; người khác nhận `null`. Link mời là `FRONTEND_URL/rooms/join?token=<invite_token>`.
+        pending:
+          description: Cấu hình chủ phòng đã đổi nhưng chờ ván sau; `null` nếu không có.
+          anyOf:
+            - $ref: "#/components/schemas/UpdateRoomRequest"
+            - type: "null"
+        closing:
+          type: boolean
+          description: Chủ phòng đã đóng phòng, chờ ván đang chạy xong.
+      required: [room, is_private, owner_id, owner_name, is_owner, invite_token, pending, closing]
+      additionalProperties: false
+    UpdateRoomRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        small_blind:
+          type: integer
+          minimum: 1
+        big_blind:
+          type: integer
+          minimum: 2
+        think_time_seconds:
+          type: integer
+          minimum: 5
+          maximum: 120
+        seven_deuce_bonus:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    JoinRoomRequest:
+      type: object
+      properties:
+        invite_token:
+          type: string
+          minLength: 1
+          maxLength: 64
+      required: [invite_token]
+      additionalProperties: false
+    GrantChipsRequest:
+      type: object
+      properties:
+        player_id:
+          $ref: "./schema/common.schema.json#/$defs/PlayerId"
+        amount:
+          type: integer
+          not:
+            const: 0
+          description: Dương là cấp thêm, âm là trừ bớt.
+      required: [player_id, amount]
+      additionalProperties: false
+    GrantChipsResult:
+      type: object
+      properties:
+        player_id:
+          $ref: "./schema/common.schema.json#/$defs/PlayerId"
+        amount:
+          type: integer
+        balance:
+          $ref: "./schema/common.schema.json#/$defs/Chips"
+      required: [player_id, amount, balance]
+      additionalProperties: false
+    PlayerRequest:
+      type: object
+      properties:
+        player_id:
+          $ref: "./schema/common.schema.json#/$defs/PlayerId"
+      required: [player_id]
       additionalProperties: false
     TakeSeatRequest:
       type: object
@@ -704,6 +1037,9 @@ components:
             - invalid_token
             - not_guest
             - method_not_allowed
+            - invalid_amount
+            - negative_balance
+            - kicked
           description: Mã ổn định, client được phép `switch` theo mã.
         message:
           type: string
@@ -719,7 +1055,7 @@ components:
       additionalProperties: false
   responses:
     BadRequest:
-      description: Body sai (`validation_error`, `invalid_seat`, `invalid_credentials`, `invalid_token`)
+      description: Body sai (`validation_error`, `invalid_seat`, `invalid_credentials`, `invalid_token`, `invalid_amount`)
       content:
         application/json:
           schema:
@@ -731,7 +1067,7 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
     Forbidden:
-      description: Thiếu/sai CSRF token (`forbidden`), hoặc email chưa xác minh (`email_not_verified`)
+      description: Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`)
       content:
         application/json:
           schema:
@@ -743,7 +1079,7 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
     Conflict:
-      description: Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`)
+      description: Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`)
       content:
         application/json:
           schema:

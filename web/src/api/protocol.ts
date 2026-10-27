@@ -12,6 +12,7 @@ export type ServerMessage =
   | HandCompletedMessage
   | SeatUpdatedMessage
   | RoomSuspendedMessage
+  | RoomUpdatedMessage
   | CommandAckMessage
   | CommandRejectedMessage
   | ProtocolErrorMessage;
@@ -371,6 +372,20 @@ export interface RoomSuspendedMessage {
      * For logs and developers, not for players.
      */
     message: string;
+  };
+}
+/**
+ * State event: the room's settings or status changed (owner changed blinds or think time, the room was closed). Settings changed during a hand take effect from the next hand: this event is sent when they apply. See docs/api/ws-protocol.md.
+ */
+export interface RoomUpdatedMessage {
+  protocol_version: ProtocolVersion;
+  type: "room.updated";
+  room_id: RoomId;
+  hand_id: HandIdOrNull;
+  version: Version;
+  server_time: ServerTime;
+  payload: {
+    room: RoomInfo;
   };
 }
 /**
