@@ -290,3 +290,29 @@ class TestResendAfterCrash:
             assert codes == ["command_id_reused"]
 
         run_async(body)
+
+
+class TestOrigin:
+    """Point 7: the WebSocket only accepts pages served from our own hosts."""
+
+    def test_a_foreign_origin_is_refused_and_ours_is_accepted(self):
+        from channels.testing import WebsocketCommunicator
+
+        from config.asgi import application
+
+        room, a, b = heads_up_room()
+
+        async def body():
+            for origin, expected in (
+                (b"http://evil.example", False),
+                (b"http://localhost:3000", True),
+            ):
+                conn = WebsocketCommunicator(
+                    application, f"/ws/rooms/{room.pk}/", headers=[(b"origin", origin)]
+                )
+                connected, _ = await conn.connect()
+                assert connected is expected, origin
+                if connected:
+                    await conn.disconnect()
+
+        run_async(body)
