@@ -29,11 +29,14 @@ MESSAGE_TYPES: dict[Direction, list[str]] = {
         "hand.completed",
         "seat.updated",
         "room.suspended",
+        "room.updated",
+        "chat.message",
+        "audience.updated",
         "command.ack",
         "command.rejected",
         "protocol.error",
     ],
-    "client": ["command.act", "command.sit_out", "command.sit_in", "resync.request"],
+    "client": ["command.act", "command.sit_out", "command.sit_in", "resync.request", "chat.send"],
 }
 
 # Server messages that change the room and add 1 to its version; every other server message
@@ -46,6 +49,7 @@ STATE_EVENTS = frozenset(
         "hand.completed",
         "seat.updated",
         "room.suspended",
+        "room.updated",
     }
 )
 

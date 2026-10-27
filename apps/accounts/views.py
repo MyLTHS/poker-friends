@@ -7,6 +7,7 @@ Errors are ``{"code", "message", "fields"?}`` (ApiError).
 
 from django.conf import settings
 from django.contrib.auth import logout
+from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import exceptions, status
@@ -96,12 +97,18 @@ def client_ip(request) -> str:
     it saw to X-Forwarded-For, so the N-th entry from the right is the real client. Entries
     further left were sent by the client itself and are ignored.
     """
+    return client_ip_from(
+        request.META.get("REMOTE_ADDR", ""), request.META.get("HTTP_X_FORWARDED_FOR", "")
+    )
+
+
+def client_ip_from(remote_addr: str, forwarded_for: str) -> str:
+    """``client_ip`` from its two inputs, for callers without a request (WebSocket scope)."""
     proxies = settings.ACCOUNTS_TRUSTED_PROXIES
-    forwarded = [ip.strip() for ip in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")]
-    forwarded = [ip for ip in forwarded if ip]
+    forwarded = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
     if proxies and forwarded:
         return forwarded[-min(proxies, len(forwarded))]
-    return request.META.get("REMOTE_ADDR", "")
+    return remote_addr
 
 
 def me(user, http_status=status.HTTP_200_OK) -> Response:
@@ -209,3 +216,12 @@ class UpgradeView(AccountView):
             request, data["email"], data["password"], data.get("username")
         )
         return me(user)
+
+
+def csrf_failure(request, reason=""):
+    """CSRF_FAILURE_VIEW: API callers get an ApiError, not Django's HTML page."""
+    if request.path.startswith("/api/"):
+        return JsonResponse({"code": "forbidden", "message": f"CSRF failed: {reason}"}, status=403)
+    from django.views.csrf import csrf_failure as default
+
+    return default(request, reason)

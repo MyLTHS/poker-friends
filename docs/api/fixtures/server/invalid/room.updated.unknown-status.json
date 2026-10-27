@@ -1,0 +1,20 @@
+{
+  "protocol_version": 1,
+  "type": "room.updated",
+  "room_id": 1,
+  "hand_id": null,
+  "version": 31,
+  "server_time": "2026-10-27T15:10:02.000Z",
+  "payload": {
+    "room": {
+      "room_id": 1,
+      "name": "Bàn bạn bè",
+      "status": "closing",
+      "max_seats": 9,
+      "small_blind": 10,
+      "big_blind": 20,
+      "think_time_seconds": 30,
+      "seven_deuce_bonus": 50
+    }
+  }
+}

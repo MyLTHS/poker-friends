@@ -5,10 +5,11 @@ for each, so a WebSocket client can connect as that player. Granting chips throu
 server is B7, so run this **before** the server touches the room. Development only.
 """
 
+from django.contrib.auth import BACKEND_SESSION_KEY, HASH_SESSION_KEY, SESSION_KEY
 from django.contrib.sessions.backends.db import SessionStore
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.games.accounts import SESSION_KEY
+from apps.accounts.services import MODEL_BACKEND
 from apps.games.models import LedgerEntry, LedgerKind, Room, RoomSeat, User
 
 
@@ -44,12 +45,15 @@ class Command(BaseCommand):
         if not 2 <= players <= room.max_seats:
             raise CommandError(f"--players must be between 2 and {room.max_seats}.")
         for seat in range(1, players + 1):
-            user = User.objects.create(username=f"demo-{room.pk}-{seat}", is_guest=True)
+            user = User.objects.create_user(username=f"demo-{room.pk}-{seat}", is_guest=True)
             RoomSeat.objects.create(room=room, user=user, seat=seat)
             LedgerEntry.objects.create(
                 room=room, user=user, kind=LedgerKind.GRANT, amount=options["chips"]
             )
             session = SessionStore()
-            session[SESSION_KEY] = user.pk
+            # A Django-auth login session, the same as POST /api/auth/guest/ would create.
+            session[SESSION_KEY] = str(user.pk)
+            session[BACKEND_SESSION_KEY] = MODEL_BACKEND
+            session[HASH_SESSION_KEY] = user.get_session_auth_hash()
             session.create()
             self.stdout.write(f"seat {seat}: player {user.pk} sessionid={session.session_key}")

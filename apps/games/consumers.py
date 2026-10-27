@@ -11,20 +11,47 @@ import uuid
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 
+from apps.accounts.ratelimit import RateLimited
+
 from . import actor as actor_module
-from . import contract
-from .accounts import aget_or_create_session_user
+from . import contract, rooms
+from .accounts import player_for_scope
+from .models import Room
+
+NO_ACCESS_CLOSE_CODE = 4404
+GUEST_LIMIT_CLOSE_CODE = 4429
 
 
 class RoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_id = int(self.scope["url_route"]["kwargs"]["room_id"])
-        user = await aget_or_create_session_user(self.scope["session"])
+        room = await Room.objects.filter(pk=self.room_id).afirst()
+        user = self.scope.get("user")
+        if room is None or (room.is_private and not (user and user.is_authenticated)):
+            await self._refuse(NO_ACCESS_CLOSE_CODE)
+            return
+        try:
+            user = await player_for_scope(self.scope)
+        except RateLimited:
+            await self._refuse(GUEST_LIMIT_CLOSE_CODE)
+            return
+        verdict = await rooms.access(room, user)
+        if verdict != "ok":
+            code = NO_ACCESS_CLOSE_CODE if verdict == "hidden" else actor_module.KICKED_CLOSE_CODE
+            await self._refuse(code)
+            return
         self.player_id = str(user.pk)
         self.conn = uuid.uuid4().hex
         await self.accept()
         self.actor = await actor_module.get_actor(self.room_id)
-        self.actor.connect(self.conn, self.channel_name, self.player_id)
+        self.actor.connect(self.conn, self.channel_name, self.player_id, user.username)
+
+    async def _refuse(self, code: int) -> None:
+        # Accept first: closing during the handshake is an HTTP 403 to a browser, which then
+        # sees only 1006 and cannot tell "kicked" from "network down" (the client stops retrying
+        # on 4403/4404).
+        await self.accept()
+        await self.close(code=code)
 
     async def disconnect(self, code):
         if hasattr(self, "actor"):
@@ -38,6 +65,17 @@ class RoomConsumer(AsyncWebsocketConsumer):
             return
         if not isinstance(message, dict):
             await self._protocol_error("invalid_json", "A message must be an object.")
+            return
+        try:
+            # Every message counts, invalid ones and resyncs included: each costs a schema check
+            # or a full snapshot. The cache is in-process memory, so this does not block.
+            rooms.COMMANDS_PER_PLAYER.hit(self.player_id)
+        except RateLimited:
+            command_id = message.get("command_id")
+            if contract.matches(command_id, "CommandId"):
+                await self._rejected(command_id, "rate_limited", "Too many messages.")
+            else:
+                await self._protocol_error("rate_limited", "Too many messages.")
             return
         if message.get("protocol_version") != actor_module.PROTOCOL_VERSION:
             await self._protocol_error("unsupported_protocol_version", "Use version 1.")
@@ -55,17 +93,32 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 await self._protocol_error("invalid_message", "; ".join(errors))
             return
         if message["room_id"] != self.room_id:
-            await self._rejected(command_id, "invalid_command", "Wrong room.")
+            if command_id is not None:
+                await self._rejected(command_id, "invalid_command", "Wrong room.")
+            else:
+                await self._protocol_error("invalid_message", "Wrong room.")
             return
 
         if message["type"] == "resync.request":
             await self.send(text_data=json.dumps(self.actor.snapshot_message(self.player_id)))
+            return
+        if message["type"] == "chat.send":
+            try:
+                rooms.CHAT_PER_PLAYER.hit(self.player_id)
+            except RateLimited:
+                await self._protocol_error("rate_limited", "Too many chat lines.")
+                return
+            self.actor.chat(self.player_id, message["payload"]["text"].strip())
             return
         self.actor.submit_command(self.conn, self.player_id, message)
 
     async def table_message(self, event):
         """From the actor via the channel layer: relay as-is."""
         await self.send(text_data=event["text"])
+
+    async def table_close(self, event):
+        """From the actor: this player was kicked (B7)."""
+        await self.close(code=event["code"])
 
     async def _reply(self, type_: str, payload: dict) -> None:
         actor = getattr(self, "actor", None)

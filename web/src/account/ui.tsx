@@ -6,15 +6,25 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { csrfTokenFrom, type ClientError, type Result } from "./api";
 import { errorText, type Notice } from "./messages";
 
-export function Shell({ title, children }: { title: string; children: ReactNode }) {
+export function Shell({
+  title,
+  section = "TÀI KHOẢN",
+  wide = false,
+  children,
+}: {
+  title: string;
+  section?: string;
+  wide?: boolean;
+  children: ReactNode;
+}) {
   return (
     <main className="club-theme min-h-screen px-4 py-12">
-      <div className="mx-auto max-w-md">
+      <div className={`mx-auto ${wide ? "max-w-3xl" : "max-w-md"}`}>
         <p className="text-xs tracking-[0.2em] text-[var(--muted)]">
           <Link href="/" className="hover:text-[var(--accent)]">
             POKER FRIENDS
           </Link>{" "}
-          · TÀI KHOẢN
+          · {section}
         </p>
         <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl">{title}</h1>
         <div className="mt-8 grid gap-4">{children}</div>

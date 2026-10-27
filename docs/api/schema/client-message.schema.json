@@ -14,6 +14,9 @@
     },
     {
       "$ref": "messages/resync.request.schema.json"
+    },
+    {
+      "$ref": "messages/chat.send.schema.json"
     }
   ]
 }

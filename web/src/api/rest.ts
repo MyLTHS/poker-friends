@@ -9,13 +9,43 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * Lobby
+         * @description Phòng chưa đóng mà người gọi được thấy: mọi phòng public, cộng phòng private mà người gọi là
+         *     chủ hoặc đã vào bằng link mời. Mới tạo trước. Không cần đăng nhập (chưa đăng nhập thì chỉ
+         *     thấy phòng public).
+         */
+        get: operations["listRooms"];
+        put?: never;
+        /**
+         * Tạo phòng
+         * @description Người gọi (kể cả khách) thành chủ phòng. Phòng mới ở trạng thái `open`, chưa ai ngồi, chưa ai
+         *     có chip: chủ phòng cấp chip bằng `grantChips` sau khi người chơi vào ghế. Phòng private chỉ
+         *     người có link mời (`invite_token`) mới thấy. Giới hạn 10 phòng/giờ mỗi người.
+         */
+        post: operations["createRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/join/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get?: never;
         put?: never;
         /**
-         * Tạo phòng (dự kiến B7)
-         * @description Người gọi thành chủ phòng. Phòng mới ở trạng thái `open`, chưa ai ngồi.
+         * Vào phòng bằng link mời
+         * @description Trang web mở link `FRONTEND_URL/rooms/join?token=...` rồi gọi API này. Người gọi thành thành
+         *     viên của phòng (thấy phòng private, vào ghế được). Chưa đăng nhập thì server tạo khách và đăng
+         *     nhập luôn, như khi mở bàn. Mã sai hoặc đã bị chủ phòng đổi: `room_not_found`.
          */
-        post: operations["createRoom"];
+        post: operations["joinRoom"];
         delete?: never;
         options?: never;
         head?: never;
@@ -31,10 +61,113 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Xem cấu hình phòng (dự kiến B7) */
+        /**
+         * Xem phòng
+         * @description Phòng private mà người gọi không có quyền xem thì trả `room_not_found` như phòng không tồn tại.
+         */
         get: operations["getRoom"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Chủ phòng đổi cấu hình
+         * @description Chỉ chủ phòng (`forbidden` với người khác). Đang có ván thì ván đó giữ cấu hình cũ: thay đổi
+         *     nằm trong `pending` và có hiệu lực từ ván sau; cả bàn nhận `room.updated` lúc đó. Không có ván
+         *     thì có hiệu lực ngay. `small_blind` phải nhỏ hơn `big_blind` (tính cả giá trị đang có).
+         */
+        patch: operations["updateRoom"];
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/chips/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chủ phòng cấp hoặc điều chỉnh chip
+         * @description Chỉ chủ phòng. Ghi một bút toán `grant` vào sổ chip của phòng; `amount` âm là trừ bớt (không
+         *     được làm số dư âm: `negative_balance`). Người nhận phải đang ngồi ghế (`not_seated`) và không ở
+         *     trong ván đang chạy (`player_in_hand`). Cả bàn nhận `seat.updated` với `stack` mới.
+         */
+        post: operations["grantChips"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/kick/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chủ phòng mời một người ra khỏi phòng
+         * @description Chỉ chủ phòng, không kick được chính mình. Người đó rời ghế (chip vẫn nằm trong sổ của phòng),
+         *     mất quyền xem phòng private, mọi kết nối WebSocket của họ bị đóng (mã 4403), và không vào lại
+         *     được (`kicked`). Đang trong ván thì từ chối `player_in_hand`: đợi ván xong.
+         */
+        post: operations["kickPlayer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/close/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chủ phòng đóng phòng
+         * @description Chỉ chủ phòng. Không có ván thì đóng ngay (200). Đang có ván thì đóng khi ván xong (202,
+         *     `closing: true`). Phòng đóng: không chia ván mới, không vào ghế được, biến khỏi lobby; sổ chip
+         *     và lịch sử giữ nguyên. Cả bàn nhận `room.updated` với `status: "closed"`.
+         */
+        post: operations["closeRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/invite/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chủ phòng đổi link mời
+         * @description Tạo `invite_token` mới; link cũ hết hiệu lực ngay (người đã vào phòng vẫn giữ quyền).
+         */
+        post: operations["rotateInvite"];
         delete?: never;
         options?: never;
         head?: never;
@@ -55,7 +188,10 @@ export interface paths {
         /**
          * Vào ghế (dự kiến B4)
          * @description Người gọi ngồi vào một ghế trống. Được dealt từ ván kế tiếp nếu có chip trong phòng.
-         *     Cả bàn nhận `seat.updated` qua WebSocket.
+         *     Cả bàn nhận `seat.updated` qua WebSocket. Phòng private cần quyền xem (`room_not_found`);
+         *     người đã bị kick nhận `kicked`; phòng đã đóng nhận `room_closed`; phòng tạm dừng nhận
+         *     `room_suspended`. Chưa đăng nhập thì server tạo khách và đăng nhập luôn (tối đa 20 khách/giờ
+         *     mỗi IP, quá thì `rate_limited`); điều này đúng cho mọi API của bàn và cho WebSocket.
          */
         post: operations["takeSeat"];
         delete?: never;
@@ -367,6 +503,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rooms/{room_id}/chat/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 50 dòng chat gần nhất
+         * @description Cũ trước, mới sau. Dòng mới tới qua WebSocket `chat.message`. Cần quyền xem phòng như `getRoom` (`room_not_found` nếu không, `kicked` nếu đã bị kick).
+         */
+        get: operations["getChatHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/hands/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Lịch sử ván của phòng
+         * @description 100 ván đã xong gần nhất, mới trước. Ván đang chơi không có ở đây. Ván bị người quản trị huỷ
+         *     (`void_hand`) có `voided: true` và không ai có lời/lỗ. Cần quyền xem phòng như `getRoom` (`room_not_found` nếu không, `kicked` nếu đã bị kick).
+         */
+        get: operations["listHands"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/summary/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Bảng tổng kết lời/lỗ
+         * @description Mỗi người từng có chip trong phòng: đã được cấp bao nhiêu, thắng/thua bao nhiêu ở các ván,
+         *     thưởng 7-2 nhận/trả, số dư hiện tại và lời/lỗ (`net` = số dư − đã cấp). Tính từ sổ chip;
+         *     tổng `net` của cả phòng luôn bằng 0. Cần quyền xem phòng như `getRoom` (`room_not_found` nếu không, `kicked` nếu đã bị kick).
+         */
+        get: operations["getRoomSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hands/{hand_id}/replay/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hand_id: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * Xem lại một ván từng bước
+         * @description Dựng lại ván từ cấu hình và các lệnh đã lưu. Mỗi bước là `HandView` **theo góc nhìn người
+         *     gọi tại thời điểm đó**: chỉ thấy bài của chính mình (nếu đã ngồi ván đó) và bài đã lật tới
+         *     bước đó; bài úp của người khác luôn là `"??"`. Chỉ ván đã xong (`hand_not_found` cho ván đang
+         *     chơi hoặc không có quyền xem); ván đã huỷ: `hand_voided`. `legal_actions` luôn `null`.
+         */
+        get: operations["getHandReplay"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -385,6 +615,59 @@ export interface components {
              * @default 0
              */
             seven_deuce_bonus?: number;
+            /**
+             * @description Phòng private không hiện ở lobby; chỉ chủ phòng và người có link mời thấy.
+             * @default false
+             */
+            is_private?: boolean;
+        };
+        Lobby: {
+            rooms: components["schemas"]["LobbyRoom"][];
+        };
+        LobbyRoom: {
+            room: components["schemas"]["RoomInfo"];
+            is_private: boolean;
+            owner_name: string | null;
+            /** @description Số ghế đang có người. */
+            seated: number;
+        };
+        RoomDetail: {
+            room: components["schemas"]["RoomInfo"];
+            is_private: boolean;
+            /** @description Cùng dạng `player_id` ở WebSocket. */
+            owner_id: string | null;
+            owner_name: string | null;
+            /** @description Người gọi có phải chủ phòng không. */
+            is_owner: boolean;
+            /** @description Chỉ chủ phòng thấy; người khác nhận `null`. Link mời là `FRONTEND_URL/rooms/join?token=<invite_token>`. */
+            invite_token: string | null;
+            /** @description Cấu hình chủ phòng đã đổi nhưng chờ ván sau; `null` nếu không có. */
+            pending: components["schemas"]["UpdateRoomRequest"] | null;
+            /** @description Chủ phòng đã đóng phòng, chờ ván đang chạy xong. */
+            closing: boolean;
+        };
+        UpdateRoomRequest: {
+            name?: string;
+            small_blind?: number;
+            big_blind?: number;
+            think_time_seconds?: number;
+            seven_deuce_bonus?: number;
+        };
+        JoinRoomRequest: {
+            invite_token: string;
+        };
+        GrantChipsRequest: {
+            player_id: components["schemas"]["PlayerId"];
+            /** @description Dương là cấp thêm, âm là trừ bớt. */
+            amount: number;
+        };
+        GrantChipsResult: {
+            player_id: components["schemas"]["PlayerId"];
+            amount: number;
+            balance: components["schemas"]["Chips"];
+        };
+        PlayerRequest: {
+            player_id: components["schemas"]["PlayerId"];
         };
         TakeSeatRequest: {
             seat: components["schemas"]["SeatNumber"];
@@ -477,12 +760,70 @@ export interface components {
          * @enum {string}
          */
         GoogleError: "google_disabled" | "google_failed" | "email_taken" | "email_not_verified" | "social_account_taken" | "not_guest" | "account_inactive";
+        ChatHistory: {
+            messages: components["schemas"]["ChatMessage"][];
+        };
+        HandList: {
+            hands: components["schemas"]["HandSummary"][];
+        };
+        HandSummary: {
+            hand_id: number;
+            hand_no: number;
+            completed_at: components["schemas"]["ServerTime"];
+            voided: boolean;
+            players: {
+                player_id: components["schemas"]["PlayerId"];
+                display_name: string;
+                /** @description `null` với người không được chia bài mà vẫn có bút toán (đang nghỉ nhưng phải trả thưởng 7-2). */
+                seat: components["schemas"]["SeatNumber"] | null;
+                /** @description Lời (+) / lỗ (−) của ván, gồm cả thưởng 7-2. Tổng cả ván bằng 0. */
+                net: number;
+            }[];
+        };
+        HandReplay: {
+            hand_id: number;
+            hand_no: number;
+            room_id: components["schemas"]["RoomId"];
+            completed_at: components["schemas"]["ServerTime"];
+            /** @description Bước đầu là lúc vừa chia bài (`action` null); mỗi bước sau là một hành động đã áp. */
+            steps: {
+                action: components["schemas"]["AppliedAction"] | null;
+                hand: components["schemas"]["HandView"];
+            }[];
+            /**
+             * @description Mọi người có bút toán trong ván này, kể cả người đang nghỉ (sit-out) mà phải trả thưởng
+             *     7-2. Tổng `hand_net + seven_deuce_net` của cả ván luôn bằng 0.
+             */
+            results: {
+                player_id: components["schemas"]["PlayerId"];
+                display_name: string;
+                hand_net: number;
+                seven_deuce_net: number;
+            }[];
+            /** @description Người ăn thưởng luật 7-2 ở ván này (#27), `null` nếu không có. */
+            seven_deuce_winner: components["schemas"]["PlayerId"] | null;
+        };
+        RoomSummary: {
+            players: {
+                player_id: components["schemas"]["PlayerId"];
+                display_name: string;
+                /** @description Tổng chip chủ phòng đã cấp (trừ đi phần đã trừ bớt). */
+                granted: number;
+                /** @description Thắng (+) / thua (−) ở các ván. */
+                hands_net: number;
+                seven_deuce_net: number;
+                balance: components["schemas"]["Chips"];
+                /** @description Lời/lỗ = balance − granted = hands_net + seven_deuce_net. */
+                net: number;
+                hands_played: number;
+            }[];
+        };
         ApiError: {
             /**
              * @description Mã ổn định, client được phép `switch` theo mã.
              * @enum {string}
              */
-            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed";
+            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked" | "hand_not_found" | "hand_voided" | "room_suspended";
             /** @description Để đọc log, không hiện cho người chơi. */
             message: string;
             /** @description Chỉ có khi `validation_error`, lỗi theo từng trường của body. */
@@ -506,13 +847,13 @@ export interface components {
             think_time_seconds: number;
             seven_deuce_bonus: components["schemas"]["Chips"];
         };
-        /** SeatNumber */
-        SeatNumber: number;
         /**
          * PlayerId
          * @description String form of the user's id (str(User.pk)), the id the engine uses.
          */
         PlayerId: string;
+        /** SeatNumber */
+        SeatNumber: number;
         /**
          * SeatOccupant
          * @description Who sits in a seat. stack is the room balance from the ledger: during a hand it is the balance before that hand; the live stack is in HandView.
@@ -623,9 +964,44 @@ export interface components {
             hand: components["schemas"]["HandView"] | null;
             turn: components["schemas"]["Turn"] | null;
         };
+        /**
+         * ChatText
+         * @description 1 to 300 characters; not blank.
+         */
+        ChatText: string;
+        /**
+         * ChatMessage
+         * @description One chat line in a room (B8). Emoji are ordinary characters in text.
+         */
+        ChatMessage: {
+            message_id: number;
+            player_id: components["schemas"]["PlayerId"];
+            display_name: string;
+            text: components["schemas"]["ChatText"];
+            sent_at: components["schemas"]["ServerTime"];
+        };
+        /**
+         * AppliedAction
+         * @description One applied action. Like command.act: fold, check and call have no amount; raise has the total raised to. timeout is true when the server acted because the clock ran out.
+         */
+        AppliedAction: {
+            player_id: components["schemas"]["PlayerId"];
+            seat: components["schemas"]["SeatNumber"];
+            /** @enum {string} */
+            kind: "fold" | "check" | "call";
+            amount: null;
+            timeout: boolean;
+        } | {
+            player_id: components["schemas"]["PlayerId"];
+            seat: components["schemas"]["SeatNumber"];
+            /** @constant */
+            kind: "raise";
+            amount: number;
+            timeout: boolean;
+        };
     };
     responses: {
-        /** @description Body sai (`validation_error`, `invalid_seat`, `invalid_credentials`, `invalid_token`) */
+        /** @description Body sai (`validation_error`, `invalid_seat`, `invalid_credentials`, `invalid_token`, `invalid_amount`) */
         BadRequest: {
             headers: {
                 [name: string]: unknown;
@@ -643,7 +1019,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Thiếu/sai CSRF token (`forbidden`), hoặc email chưa xác minh (`email_not_verified`) */
+        /** @description Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`) */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -652,7 +1028,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Không có phòng hoặc không được xem phòng này (`room_not_found`) */
+        /** @description Không có phòng hoặc không được xem phòng này (`room_not_found`); không có ván, ván chưa xong hoặc không được xem (`hand_not_found`) */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -661,7 +1037,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`) */
+        /** @description Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`, `room_suspended`) */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -689,6 +1065,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listRooms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Danh sách phòng */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lobby"];
+                };
+            };
+        };
+    };
     createRoom: {
         parameters: {
             query?: never;
@@ -705,7 +1101,8 @@ export interface operations {
                  *       "small_blind": 5,
                  *       "big_blind": 10,
                  *       "think_time_seconds": 20,
-                 *       "seven_deuce_bonus": 50
+                 *       "seven_deuce_bonus": 50,
+                 *       "is_private": true
                  *     }
                  */
                 "application/json": components["schemas"]["CreateRoomRequest"];
@@ -718,11 +1115,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RoomInfo"];
+                    "application/json": components["schemas"]["RoomDetail"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    joinRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinRoomRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã vào phòng */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             429: components["responses"]["RateLimited"];
         };
     };
@@ -737,16 +1164,178 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Cấu hình phòng */
+            /** @description Phòng */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RoomInfo"];
+                    "application/json": components["schemas"]["RoomDetail"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "small_blind": 10,
+                 *       "big_blind": 20
+                 *     }
+                 */
+                "application/json": components["schemas"]["UpdateRoomRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã nhận; xem `room` (đang áp dụng) và `pending` (chờ ván sau) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    grantChips: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "player_id": "7",
+                 *       "amount": 1000
+                 *     }
+                 */
+                "application/json": components["schemas"]["GrantChipsRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã ghi sổ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrantChipsResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    kickPlayer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayerRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã kick */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    closeRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã đóng */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomDetail"];
+                };
+            };
+            /** @description Sẽ đóng khi ván đang chạy xong */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomDetail"];
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    rotateInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Link mới */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomDetail"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -781,8 +1370,10 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
         };
     };
     leaveSeat: {
@@ -804,8 +1395,10 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getTableSnapshot: {
@@ -829,7 +1422,9 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getAuthConfig: {
@@ -1133,6 +1728,103 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    getChatHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Chat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatHistory"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listHands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Các ván */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandList"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRoomSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bảng tổng kết */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomSummary"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getHandReplay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hand_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Các bước */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandReplay"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
 }

@@ -121,10 +121,17 @@ INSTALLED_APPS += [
     "apps.accounts",
 ]
 MIDDLEWARE += ["allauth.account.middleware.AccountMiddleware"]
+CSRF_FAILURE_VIEW = "apps.accounts.views.csrf_failure"  # JSON ApiError under /api/
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
+
+# Behind an HTTPS reverse proxy (Caddy) that sets X-Forwarded-Proto: build https:// URLs (the
+# Google callback) and send cookies over HTTPS only. See docs/deploy.md.
+if env_bool("DJANGO_BEHIND_HTTPS_PROXY"):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
 
 # Reverse proxies (Caddy, ...) in front of Django; rate limits then read the client IP from
 # X-Forwarded-For. 0 = none, use the connection's address.

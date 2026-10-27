@@ -1,6 +1,6 @@
 # ADR-001: Mỗi bàn một table actor
 
-- **Trạng thái:** Đã cài ở B4a (27/10/2026, `apps/games/actor.py`), chờ chủ dự án duyệt. Độ bền ở B5. Chỗ lệch so với đề xuất: mục "Ghi chú khi cài (B4a)" cuối file.
+- **Trạng thái:** Đã cài ở B4a (27/10/2026, `apps/games/actor.py`), phần độ bền ở B5 (27/10/2026), chờ chủ dự án duyệt. Chỗ lệch so với đề xuất và quyết định B5: hai mục "Ghi chú khi cài" cuối file.
 - **Liên quan:** [docs/spec.md](../spec.md) mục 3, [giao thức WebSocket](../api/ws-protocol.md),
   `apps/games/models.py` (`Hand`, `HandCommand`), `apps/games/services.py`
   (`save_completed_hand`).
@@ -82,7 +82,9 @@ Khi process khởi động (hoặc actor của một phòng được tạo lại
    `HandEngine.result()`, thưởng 7-2 theo số dư sổ chip và các ghế đang ngồi như
    `TableSession._apply_seven_deuce_bonus`), để hai đường không bao giờ ra kết quả khác nhau.
 4. Ván còn dở: nạp tập `command_id` đã áp của ván đó để chống trùng tiếp.
-5. Đặt lại đồng hồ cho người đang tới lượt (B5 quyết định: cho lại đủ thời gian hay phần còn lại).
+5. Đặt lại đồng hồ cho người đang tới lượt: **phần thời gian còn lại**, tính từ lệnh cuối đã ghi
+   (hoặc từ lúc chia bài nếu chưa có lệnh), nhưng không ít hơn 10 giây (và không quá thời gian suy
+   nghĩ của phòng) để người chơi kịp vào lại (chốt ở B5).
 6. Client kết nối lại nhận `table.snapshot` như bình thường.
 
 Không cần lưu "ảnh chụp" trạng thái riêng: `Hand.config` + `HandCommand` là đủ. Ván xong thì đã có
@@ -102,8 +104,8 @@ Actor làm như sau:
    mới có `room.status = "suspended"`. Phòng khác không bị ảnh hưởng.
 4. Thử khôi phục bằng replay (mục 4). Replay thành công thì đóng mọi kết nối của phòng để client vào
    lại với snapshot mới. Replay hỏng cùng chỗ (lệnh "độc") thì phòng **giữ trạng thái tạm dừng**
-   cho tới khi người quản trị xử lý (huỷ ván và trả lại chip theo `Hand.config`, hoặc cách khác):
-   quy trình chốt ở B5. Không bao giờ tự xoá `HandCommand` để "chữa".
+   cho tới khi người quản trị xử lý: `manage.py void_hand <hand_id> --reason "..."` rồi khởi động
+   lại server (chốt ở B5, xem "Ghi chú khi cài (B5)"). Không bao giờ tự xoá `HandCommand` để "chữa".
 
 Lỗi **trước** khi ghi (DB không ghi được ở bước 2) thì chưa có gì thay đổi: trả `internal_error`,
 client gửi lại cùng `command_id` an toàn.
@@ -225,4 +227,42 @@ trùng theo `(hand, command_id)`, khôi phục mục 4 và fail-stop mục 5. Nh
 Còn để sau (B5 trở đi): ghi DB trước khi đổi bộ nhớ cho sit-out/sit-in/rời ghế; gỡ actor của phòng
 không còn ai khỏi `_actors`; `_applied` và `TableSession.history` lớn dần theo số ván; hàng đợi
 không giới hạn và chưa có rate limit lệnh; WebSocket không có cookie phiên tạo khách mới mỗi lần nối.
+
+## Ghi chú khi cài (B5)
+
+- **Đồng hồ sau khởi động lại** (mục 4.5): người tới lượt giữ phần thời gian còn lại, tính từ
+  `created_at` của `HandCommand` cuối (hoặc `Hand.created_at`), tối thiểu
+  `RECOVERY_GRACE_SECONDS` = 10 giây (không quá `think_time_seconds`). Lý do: không ai được thêm giờ
+  chỉ vì server sập, cũng không ai bị fold oan vì server sập lâu. `turn.deadline` gửi mốc tuyệt đối
+  như thường.
+- **Replay hỏng lúc khởi động** (mục 5.4): actor vẫn được dựng, ở trạng thái tạm dừng, không có ván
+  trong bộ nhớ; kết nối mới nhận snapshot `room.status = "suspended"`, lệnh nhận `room_suspended`,
+  không chia ván mới. Lỗi ghi log kèm `room_id`, `hand_id`.
+- **Huỷ ván hỏng:** `manage.py void_hand <hand_id> --reason "..."` đánh dấu ván xong với
+  `Hand.result = {"voided": true, "reason": ...}`. Chip chỉ ghi sổ khi ván xong, nên ván dở không có
+  bút toán nào: huỷ ván là mọi người về đúng số dư trước ván. `HandCommand` giữ nguyên để điều tra.
+  Server đang chạy vẫn giữ phòng tạm dừng trong bộ nhớ: **khởi động lại server** để phòng dựng lại
+  từ DB. Màn lịch sử (B8) phải bỏ qua hoặc ghi rõ ván đã huỷ.
+- **Heartbeat:** dùng ping/pong của chính WebSocket do Daphne gửi (mặc định: kết nối im 20 giây
+  thì ping, 30 giây không có pong thì đóng). Trình duyệt tự trả pong, client không phải làm gì.
+  Đóng kết nối thì actor phát `seat.updated` với `connected: false` như B4a. Không thêm message
+  ping trong giao thức.
+- **Chống trùng sit-out/sit-in vẫn chỉ trong bộ nhớ** (ws-protocol mục 5): sau khởi động lại, gửi
+  lại nhận `already_sitting_out` / `not_sitting_out`, client coi là đã đúng trạng thái. Lưu bền thì
+  phải thêm bảng chỉ để đổi một mã lỗi thành một ack, không đáng.
+- **Một process ASGI** và cấu hình sau reverse proxy: [docs/deploy.md](../deploy.md).
+
+## Ghi chú khi cài (B7–B8)
+
+- **Thao tác chủ phòng đi qua hàng đợi** (`_Call`): cấp chip, đổi cấu hình, kick, đóng phòng. Nhờ
+  vậy chúng xếp thứ tự cùng ván đang chạy: cấu hình đổi giữa ván để dành (`Room.pending_settings`)
+  và áp ngay sau `hand.completed`; đóng giữa ván (`Room.closing`) cũng chờ ván xong. Cả hai lưu
+  trong DB nên không mất khi khởi động lại. Phòng tạm dừng từ chối các thao tác này.
+- **Người bị kick:** actor đọc `RoomBan` từ DB mỗi lần kết nối, vào ghế, chat. `_kick` ghi ban trước
+  mọi thứ xếp hàng sau nó, nên lệnh ngồi ghế hay kết nối chen ngay sau vẫn bị chặn; xoá ban trong
+  admin có hiệu lực ngay. Không ai kick được chủ phòng hay staff. Phòng tạm dừng vẫn kick được người
+  không ngồi ghế.
+- **Thông báo** (`chat.message`, `audience.updated`) do actor gửi nhưng không tăng `version`.
+- **Mọi lỗi khi lưu ván xong** (không chỉ `HandPersistenceError`) đều fail-stop: sổ chip trong bộ
+  nhớ đã đi trước DB. Khởi động lại thì khôi phục lưu lại ván; lưu vẫn hỏng thì phòng mở tạm dừng.
 

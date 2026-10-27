@@ -34,6 +34,14 @@ class Room(models.Model):
     # Fixed chip bonus every other seated player (sit-out included) owes a showdown winner
     # holding a 7 and a 2 (any suits). 0 means the room has no seven-deuce bonus.
     seven_deuce_bonus = models.PositiveIntegerField(default=0)
+    # Private rooms are hidden from the lobby; only the owner and members (who opened the invite
+    # link) see them. The token is in the invite link; rotating it kills old links.
+    is_private = models.BooleanField(default=False)
+    invite_token = models.CharField(max_length=43, unique=True, null=True, blank=True)
+    # Owner's changes made during a hand, applied when it ends (B7). Stored so a restart in
+    # the middle of that hand does not forget them.
+    pending_settings = models.JSONField(default=dict, blank=True)
+    closing = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -73,6 +81,30 @@ class RoomSeat(models.Model):
         if self.seat > self.room.max_seats:
             raise ValidationError(f"Seat {self.seat} is beyond this room's {self.room.max_seats}.")
         super().save(*args, **kwargs)
+
+
+class RoomMember(models.Model):
+    """Someone allowed into a private room: joined through its invite link (or the owner)."""
+
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="members")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="room_memberships")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["room", "user"], name="unique_member_per_room")
+        ]
+
+
+class RoomBan(models.Model):
+    """Someone the owner kicked: they cannot see (if private), join or sit in the room again."""
+
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="bans")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="room_bans")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["room", "user"], name="unique_ban_per_room")]
 
 
 class LedgerKind(models.TextChoices):
@@ -163,7 +195,8 @@ class Hand(models.Model):
     hand_no = models.PositiveIntegerField()
     button_seat = models.PositiveSmallIntegerField()
     config = models.JSONField()
-    # ``HandResult`` as computed when the hand finished, kept to check replays against.
+    # ``HandResult`` as computed when the hand finished, kept to check replays against; or
+    # ``{"voided": true, "reason": ...}`` for an unfinished hand voided by ``void_hand`` (B5).
     result = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -219,3 +252,40 @@ class HandCommand(AppendOnlyModel):
             ),
             models.UniqueConstraint(fields=["hand", "sequence"], name="unique_sequence_per_hand"),
         ]
+
+
+class ChatMessage(models.Model):
+    """One chat line in a room (B8)."""
+
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="chat_messages")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="chat_messages")
+    text = models.CharField(max_length=300)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["room_id", "id"]
+
+
+class OwnerAction(AppendOnlyModel):
+    """Log of every owner power used in a room, by its owner or by staff (B8).
+
+    Staff may act as the owner of any room through the same API, so this is also the admin's
+    audit log. Append-only like the ledger, so nobody can tidy it up afterwards.
+    """
+
+    class Kind(models.TextChoices):
+        GRANT = "grant", "Grant chips"
+        SETTINGS = "settings", "Change settings"
+        KICK = "kick", "Kick"
+        CLOSE = "close", "Close room"
+        INVITE = "invite", "Rotate invite link"
+
+    room = models.ForeignKey(Room, on_delete=models.PROTECT, related_name="owner_actions")
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name="owner_actions")
+    by_staff = models.BooleanField(help_text="Done by staff in a room they do not own.")
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    details = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-id"]

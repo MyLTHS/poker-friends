@@ -18,6 +18,16 @@ const TEXT: Record<string, string> = {
   not_authenticated: "Bạn chưa đăng nhập.",
   forbidden: "Phiên đã cũ. Tải lại trang rồi thử lại.",
   method_not_allowed: "Trang web gọi sai API. Báo lại cho người làm web nhé.",
+  room_not_found: "Không có phòng này, hoặc đây là phòng riêng mà bạn chưa có link mời.",
+  room_closed: "Phòng đã đóng.",
+  kicked: "Chủ phòng đã mời bạn ra khỏi phòng này.",
+  player_in_hand: "Người này đang trong ván. Đợi ván xong rồi làm lại.",
+  not_seated: "Người này không ngồi ở bàn.",
+  negative_balance: "Không trừ được nhiều hơn số chip người đó đang có.",
+  invalid_amount: "Số chip phải khác 0.",
+  seat_taken: "Ghế này có người rồi.",
+  already_seated: "Bạn đang ngồi một ghế khác rồi.",
+  invalid_seat: "Ghế không hợp lệ.",
   network_error: "Không nối được tới server. Kiểm tra Django đang chạy rồi thử lại.",
 };
 

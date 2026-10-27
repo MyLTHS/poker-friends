@@ -11,8 +11,8 @@ No-Limit Texas Hold'em chip ảo cho nhóm bạn. Backend Django + PokerKit.
 Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đoán, bài tập) ở [docs/roadmap.md](docs/roadmap.md).
 
 **Đang ở:** A và B1 đã được chủ dự án duyệt; B2 và B3 đã gộp vào `main`, chờ duyệt. B4a và B6
-xong code, chờ duyệt. Đang làm **B5 (phần code)**, rồi B7, B8 và ba bản thiết kế cho C1; B4b (nối
-trang React với backend thật, Playwright) làm sau.
+xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản thiết kế cho C1; B4b
+(nối trang React với backend thật, Playwright) làm sau.
 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
@@ -21,9 +21,10 @@ trang React với backend thật, Playwright) làm sau.
 | B2 | Dữ liệu | ✅ Xong code, chờ duyệt |
 | B3 | Hợp đồng API | ✅ Xong code, chờ duyệt |
 | B4 | Bàn chơi realtime | 🟡 B4a (backend) xong code, chờ duyệt; B4b (nối React, Playwright) chưa bắt đầu |
-| B5 | Độ bền + staging | 🟡 Đang làm phần code; staging chờ VPS |
+| B5 | Độ bền + staging | 🟡 Phần code xong, chờ duyệt; staging chờ VPS |
 | B6 | Tài khoản | ✅ Xong code, chờ duyệt |
-| B7–B8 | Phòng, xã hội | ⬜ Chưa bắt đầu |
+| B7 | Phòng và quyền | ✅ Xong code, chờ duyệt |
+| B8 | Xã hội và quản trị | ✅ Xong code, chờ duyệt |
 | C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, một Claude riêng chỉ đọc review) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
@@ -96,8 +97,10 @@ trang React với backend thật, Playwright) làm sau.
 
 **B5. Độ bền + staging**
 
-- [ ] Đồng hồ suy nghĩ, hết giờ tự check/fold
-- [ ] Heartbeat, disconnect, reconnect bằng snapshot, khôi phục ván dở khi restart
+- [x] Đồng hồ suy nghĩ, hết giờ tự check/fold (B4a); khôi phục giữa ván giữ phần thời gian còn lại
+- [x] Heartbeat (ping WebSocket của Daphne), disconnect, reconnect bằng snapshot, khôi phục ván dở
+  khi restart (B4a); ván không dựng lại được thì phòng mở ở trạng thái tạm dừng, huỷ bằng
+  `manage.py void_hand` ([ADR-001](docs/adr/ADR-001-table-actor.md), [deploy](docs/deploy.md))
 - [ ] Staging trên VPS (Caddy HTTPS), diễn tập backup → khôi phục
 - [ ] CD staging: gộp vào `main` + CI xanh thì tự build, migrate, deploy lên staging
 
@@ -114,16 +117,31 @@ trang React với backend thật, Playwright) làm sau.
 - [ ] Lym tạo key Google + SMTP thật và thử lại
 - [ ] Duyệt với chủ dự án
 
-**B7. Phòng và quyền**
+**B7. Phòng và quyền** — `apps/games/rooms.py`, tag `rooms` trong [openapi.yaml](docs/api/openapi.yaml)
 
-- [ ] Phòng public/private, lobby, link mời
-- [ ] Quyền chủ phòng: cấp chip, đổi blind, kick, đóng phòng; rate limit
+- [x] Phòng public/private, lobby, link mời có token (đổi được, link cũ hết hiệu lực); phòng
+  private chỉ chủ phòng, thành viên vào bằng link và người đang ngồi thấy (REST và WebSocket)
+- [x] Quyền chủ phòng qua hàng đợi của actor: cấp/trừ chip (không khi người đó đang trong ván, không
+  âm), đổi blind/thời gian/thưởng 7-2 (giữa ván thì chờ ván sau, phát `room.updated`), kick (rời
+  ghế, đóng kết nối, không vào lại được), đóng phòng (giữa ván thì đóng khi ván xong)
+- [x] Rate limit tạo phòng (10/giờ mỗi người) và lệnh WebSocket (20/10 giây mỗi người chơi)
+- [x] Trang thử `web/` → `/rooms`: lobby, tạo phòng, link mời (`/rooms/join?token=`), bảng chủ phòng
+  (cấp/trừ chip, kick, đổi cấu hình, đổi link, đóng phòng); ghế cập nhật qua REST mỗi 3 giây
+- [ ] Duyệt với chủ dự án
 
 **B8. Xã hội và quản trị**
 
-- [ ] Chat + emoji, spectator
-- [ ] Lịch sử + replay, bảng lời/lỗ
-- [ ] Django Admin + nhật ký thao tác admin
+- [x] Chat + emoji (`chat.send` → `chat.message`, 5 dòng/10 giây, lịch sử 50 dòng), danh sách người
+  xem (`audience.updated`); hai loại này là "thông báo", không tăng `version`
+- [x] Lịch sử ván + replay từng bước theo góc nhìn người xem (test: không bao giờ lộ bài úp của người
+  khác ở bất kỳ bước nào), bảng lời/lỗ từ sổ chip (`apps/games/history.py`)
+- [x] Admin: staff có quyền chủ phòng ở mọi phòng (qua đúng API của chủ phòng); mọi thao tác chủ
+  phòng/admin ghi vào `OwnerAction` (chỉ ghi thêm, trigger PostgreSQL); Django Admin chỉ xem phần
+  do actor nắm, xoá được chat, bỏ kick được
+- [x] Trang thử `web/`: chat trực tiếp + người xem ở `/rooms/<id>`, lịch sử + bảng lời/lỗ ở
+  `/rooms/<id>/history`, xem lại từng bước ở `/hands/<id>` (thử tay: 2 người chơi qua WebSocket, xem
+  bằng trình duyệt)
+- [ ] Duyệt với chủ dự án
 
 ### C. Thiết kế + frontend
 
