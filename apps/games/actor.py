@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from channels.db import database_sync_to_async
+from channels.exceptions import ChannelFull
 from channels.layers import get_channel_layer
 from django.db import IntegrityError
 from django.utils import timezone
@@ -101,6 +102,17 @@ class _Command:
 class _Timeout:
     hand_pk: int  # ignored if the room has moved past this hand
     player_id: str  # ignored if it is no longer this player's turn (ADR-001 mục "Hết giờ")
+    # Actions applied in the hand when the clock was set: the clock only acts on that turn,
+    # not on a later turn of the same player (heads-up: the big blind closes preflop by
+    # checking and is first to act on the flop).
+    turn: int
+
+
+# The clock's own commands are named "timeout:<hand>-<n>"; ":" is outside the CommandId
+# pattern clients must use (docs/api/schema/common.schema.json), so no client can take it.
+TIMEOUT_COMMAND_PREFIX = "timeout:"
+# The clock's command could not be recorded (nothing applied yet): try again this much later.
+TIMEOUT_RETRY_SECONDS = 1.0
 
 
 @dataclass
@@ -156,6 +168,7 @@ class TableActor:
         self.closing = False  # the owner closed the room during a hand
         self.banned: set[str] = set()  # kicked players (RoomBan), checked by the one writer
         self._audience: list[dict[str, str]] = []  # last spectator list sent (B8)
+        self._pausing = False  # between two hands, waiting for next_hand_delay
         self._task = asyncio.create_task(self._run())
 
     # ---- public: called from consumers/views, never touches the engine directly -----------
@@ -239,8 +252,9 @@ class TableActor:
         if self.hand is not None and self.session.current_hand.actor is not None:
             await self._schedule_turn(self.resume_deadline)
         elif self.hand is None and not self.suspended:
-            # Restarted between hands with owner changes still waiting: apply them now.
-            await self._between_hands()
+            # Restarted between hands with owner changes still waiting: apply them now. No
+            # hand just ended, so no pause before the next one.
+            await self._between_hands(pause=False)
         while True:
             item = await self._queue.get()
             try:
@@ -265,6 +279,7 @@ class TableActor:
             case _Timeout():
                 await self._on_timeout(item)
             case _StartHand():
+                self._pausing = False
                 await self._maybe_start_hand()
             case _TakeSeat():
                 await self._on_take_seat(item)
@@ -330,6 +345,8 @@ class TableActor:
         if self.suspended:
             await self._rejected(item.conn, command_id, "room_suspended")
             return
+        if key not in self._applied and kind == "command.act":
+            await self._remember_from_log(key, message["hand_id"], command_id)
         if key in self._applied:
             first_asked, result_version = self._applied[key]
             if first_asked != asked:
@@ -351,6 +368,18 @@ class TableActor:
             return
         self._applied[key] = (asked, result_version)
         await self._ack(item.conn, command_id, result_version)
+
+    async def _remember_from_log(self, key: tuple, hand_id: Any, command_id: str) -> None:
+        """A command for another hand than the running one may still be in the log: the last
+        command of a hand that recovery finished (the client resends it after reconnecting).
+        Then it is a duplicate (result_version null), not a stale_hand rejection.
+        """
+        if self.hand is not None and hand_id == self.hand.pk:
+            return  # the running hand's commands are already in _applied
+        stored = await HandCommand.objects.filter(hand_id=hand_id, command_id=command_id).afirst()
+        if stored is not None:
+            payload = {"kind": stored.kind, "amount": stored.amount}
+            self._applied[key] = (_asked(str(stored.player_id), "command.act", payload), None)
 
     def _dedup_key(self, kind: str, message: dict[str, Any]) -> tuple:
         if kind == "command.act":
@@ -429,18 +458,37 @@ class TableActor:
         except Exception as error:
             await self._fail_stop(f"act() failed on an already-recorded command: {error}")
             raise RoomSuspended from error
-        await self._after_action(action, timeout=timeout)
+        try:
+            await self._after_action(action, timeout=timeout)
+        except RoomSuspended:
+            raise
+        except Exception as error:
+            # Applied but not (fully) announced, or the next turn not scheduled: the clients
+            # and the clock no longer match the engine. Same rule as above: stop the room.
+            log.exception("room %s: error after applying a recorded command", self.room.pk)
+            await self._fail_stop(f"error after a recorded command: {error}")
+            raise RoomSuspended from error
 
     async def _on_timeout(self, item: _Timeout) -> None:
         if self.hand is None or self.hand.pk != item.hand_pk or self.suspended:
             return  # the hand (or room) moved on since this timer was scheduled
         engine = self.session.current_hand
-        if engine.actor != item.player_id:
+        if engine.actor != item.player_id or len(engine._actions) != item.turn:
             return  # a real action for this turn was processed first; the timer lost the race
         actor_player = item.player_id
         legal = engine.legal_actions(actor_player)
         action = Action(actor_player, ActionKind.CHECK if legal.can_check else ActionKind.FOLD)
-        await self._write_command(action, f"timeout-{self.hand.pk}-{len(engine._actions) + 1}")
+        command_id = f"{TIMEOUT_COMMAND_PREFIX}{self.hand.pk}-{item.turn + 1}"
+        try:
+            await self._write_command(action, command_id)
+        except Reject:
+            # Not recorded, so nothing happened yet: retry rather than leave the table waiting
+            # for a clock that already fired.
+            log.warning("room %s: could not record %s, retrying", self.room.pk, command_id)
+            asyncio.get_running_loop().call_later(
+                TIMEOUT_RETRY_SECONDS, lambda: self._queue.put_nowait(item)
+            )
+            return
         await self._apply_checked_action(action, timeout=True)
 
     # ---- starting hands ------------------------------------------------------------------
@@ -449,7 +497,7 @@ class TableActor:
         """Deal a new hand when none is running, the room is healthy and someone is watching
         (like the mock: no hands played to an empty room).
         """
-        if self.hand is not None or self.suspended or not self.connections:
+        if self.hand is not None or self.suspended or self._pausing or not self.connections:
             return
         if self.closed or self.closing:
             return
@@ -475,6 +523,9 @@ class TableActor:
         await self._schedule_turn()
 
     def _schedule_next_hand(self) -> None:
+        # Until _StartHand arrives, nothing else (a new connection, a seat) starts the next hand
+        # early: players get the whole pause to see the result.
+        self._pausing = True
         asyncio.get_running_loop().call_later(
             self.next_hand_delay, lambda: self._queue.put_nowait(_StartHand())
         )
@@ -510,10 +561,10 @@ class TableActor:
         if self._deadline_timer:
             self._deadline_timer.cancel()
         self._deadline = deadline
-        hand_pk, player_id = self.hand.pk, engine.actor
+        hand_pk, player_id, turn_no = self.hand.pk, engine.actor, len(engine._actions)
         self._deadline_timer = asyncio.get_running_loop().call_later(
             max(0.0, (deadline - now).total_seconds()),
-            lambda: self._queue.put_nowait(_Timeout(hand_pk, player_id)),
+            lambda: self._queue.put_nowait(_Timeout(hand_pk, player_id, turn_no)),
         )
         await self._broadcast("turn.deadline", lambda viewer: {"turn": turn})
 
@@ -553,7 +604,7 @@ class TableActor:
         )
         await self._between_hands()
 
-    async def _between_hands(self) -> None:
+    async def _between_hands(self, pause: bool = True) -> None:
         """The owner's changes made during the hand take effect, then the next hand (or none)."""
         try:
             if self.pending:
@@ -563,7 +614,7 @@ class TableActor:
         except Exception:
             # Not applied, still pending (and stored): log it, but never stall the table.
             log.exception("room %s: applying the owner's changes failed", self.room.pk)
-        if not self.closed and not self.closing:
+        if pause and not self.closed and not self.closing:
             self._schedule_next_hand()
 
     # ---- seats (REST) ----------------------------------------------------------------------
@@ -583,9 +634,12 @@ class TableActor:
                 raise Reject("seat_taken")
             if not 1 <= item.seat <= self.room.max_seats:
                 raise Reject("invalid_seat")
-            await RoomSeat.objects.aupdate_or_create(
-                room=self.room, user=item.user, defaults={"seat": item.seat}
-            )
+            try:
+                await RoomSeat.objects.aupdate_or_create(
+                    room=self.room, user=item.user, defaults={"seat": item.seat}
+                )
+            except IntegrityError as error:  # the database disagrees: someone has that seat
+                raise Reject("seat_taken") from error
             self.session.take_seat(player_id, item.seat)
             self.names[player_id] = item.user.username
             await self._seat_updated(item.seat)
@@ -735,7 +789,9 @@ class TableActor:
 
     def _hand_view(self, viewer: str) -> dict[str, Any] | None:
         engine = self.session.current_hand
-        if engine is None:
+        if engine is None or self.hand is None:
+            # Also while a new hand is dealt in memory but its Hand row is not saved yet
+            # (_maybe_start_hand awaits that save): to a snapshot it is still between hands.
             return None
         seated = viewer if viewer in engine.player_order else None
         return {"hand_id": self.hand.pk, "hand_no": self.session.hand_no, **engine.view_for(seated)}
@@ -773,7 +829,7 @@ class TableActor:
 
     def _turn_info(self) -> dict[str, Any] | None:
         engine = self.session.current_hand
-        if engine is None or engine.actor is None or self._deadline is None:
+        if engine is None or self.hand is None or engine.actor is None or self._deadline is None:
             return None
         return {
             "player_id": engine.actor,
@@ -843,8 +899,16 @@ class TableActor:
         self.version += 1
         hand_id = hand_id if hand_id is not None else (self.hand.pk if self.hand else None)
         for conn, viewer in list(self.connections.items()):
-            if conn != exclude:
+            if conn == exclude:
+                continue
+            try:
                 await self._send(conn, type_, payload_for(viewer), hand_id)
+            except ChannelFull:
+                # That client stopped reading: drop it (it resyncs from a snapshot when it
+                # reconnects) rather than fail the whole room for one slow socket.
+                log.warning("room %s: channel full, dropping connection %s", self.room.pk, conn)
+                self.connections.pop(conn, None)
+                self.channels.pop(conn, None)
 
     async def _reply(self, conn: str, type_: str, payload: dict[str, Any]) -> None:
         await self._send(conn, type_, payload, self.hand.pk if self.hand else None)
@@ -988,23 +1052,26 @@ async def _recover(room_id: int) -> TableActor:
 
     hand_row: Hand | None = None
     poisoned = False
-    if last_hand is not None and last_hand.completed_at is None:
-        stored = HandCommand.objects.filter(hand=last_hand).order_by("sequence")
+    # Every unfinished hand, oldest first (ADR-001 mục 4.1), not only the last one: a hand whose
+    # save failed must be settled before anything after it. A hand that cannot be rebuilt or
+    # stored opens the room suspended (ADR-001 mục 5.4, docs/deploy.md "Bàn tạm dừng").
+    unfinished = Hand.objects.filter(room=room, completed_at__isnull=True).order_by("hand_no")
+    async for hand in unfinished:
+        stored = HandCommand.objects.filter(hand=hand).order_by("sequence")
         commands = [c async for c in stored]
         actions = [
             {"player_id": str(c.player_id), "kind": c.kind, "amount": c.amount} for c in commands
         ]
         try:
-            engine = HandEngine.replay({"config": last_hand.config, "actions": actions})
+            engine = HandEngine.replay({"config": hand.config, "actions": actions})
         except Exception:
-            # A recorded command the engine refuses (ADR-001 mục 5.4). Open the room suspended
-            # so clients see why, and wait for an admin: void_hand, then restart the server.
-            log.exception("room %s: replay of hand %s failed", room.pk, last_hand.pk)
-            engine, poisoned = None, True
+            # A recorded command the engine refuses: wait for an admin (void_hand, restart).
+            log.exception("room %s: replay of hand %s failed", room.pk, hand.pk)
+            session.current_hand, poisoned = None, True
+            break
         session.current_hand = engine
-        if engine is None:
-            pass
-        elif engine.is_complete:
+        session.hand_no = hand.hand_no
+        if engine.is_complete:
             # The process died after the last command but before save_completed_hand(): finish
             # the hand through the normal path so the ledger ends up with exactly one entry
             # set, computed the same way a live completion would (ADR-001 mục 4.3).
@@ -1012,20 +1079,27 @@ async def _recover(room_id: int) -> TableActor:
             session.finish_hand()
             new_entries = session.ledger[before:]
             try:
-                await asave_completed_hand(room, last_hand.hand_no, engine, new_entries)
+                await asave_completed_hand(room, hand.hand_no, engine, new_entries)
             except Exception:
                 # Same reason it failed live, most likely: open suspended instead of failing
-                # every request to this room (docs/deploy.md: "Bàn tạm dừng").
-                log.exception("room %s: replay of hand %s failed to save", room.pk, last_hand.pk)
+                # every request to this room.
+                log.exception("room %s: replay of hand %s failed to save", room.pk, hand.pk)
                 session.current_hand, poisoned = None, True
-        else:
-            hand_row = last_hand
+                break
+        elif hand.pk == last_hand.pk:
+            hand_row = hand
             # Only what was left of the clock, counted from the last recorded command (or the
             # deal), plus a short grace if that already ran out while the server was down.
-            last_event = commands[-1].created_at if commands else last_hand.created_at
+            last_event = commands[-1].created_at if commands else hand.created_at
             think = timedelta(seconds=room.think_time_seconds)
             grace = timedelta(seconds=min(RECOVERY_GRACE_SECONDS, room.think_time_seconds))
             resume_deadline = max(last_event + think, timezone.now() + grace)
+        else:
+            # An older hand still running while a newer one exists cannot be resumed.
+            log.error("room %s: hand %s is unfinished but not the last", room.pk, hand.pk)
+            session.current_hand, poisoned = None, True
+            break
+    session.hand_no = last_hand.hand_no if last_hand else 0
 
     applied: dict[tuple, tuple] = {}
     if hand_row is not None:

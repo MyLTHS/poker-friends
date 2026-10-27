@@ -24,7 +24,8 @@ application = ProtocolTypeRouter(
     {
         "http": http_application,
         # Origin must be one of ALLOWED_HOSTS: another site cannot open a socket with our
-        # visitors' cookies. Browsers always send Origin; scripts must set it.
+        # visitors' cookies. Browsers always send Origin; scripts must set it. Opening the dev
+        # app from a LAN address (a phone) needs that address in DJANGO_ALLOWED_HOSTS.
         "websocket": AllowedHostsOriginValidator(
             AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
         ),
