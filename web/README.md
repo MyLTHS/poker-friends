@@ -1,3 +1,3 @@
 # web — Frontend (Next.js)
 
-Codex dựng ở đợt B3/C2 theo [docs/roadmap.md](../docs/roadmap.md). Hiện để trống.
+Claude dựng ở đợt C2 theo [docs/roadmap.md](../docs/roadmap.md), Codex review. Hiện để trống.

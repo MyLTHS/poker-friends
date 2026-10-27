@@ -1,7 +1,9 @@
 # Quy ước làm việc
 
-Dự án có ba thành viên: **chủ dự án** (duyệt, học), **Claude** (trưởng nhóm, backend),
-**Codex** (trang thử, thiết kế, frontend). Lộ trình: [docs/roadmap.md](docs/roadmap.md).
+Dự án có ba thành viên: **chủ dự án** (duyệt, học, gộp vào `main`), **Claude** (viết toàn bộ
+code: backend, mock server, trang thử, thiết kế, frontend), **Codex** (chỉ review, ở chế độ chỉ
+đọc). Phân vai này do chủ dự án chốt ngày 27/10/2026; trước đó Codex làm trang thử, thiết kế và
+frontend. Lộ trình: [docs/roadmap.md](docs/roadmap.md).
 
 ## Chạy dự án
 
@@ -24,8 +26,8 @@ uv sync
 |---|---|---|
 | `apps/` | Backend Django | Claude |
 | `apps/games/engine/` | Lõi luật chơi (vùng nhạy cảm) | Claude |
-| `web/` | Frontend Next.js (CI riêng thêm ở đợt C2) | Codex |
-| `docs/api/` | Hợp đồng API (sửa phải có cả hai đồng ý) | Chung |
+| `web/` | Frontend Next.js (CI riêng thêm ở đợt C2); type sinh từ `docs/api/` | Claude |
+| `docs/api/` | Hợp đồng API (sửa phải có Codex review và chủ dự án đồng ý) | Claude |
 | `docs/collab/` | Trao đổi và quyết định giữa Claude và Codex | Chung |
 | `docs/learning/` | Bài học của từng đợt | Chủ dự án |
 
@@ -36,7 +38,7 @@ uv sync
   `lym/a-sua-readme`.
 - Mỗi PR làm một việc, nên dưới khoảng 400 dòng thay đổi (không tính file sinh tự động,
   lockfile, scaffold ban đầu).
-- CI phải xanh. Bên còn lại review (Claude review Codex, Codex review Claude).
+- CI phải xanh. Codex review (chỉ đọc, nhận xét ghi ở `docs/collab/`), Claude sửa.
 - **Chỉ chủ dự án được gộp vào `main`.**
 
 ## Commit
@@ -55,8 +57,8 @@ uv sync
 
 ## Hợp đồng API
 
-Đổi hợp đồng: sửa tài liệu và schema trong `docs/api/` trước, Claude và Codex cùng đồng ý trên PR,
-rồi mới sửa code.
+Đổi hợp đồng: sửa tài liệu và schema trong `docs/api/` trước, Codex review, chủ dự án đồng ý trên
+PR, rồi mới sửa code.
 
 ## Ngôn ngữ
 

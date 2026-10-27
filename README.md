@@ -19,7 +19,7 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 | B1 | Engine luật chơi | ✅ Đã duyệt |
 | B2 | Dữ liệu | 🟡 Đang làm |
 | B3–B8 | Hợp đồng API, realtime, độ bền, tài khoản, phòng, xã hội | ⬜ Chưa bắt đầu |
-| C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Codex làm trên mock từ sau B3) |
+| C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, Codex review) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
 | F | Beta với bạn bè | ⬜ |
@@ -63,11 +63,11 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 - [ ] Ghi ledger trong transaction khi nối với table actor (B3–B4, chưa có actor nên chưa áp dụng)
 - [ ] Duyệt với chủ dự án
 
-**B3. Hợp đồng API** (Claude + Codex)
+**B3. Hợp đồng API** (Claude làm, Codex review)
 
 - [ ] `docs/api/ws-protocol.md`: envelope, `command_id`, ack/rejected, resync
 - [ ] JSON Schema + fixtures, OpenAPI, sinh type TypeScript, CI kiểm schema
-- [ ] Mock server (Codex)
+- [ ] Mock server + trang thử
 - [ ] ADR-001 Table actor
 
 **B4. Bàn chơi realtime**
@@ -140,6 +140,6 @@ apps/games/engine/   # lõi thuần Python, không phụ thuộc Django
   simulate.py        # bot ngẫu nhiên + kiểm tra bất biến
 apps/games/tests/    # golden tests, property tests
 config/              # Django settings (đọc biến môi trường)
-web/                 # frontend Next.js (Codex)
+web/                 # frontend Next.js
 docs/                # đặc tả, lộ trình, hợp đồng API, trao đổi, bài học
 ```

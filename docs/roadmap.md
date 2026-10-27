@@ -9,14 +9,15 @@ biện với Codex ([docs/collab/](collab/)). Chờ chủ dự án duyệt.
 
 - **Học theo lớp**: nền móng → backend → thiết kế + frontend → kiểm thử → vận hành → beta → nhìn lại.
   Chủ dự án học và duyệt theo đúng thứ tự này.
-- **Codex được làm trước trên dữ liệu giả**: sau khi chốt hợp đồng API (B3), Codex dựng thiết kế
-  và frontend song song trên mock, nên không phải ngồi chờ. Phần nào nối được với backend thật
+- **Phân vai (Lym chốt 27/10/2026)**: các phiên **Claude** viết **toàn bộ code** — backend, mock
+  server, trang thử, thiết kế, frontend. **Codex chỉ review**, ở chế độ chỉ đọc, không sửa file.
+  Lý do: chủ dự án chốt. (Trước 27/10, Codex làm trang thử, thiết kế, frontend và mock server.)
+- **Frontend làm trước trên dữ liệu giả**: sau khi chốt hợp đồng API (B3), Claude dựng thiết kế
+  và frontend song song trên mock, nên không phải chờ backend. Phần nào nối được với backend thật
   thì nối dần. Còn bài học và cổng duyệt của phần C vẫn diễn ra sau khi xong B.
-- **Mỗi đợt backend có trang thử** (Codex làm) để chủ dự án tự bấm và thấy hệ thống chạy thật.
-- **Claude**: trưởng nhóm, backend, review code Codex. **Codex**: trang thử, thiết kế, frontend,
-  review code Claude.
-- Nhánh riêng, PR vào `main`, CI xanh, bên kia review. Gộp vào `main`, deploy và đổi phạm vi thì
-  luôn hỏi chủ dự án.
+- **Mỗi đợt backend có trang thử** (Claude làm) để chủ dự án tự bấm và thấy hệ thống chạy thật.
+- Nhánh riêng, PR vào `main`, CI xanh, Codex review (chỉ đọc). Gộp vào `main`, deploy và đổi
+  phạm vi thì luôn hỏi chủ dự án.
 - Trao đổi Claude ↔ Codex ghi ở `docs/collab/`; bài học ghi ở `docs/learning/`.
 
 ## Nhịp học của mỗi đợt (gọn)
@@ -34,7 +35,7 @@ thử trên trang thử và nói "được" mới sang đợt sau.
 |---|---|---|---|
 | A | Nền móng codebase | 1 tuần | Tổ chức để nhiều người cùng làm |
 | B | Backend (B1–B8) | 8–10 tuần | Logic, dữ liệu, đồng thời, lỗi, bảo mật |
-| C | Thiết kế + frontend (C1–C5) | 5–6 tuần, Codex làm trước từ B3 | Đặt mình vào vị trí người dùng |
+| C | Thiết kế + frontend (C1–C5) | 5–6 tuần, Claude làm trước trên mock từ B3 | Đặt mình vào vị trí người dùng |
 | D | Kiểm thử tổng thể | 1–2 tuần | Nghĩ như kẻ phá |
 | E | Production và vận hành | 1 tuần | Giữ hệ thống sống |
 | F | Beta với bạn bè | 1–2 tuần | Lắng nghe người dùng, ưu tiên |
@@ -77,14 +78,14 @@ transaction; identity khách lưu DB ngay từ đầu.
 **Tự làm:** viết test chứng minh tổng ledger một phòng luôn bằng tổng chip đã cấp.
 **Trang thử:** Django Admin xem phòng, ghế, sổ chip.
 
-### B3. Hợp đồng API (1 tuần, Claude + Codex làm chung)
+### B3. Hợp đồng API (1 tuần, Claude làm, Codex review)
 
 **Việc:**
 - `docs/api/ws-protocol.md`: envelope (`protocol_version`, `room_id`, `hand_id`, `version`,
   `server_time`); lệnh có `command_id`; `command.ack` / `command.rejected` (mã lỗi ổn định);
   `table.snapshot`, `action.applied`, `turn.deadline`, `hand.completed`…; resync khi hụt version.
 - JSON Schema + fixtures; OpenAPI cho REST; sinh type TypeScript; CI kiểm schema.
-- **Mock server** do Codex dựng, phát sự kiện từ fixtures và được kiểm tra theo schema.
+- **Mock server** (Claude dựng), phát sự kiện từ fixtures và được kiểm tra theo schema.
 - **ADR-001 Table actor:** một process ASGI; mỗi phòng một asyncio task + hàng đợi lệnh; thứ tự
   **kiểm tra hợp lệ → ghi `HandCommand` → áp vào engine → phát sự kiện**; lệnh bị từ chối chỉ ghi
   log và trả `command.rejected`; khôi phục bằng `HandEngine.replay`.
@@ -92,7 +93,7 @@ transaction; identity khách lưu DB ngay từ đầu.
 **Dự đoán:** client bấm Call, mạng chập nên gửi lại lần nữa; server phải làm gì?
 **Tự làm:** viết thêm một message (ví dụ `player.sit_out`) vào schema + fixture, CI phải xanh.
 **Trang thử:** trang thô chạy một ván giả từ mock server.
-**Song song từ đây:** Codex bắt đầu C1 (thiết kế) rồi C2 (nền frontend) trên mock.
+**Song song từ đây:** Claude bắt đầu C1 (thiết kế) rồi C2 (nền frontend) trên mock; Codex review.
 
 ### B4. Bàn chơi realtime (2 tuần)
 
@@ -153,7 +154,7 @@ bảng tổng kết lời/lỗ; Django Admin + nhật ký thao tác admin.
 
 ## C. Thiết kế + frontend
 
-Codex làm trước trên mock từ sau B3; mỗi màn nối backend thật khi đợt B tương ứng xong; E2E tăng
+Claude làm trước trên mock từ sau B3 (Codex review); mỗi màn nối backend thật khi đợt B tương ứng xong; E2E tăng
 dần sau mỗi lát. Bài học và cổng duyệt của chủ dự án diễn ra theo thứ tự dưới đây sau khi xong B.
 
 ### C1. Thiết kế
@@ -161,7 +162,7 @@ dần sau mỗi lát. Bài học và cổng duyệt của chủ dự án diễn 
 **Việc:** user flow; wireframe; 2 phương án phong cách để chọn; design system (màu, chữ, lá bài,
 chip, nút); mockup Figma desktop + mobile dọc.
 **Dự đoán:** trên điện thoại, khi tới lượt mình trong 20 giây, người chơi cần thấy gì?
-**Tự làm:** vẽ tay (hoặc Figma) wireframe màn bàn chơi trên mobile, rồi so với bản của Codex.
+**Tự làm:** vẽ tay (hoặc Figma) wireframe màn bàn chơi trên mobile, rồi so với bản của Claude.
 
 ### C2. Nền frontend
 
@@ -231,10 +232,10 @@ chọn hướng tiếp (tournament, bạn bè, thống kê, app mobile).
 | Rủi ro | Cách giảm |
 |---|---|
 | Actor và lưu trữ sai khi process chết | ADR-001 ở B3; ghi lệnh trước khi phát; replay; test kill server ở B5 |
-| Học theo lớp nên phát hiện vấn đề giao diện muộn | Trang thử mỗi đợt B; Codex làm C trước trên mock từ B3 |
+| Học theo lớp nên phát hiện vấn đề giao diện muộn | Trang thử mỗi đợt B; Claude làm C trước trên mock từ B3 |
 | Nhịp học quá nặng thành viết tài liệu | Mỗi đợt chỉ 1 câu hỏi + 1 bài tập + 3–5 dòng bài học |
 | Hợp đồng API đổi làm vỡ frontend | Tài liệu trước code; type sinh tự động; contract test hai phía |
-| Hai AI sửa đè code nhau | Nhánh + worktree riêng; phân vùng `apps/` và `web/` |
+| Hai AI sửa đè code nhau | Chỉ Claude sửa code, Codex review chỉ đọc; mỗi phiên Claude một nhánh + worktree |
 | PokerKit có thêm hành vi bất ngờ | Mô phỏng chạy trong CI; mọi bất thường thành test hồi quy |
 | Dịch vụ ngoài làm chậm | VPS/tên miền trước B5; Google/email trước B6 |
 | Deploy tự động làm hỏng hệ thống | Chỉ deploy khi CI xanh; health check; production theo tag + bước duyệt; rollback một lệnh |
