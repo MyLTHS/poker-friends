@@ -86,5 +86,7 @@ Link trong email và cuối luồng Google đưa người dùng về `FRONTEND_U
 
 - Sau Caddy (HTTPS), Django cần biết request gốc là `https` (`SECURE_PROXY_SSL_HEADER`) để gửi
   Google đúng `https://.../callback/`.
-- Rate limit theo IP hiện đọc `REMOTE_ADDR`. Sau reverse proxy, mọi request có cùng IP của proxy:
-  cần đọc IP thật từ header của Caddy trước khi mở cho bạn bè dùng.
+- Rate limit theo IP: sau reverse proxy mọi request có cùng IP của proxy. Đặt `TRUSTED_PROXIES`
+  trong `.env` bằng đúng số proxy đứng trước Django (Caddy trỏ thẳng vào Django thì là `1`) để
+  Django đọc IP thật từ header `X-Forwarded-For`. Đặt sai thì hoặc mọi người bị tính chung một
+  IP, hoặc người dùng tự khai IP giả được.
