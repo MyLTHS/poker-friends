@@ -27,7 +27,7 @@ from .engine.table import LedgerEntry as EngineLedgerEntry
 from .engine.table import LedgerKind as EngineLedgerKind
 from .engine.table import TableError, TableSession
 from .models import Hand, HandCommand, LedgerEntry, Room, RoomSeat, User
-from .services import HandPersistenceError, save_completed_hand
+from .services import save_completed_hand
 
 # save_completed_hand() is synchronous (one transaction.atomic block); run it in a thread.
 asave_completed_hand = database_sync_to_async(save_completed_hand)
@@ -435,7 +435,11 @@ class TableActor:
         new_entries = self.session.ledger[before:]
         try:
             await asave_completed_hand(self.room, hand_no, engine, new_entries)
-        except HandPersistenceError as error:
+        except Exception as error:
+            # Not stored, whatever the reason (a conflict, the database down): the ledger in
+            # memory is now ahead of the database, so the room must stop here. A restart
+            # replays the hand and stores it (ADR-001 mục 4.3).
+            log.exception("room %s: saving hand %s failed", self.room.pk, hand_pk)
             await self._fail_stop(f"save_completed_hand failed: {error}", hand_id=hand_pk)
             raise RoomSuspended from error
 
@@ -722,13 +726,17 @@ async def _recover(room_id: int) -> TableActor:
     session._button_seat = last_hand.button_seat if last_hand else None
 
     hand_row: Hand | None = None
-    if last_hand is not None and last_hand.completed_at is None:
+    # Every unfinished hand, oldest first (ADR-001 mục 4.1), not only the last one: a hand whose
+    # save failed must be settled before anything after it.
+    unfinished = Hand.objects.filter(room=room, completed_at__isnull=True).order_by("hand_no")
+    async for hand in unfinished:
         actions = [
             {"player_id": str(c.player_id), "kind": c.kind, "amount": c.amount}
-            async for c in HandCommand.objects.filter(hand=last_hand).order_by("sequence")
+            async for c in HandCommand.objects.filter(hand=hand).order_by("sequence")
         ]
-        engine = HandEngine.replay({"config": last_hand.config, "actions": actions})
+        engine = HandEngine.replay({"config": hand.config, "actions": actions})
         session.current_hand = engine
+        session.hand_no = hand.hand_no
         if engine.is_complete:
             # The process died after the last command but before save_completed_hand(): finish
             # the hand through the normal path so the ledger ends up with exactly one entry
@@ -736,9 +744,13 @@ async def _recover(room_id: int) -> TableActor:
             before = len(session.ledger)
             session.finish_hand()
             new_entries = session.ledger[before:]
-            await asave_completed_hand(room, last_hand.hand_no, engine, new_entries)
+            await asave_completed_hand(room, hand.hand_no, engine, new_entries)
+        elif hand.pk == last_hand.pk:
+            hand_row = hand
         else:
-            hand_row = last_hand
+            # An older hand still running while a newer one exists cannot be resumed.
+            raise RuntimeError(f"room {room.pk}: hand {hand.pk} is unfinished but not the last")
+    session.hand_no = last_hand.hand_no if last_hand else 0
 
     applied: dict[tuple, tuple] = {}
     if hand_row is not None:
