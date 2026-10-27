@@ -1,4 +1,4 @@
-"""Network side of the mock server: WebSocket at /ws/rooms/<room_id>/, test page at /.
+"""Network side of the mock server: a WebSocket at /ws/rooms/<room_id>/ and nothing else.
 
 Everything runs on one asyncio event loop. ``MockTable`` methods are synchronous, so two
 messages are never handled at the same time (the same single-writer idea as the real table
@@ -13,18 +13,15 @@ import logging
 import time
 import uuid
 from http import HTTPStatus
-from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from websockets.asyncio.server import Server, ServerConnection, serve
-from websockets.datastructures import Headers
 from websockets.exceptions import ConnectionClosed
 from websockets.http11 import Request, Response
 
 from .table import MockTable, Outbound
 
 log = logging.getLogger("mockserver")
-PAGE = Path(__file__).with_name("static") / "table.html"
 TICK_SECONDS = 0.2
 
 
@@ -59,9 +56,6 @@ class MockServer:
 
     def _process_request(self, connection: ServerConnection, request: Request) -> Response | None:
         path = urlsplit(request.path).path
-        if path in ("/", "/table.html"):
-            headers = Headers([("Content-Type", "text/html; charset=utf-8")])
-            return Response(HTTPStatus.OK, "OK", headers, PAGE.read_bytes())
         if path.rstrip("/") != f"/ws/rooms/{self.table.room['room_id']}":
             return connection.respond(HTTPStatus.NOT_FOUND, "Not found\n")
         return None
@@ -95,8 +89,8 @@ class MockServer:
 async def run(table: MockTable, host: str, port: int) -> None:
     server = await MockServer(table).start(host, port)
     shown = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
-    print(f"Mock server chạy tại http://{shown}:{port}/  (Ctrl+C để dừng)")
-    print(f"WebSocket: ws://{shown}:{port}/ws/rooms/{table.room['room_id']}/?player=<1|2|3>")
+    url = f"ws://{shown}:{port}/ws/rooms/{table.room['room_id']}/?player=<1|2|3>"
+    print(f"Mock server WebSocket: {url}  (Ctrl+C để dừng)")
     await server.serve_forever()
 
 

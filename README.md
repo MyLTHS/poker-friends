@@ -67,7 +67,7 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 
 - [x] [`docs/api/ws-protocol.md`](docs/api/ws-protocol.md): envelope, `command_id`, ack/rejected, resync
 - [x] JSON Schema + fixtures, OpenAPI, sinh type TypeScript, CI kiểm schema
-- [x] Mock server + trang thử ([cách chạy](docs/api/mock-server.md))
+- [x] Mock server WebSocket ([cách chạy](docs/api/mock-server.md)); trang thử React làm ở đợt frontend
 - [x] [ADR-001 Table actor](docs/adr/ADR-001-table-actor.md)
 - [ ] Duyệt với chủ dự án
 
@@ -131,10 +131,12 @@ uv sync
 .venv/bin/python -m apps.games.engine.simulate --hands 5000 --players 9
 ```
 
-Trang thử bàn chơi trên mock server (không cần Docker hay DB):
+Mock server WebSocket (không cần Docker hay DB), nối bằng client WebSocket như hướng dẫn ở
+[docs/api/mock-server.md](docs/api/mock-server.md):
 
 ```bash
-uv run python -m mockserver    # rồi mở http://localhost:8765/
+uv run python -m mockserver
+uv run python -m websockets "ws://localhost:8765/ws/rooms/1/?player=1"   # terminal thứ hai
 ```
 
 ## Cấu trúc
@@ -147,7 +149,7 @@ apps/games/engine/   # lõi thuần Python, không phụ thuộc Django
   simulate.py        # bot ngẫu nhiên + kiểm tra bất biến
 apps/games/contract.py  # nạp JSON Schema trong docs/api/, kiểm message WebSocket
 apps/games/tests/    # golden tests, property tests, test hợp đồng API
-mockserver/          # mock server WebSocket + trang thử (static/table.html)
+mockserver/          # mock server WebSocket theo docs/api/
 config/              # Django settings (đọc biến môi trường)
 web/                 # frontend Next.js; src/api/ là type sinh từ docs/api/
 docs/                # đặc tả, lộ trình, hợp đồng API, trao đổi, bài học

@@ -1,4 +1,4 @@
-"""Run the mock server: uv run python -m mockserver  (then open http://localhost:8765/)."""
+"""Run the mock server: uv run python -m mockserver  (then connect a WebSocket client)."""
 
 import argparse
 import asyncio

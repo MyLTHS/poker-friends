@@ -1,6 +1,6 @@
 # Giao thức WebSocket bàn chơi (phiên bản 1)
 
-Viết ngày 27/10/2026, đợt B3. Đây là **hợp đồng** giữa server và mọi client (trang thử, web
+Viết ngày 27/10/2026, đợt B3. Đây là **hợp đồng** giữa server và mọi client (web
 Next.js, sau này app mobile). Đổi hợp đồng thì sửa tài liệu này và schema trước, theo
 [CONTRIBUTING.md](../../CONTRIBUTING.md#hợp-đồng-api).
 
@@ -14,7 +14,7 @@ Các file đi kèm:
 | Ví dụ đúng và ví dụ sai | [`fixtures/{server,client}/{valid,invalid}/`](fixtures/) |
 | REST (tạo phòng, vào ghế, lấy snapshot) | [`openapi.yaml`](openapi.yaml) |
 | Type TypeScript sinh từ schema | [`web/src/api/`](../../web/src/api/) |
-| Mock server + trang thử | [`mockserver/`](../../mockserver/), cách chạy ở [README mock](mock-server.md) |
+| Mock server | [`mockserver/`](../../mockserver/), cách chạy ở [README mock](mock-server.md) |
 | Kiểm schema bằng Python | [`apps/games/contract.py`](../../apps/games/contract.py) |
 
 ## 1. Ba nguyên tắc

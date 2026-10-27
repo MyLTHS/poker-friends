@@ -92,7 +92,9 @@ transaction; identity khách lưu DB ngay từ đầu.
 
 **Dự đoán:** client bấm Call, mạng chập nên gửi lại lần nữa; server phải làm gì?
 **Tự làm:** viết thêm một message (ví dụ `player.sit_out`) vào schema + fixture, CI phải xanh.
-**Trang thử:** trang thô chạy một ván giả từ mock server.
+**Trang thử:** mock server WebSocket, thử bằng client dòng lệnh. Trang thử có giao diện làm bằng
+React trong `web/` ở đợt frontend, sau khi chốt thiết kế (Lym quyết định 27/10/2026, bỏ trang
+HTML tĩnh).
 **Song song từ đây:** Claude bắt đầu C1 (thiết kế) rồi C2 (nền frontend) trên mock; Codex review.
 
 ### B4. Bàn chơi realtime (2 tuần)

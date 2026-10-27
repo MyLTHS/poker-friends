@@ -1,4 +1,4 @@
-"""The mock server over a real socket: test page over HTTP, the protocol over WebSocket."""
+"""The mock server over a real socket."""
 
 import asyncio
 import json
@@ -31,18 +31,16 @@ async def _receive_until(socket, type_):
             return received
 
 
-def test_serves_the_test_page():
+def test_only_the_room_websocket_is_served():
     async def scenario(port):
         reader, writer = await asyncio.open_connection("127.0.0.1", port)
         writer.write(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
         await writer.drain()
-        response = await reader.read(200_000)
+        response = await reader.read(10_000)
         writer.close()
         return response
 
-    response = asyncio.run(_with_server(scenario))
-    assert response.startswith(b"HTTP/1.1 200")
-    assert b"<html" in response
+    assert asyncio.run(_with_server(scenario)).startswith(b"HTTP/1.1 404")
 
 
 def test_plays_over_websocket_and_acks_a_retried_command_once():
