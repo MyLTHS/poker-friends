@@ -20,6 +20,12 @@ describe("errorText", () => {
     }
   });
 
+  it("explains the room errors (B7)", () => {
+    for (const code of ["kicked", "negative_balance", "room_closed", "player_in_hand", "not_seated", "room_not_found"] as const) {
+      expect(errorText({ code })).not.toBe("Có lỗi xảy ra, thử lại sau.");
+    }
+  });
+
   it("says when to retry after a rate limit", () => {
     expect(errorText({ code: "rate_limited" }, 90)).toContain("2 phút");
     expect(errorText({ code: "rate_limited" }, 30)).toContain("1 phút");

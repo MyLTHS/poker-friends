@@ -23,7 +23,7 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B7**, rồi B8 và b
 | B4 | Bàn chơi realtime | 🟡 B4a (backend) xong code, chờ duyệt; B4b (nối React, Playwright) chưa bắt đầu |
 | B5 | Độ bền + staging | 🟡 Phần code xong, chờ duyệt; staging chờ VPS |
 | B6 | Tài khoản | ✅ Xong code, chờ duyệt |
-| B7 | Phòng và quyền | 🟡 Backend xong, trang thử đang làm |
+| B7 | Phòng và quyền | ✅ Xong code, chờ duyệt |
 | B8 | Xã hội và quản trị | ⬜ Chưa bắt đầu |
 | C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, một Claude riêng chỉ đọc review) |
 | D | Kiểm thử tổng thể | ⬜ |
@@ -125,7 +125,8 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B7**, rồi B8 và b
   âm), đổi blind/thời gian/thưởng 7-2 (giữa ván thì chờ ván sau, phát `room.updated`), kick (rời
   ghế, đóng kết nối, không vào lại được), đóng phòng (giữa ván thì đóng khi ván xong)
 - [x] Rate limit tạo phòng (10/giờ mỗi người) và lệnh WebSocket (20/10 giây mỗi người chơi)
-- [ ] Trang thử: tạo phòng, gửi link mời, chủ phòng cấp chip và kick
+- [x] Trang thử `web/` → `/rooms`: lobby, tạo phòng, link mời (`/rooms/join?token=`), bảng chủ phòng
+  (cấp/trừ chip, kick, đổi cấu hình, đổi link, đóng phòng); ghế cập nhật qua REST mỗi 3 giây
 - [ ] Duyệt với chủ dự án
 
 **B8. Xã hội và quản trị**

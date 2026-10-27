@@ -24,21 +24,24 @@ export function csrfTokenFrom(cookies: () => string): string {
   return readCookie(cookies(), "csrftoken") ?? "";
 }
 
-export function createAuthApi(
+type Method = "GET" | "POST" | "PATCH" | "DELETE";
+
+/** One JSON request to the Django API, with the CSRF token on every non-GET. */
+export function makeRequest(
   fetchImpl: typeof fetch = (...args) => fetch(...args),
   cookies: () => string = () => document.cookie,
 ) {
-  async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<Result<T>> {
+  return async function request<T>(method: Method, url: string, body?: unknown): Promise<Result<T>> {
     let response: Response;
     try {
-      response = await fetchImpl(`/api/auth/${path}`, {
+      response = await fetchImpl(url, {
         method,
         credentials: "same-origin",
         headers: {
           Accept: "application/json",
-          ...(method === "POST" ? { "Content-Type": "application/json", "X-CSRFToken": csrfTokenFrom(cookies) } : {}),
+          ...(method !== "GET" ? { "Content-Type": "application/json", "X-CSRFToken": csrfTokenFrom(cookies) } : {}),
         },
-        body: method === "POST" && body !== undefined ? JSON.stringify(body) : undefined,
+        body: method !== "GET" && body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch {
       return { ok: false, error: { code: "network_error", message: "Request failed" } };
@@ -60,7 +63,16 @@ export function createAuthApi(
       error: data as ClientError,
       ...(response.status === 429 && retry > 0 ? { retryAfter: retry } : {}),
     };
-  }
+  };
+}
+
+export function createAuthApi(
+  fetchImpl: typeof fetch = (...args) => fetch(...args),
+  cookies: () => string = () => document.cookie,
+) {
+  const request = makeRequest(fetchImpl, cookies);
+  const call = <T>(method: "GET" | "POST", path: string, body?: unknown) =>
+    request<T>(method, `/api/auth/${path}`, body);
 
   return {
     config: () => call<AuthConfig>("GET", "config/"),
