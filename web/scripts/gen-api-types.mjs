@@ -48,7 +48,11 @@ async function protocolTypes() {
 }
 
 async function restTypes() {
-  const ast = await openapiTS(new URL(`file://${path.join(API, "openapi.yaml")}`));
+  const ast = await openapiTS(new URL(`file://${path.join(API, "openapi.yaml")}`), {
+    // A field with a default is optional in a request: the server fills it in. The generator's
+    // default would make it required, so a minimal body allowed by OpenAPI would not type-check.
+    defaultNonNullable: false,
+  });
   return HEADER("docs/api/openapi.yaml") + astToString(ast);
 }
 

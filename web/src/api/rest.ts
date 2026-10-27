@@ -117,17 +117,17 @@ export interface components {
         CreateRoomRequest: {
             name: string;
             /** @default 9 */
-            max_seats: number;
+            max_seats?: number;
             small_blind: number;
             /** @description Phải lớn hơn `small_blind`. */
             big_blind: number;
             /** @default 30 */
-            think_time_seconds: number;
+            think_time_seconds?: number;
             /**
              * @description Thưởng luật 7-2 (#27); 0 là tắt.
              * @default 0
              */
-            seven_deuce_bonus: number;
+            seven_deuce_bonus?: number;
         };
         TakeSeatRequest: {
             seat: components["schemas"]["SeatNumber"];
