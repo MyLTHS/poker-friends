@@ -163,7 +163,7 @@ class HandEngine:
         folded, or ``None``. A showdown win never counts, so there is at most one such player.
 
         Decided from the action log (not PokerKit's statuses), so a replay always agrees.
-        A walk (everyone folds to the big blind) counts too, pending a decision on rule #27.
+        A walk (everyone folds to the big blind) counts too (rule #27, decided 2026-10-27).
         """
         if not self.is_complete:
             return None

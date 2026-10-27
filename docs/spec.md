@@ -13,7 +13,7 @@ không tiền thật, không rake. Quy mô 10–20 người, 1 server.
 |---|---|---|
 | 1 | Tiền | Chip ảo |
 | 2 | Game | No-Limit Texas Hold'em cash game |
-| 3 | Số ghế | Tối đa 9, hỗ trợ heads-up |
+| 3 | Số ghế | Từ 2 đến 9 ghế mỗi phòng (chủ phòng chọn), hỗ trợ heads-up |
 | 4 | Loại bàn | Public + private |
 | 5 | Vào bàn | Lobby + link mời |
 | 6, 22 | Chip | Chip **theo từng phòng**: chủ phòng cấp/điều chỉnh, admin can thiệp được. Cuối phòng có bảng tổng kết lời/lỗ. Không có ví chung |
@@ -33,7 +33,7 @@ không tiền thật, không rake. Quy mô 10–20 người, 1 server.
 | 24 | TDD | Có |
 | 25 | API | Phục vụ web của dự án, thiết kế chuẩn để dùng lại cho app mobile |
 | 26 | Dự án | Django mới hoàn toàn |
-| 27 | Luật 7-2 | Chủ phòng cấu hình theo phòng (`Room.seven_deuce_bonus`, mặc định 0 = tắt). Chỉ thưởng khi người cầm đúng hạng **7 và 2** (bất kỳ chất) **ăn pot vì mọi người khác đã fold** (bluff thành công); thắng ở showdown thì **không** thưởng, nên mỗi ván có tối đa một người nhận. Khi đó server **tự lật 2 lá 7-2** của người thắng cho cả bàn (kể cả người xem) sau khi ván xong; bài của người đã fold vẫn úp. **Mọi người khác đang ngồi bàn** (kể cả sit-out) trả người thắng `min(bonus, chip còn lại sau khi chia pot)`, không bao giờ âm; người thắng nhận đúng tổng thực trả; ai còn 0 chip thì không trả. Trường hợp *walk* (mọi người fold tới big blind, BB cầm 7-2): **chưa chốt**, tạm tính là được thưởng (quyết định 27/10/2026, thay bản cũ "thắng tại showdown") |
+| 27 | Luật 7-2 | Chủ phòng cấu hình theo phòng (`Room.seven_deuce_bonus`, mặc định 0 = tắt). Chỉ thưởng khi người cầm đúng hạng **7 và 2** (bất kỳ chất) **ăn pot vì mọi người khác đã fold** (bluff thành công); thắng ở showdown thì **không** thưởng, nên mỗi ván có tối đa một người nhận. Khi đó server **tự lật 2 lá 7-2** của người thắng cho cả bàn (kể cả người xem) sau khi ván xong; bài của người đã fold vẫn úp. **Mọi người khác đang ngồi bàn** (kể cả sit-out) trả người thắng `min(bonus, chip còn lại sau khi chia pot)`, không bao giờ âm; người thắng nhận đúng tổng thực trả; ai còn 0 chip thì không trả. *Walk* (mọi người fold tới big blind, BB cầm 7-2) **cũng được thưởng** (quyết định 27/10/2026, thay bản cũ "thắng tại showdown") |
 
 ## Kiến trúc (tối giản cho 20 người)
 
@@ -84,14 +84,15 @@ Model dự kiến:
 |---|---|---|
 | `User` | Tài khoản, có cờ `is_guest` | Khách nâng cấp lên thật vẫn giữ nguyên `id` → giữ lịch sử + chip |
 | `Room` | Một bàn/phòng chơi | Trạng thái `open → playing → closed`; cấu hình blind, số ghế, thời gian suy nghĩ, `seven_deuce_bonus` (luật #27, 0 = tắt thưởng) |
-| `RoomSeat` | Một người ngồi ở một ghế của một `Room` | Gắn `User` ↔ `Room`, số ghế, trạng thái sit-out |
-| `LedgerEntry` | Bút toán chip | **Chỉ ghi thêm (append-only)** — không `UPDATE`/`DELETE` dòng cũ; mọi thay đổi chip (cấp, kết quả ván, thưởng luật 7-2) là một dòng mới. `kind`: `grant` / `hand` / `seven_deuce` |
-| `Hand` | Một ván đã chơi xong | Lưu `HandConfig` (ghế/stack/button/blind/bộ bài) + kết quả, đủ để `HandEngine.replay()` lại |
-| `HandCommand` | Một lệnh người chơi đã được áp dụng vào một `Hand` | Ghi **trước khi** áp vào engine (xem mục 3) — là nguồn phục hồi khi process chết giữa ván |
+| `RoomSeat` | Một người ngồi ở một ghế của một `Room` | Gắn `User` ↔ `Room`, số ghế (1 đến `max_seats` của phòng, DB kiểm bằng trigger), trạng thái sit-out |
+| `LedgerEntry` | Bút toán chip | **Chỉ ghi thêm (append-only)** — không `UPDATE`/`DELETE` dòng cũ; mọi thay đổi chip (cấp, kết quả ván, thưởng luật 7-2) là một dòng mới. `kind`: `grant` / `hand` / `seven_deuce`; dòng `hand`/`seven_deuce` trỏ tới `Hand` cùng phòng, `grant` thì không. Trigger PostgreSQL chặn cả SQL thô |
+| `Hand` | Một ván đã chơi xong | Lưu `HandConfig` (ghế/stack/button/blind/bộ bài/mức thưởng 7-2) + `result` (kết quả lúc ván xong, để đối chiếu khi replay), đủ để `HandEngine.replay()` lại |
+| `HandCommand` | Một lệnh người chơi đã được áp dụng vào một `Hand` | Ghi **trước khi** áp vào engine (xem mục 3) — là nguồn phục hồi khi process chết giữa ván. `sequence` cho thứ tự replay; **chỉ ghi thêm** như ledger; xóa `Hand` bị chặn (`PROTECT`) |
 
 Bất biến bắt buộc có test: **tổng `LedgerEntry` của một `Room` luôn bằng tổng chip đã cấp cho
 phòng đó** — không có "ví chung" giữa các phòng (chip theo từng phòng, theo quyết định #6/#22).
-Ghi `LedgerEntry` luôn trong một DB transaction cùng với bản ghi kết quả ván.
+Ghi `LedgerEntry` luôn trong một DB transaction cùng với bản ghi kết quả ván
+(`apps/games/services.py` → `save_completed_hand()`).
 
 ### 3. Lớp điều phối — Table actor (B3–B4, ADR-001)
 
