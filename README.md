@@ -18,7 +18,7 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 | A | Nền móng codebase | ✅ Đã duyệt |
 | B1 | Engine luật chơi | ✅ Đã duyệt |
 | B2 | Dữ liệu | 🟡 Đang làm |
-| B3–B8 | Hợp đồng API, realtime, độ bền, tài khoản, phòng, xã hội | ⬜ Chưa bắt đầu |
+| B3–B8 | Hợp đồng API, realtime, độ bền, tài khoản, phòng, xã hội | 🟡 B3 xong chờ duyệt, B6 có code chờ duyệt, còn lại chưa xong |
 | C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, một Claude riêng chỉ đọc review) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
@@ -88,10 +88,18 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 - [ ] Staging trên VPS (Caddy HTTPS), diễn tập backup → khôi phục
 - [ ] CD staging: gộp vào `main` + CI xanh thì tự build, migrate, deploy lên staging
 
-**B6. Tài khoản**
+**B6. Tài khoản** — app `apps/accounts/`, API `/api/auth/` trong [openapi.yaml](docs/api/openapi.yaml)
 
-- [ ] Email/mật khẩu (xác minh, quên mật khẩu), Google
-- [ ] Nâng cấp khách giữ nguyên lịch sử và chip; rate limit đăng nhập
+- [x] Email/mật khẩu: đăng ký, xác minh email (link hết hạn sau 3 ngày), đăng nhập/đăng xuất,
+  quên mật khẩu (link dùng một lần, 1 giờ); cookie phiên Django + CSRF
+- [x] Google qua `django-allauth`, chỉ bật khi có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+- [x] Khách (`is_guest`) và nâng cấp khách bằng email hoặc Google: cùng `User.id`, chip và lịch sử
+  ván ở mọi phòng giữ nguyên; email đã thuộc người khác thì từ chối, không gộp tài khoản
+- [x] Rate limit đăng nhập, quên mật khẩu (theo IP và theo email), gửi email, tạo khách — cache Django
+- [x] Email in ra console khi chưa có `EMAIL_URL`; [hướng dẫn tạo key Google + SMTP](docs/huong-dan-google-smtp.md)
+- [x] Trang thử React `/account` ([cách chạy](web/README.md))
+- [ ] Lym tạo key Google + SMTP thật và thử lại
+- [ ] Duyệt với chủ dự án
 
 **B7. Phòng và quyền**
 
