@@ -14,6 +14,7 @@ from django.db.models import ProtectedError, Sum
 from django.utils import timezone
 
 from apps.games.engine.hand import HandEngine
+from apps.games.engine.table import LedgerKind as EngineLedgerKind
 from apps.games.models import (
     AppendOnlyError,
     Hand,
@@ -118,6 +119,13 @@ class TestLedgerInvariant:
 
         total_a = LedgerEntry.objects.filter(room=room_a).aggregate(total=Sum("amount"))["total"]
         assert total_a == 500
+
+
+class TestLedgerKindsStayInSync:
+    def test_engine_and_database_know_the_same_ledger_kinds(self):
+        # The engine stays free of Django, so each layer defines its own enum; they must not
+        # drift apart when a new kind is added on one side only.
+        assert {kind.value for kind in EngineLedgerKind} == set(LedgerKind.values)
 
 
 class TestLedgerAppendOnly:
