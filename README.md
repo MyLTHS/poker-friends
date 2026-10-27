@@ -19,7 +19,7 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 | B1 | Engine luật chơi | ✅ Đã duyệt |
 | B2 | Dữ liệu | 🟡 Đang làm |
 | B3–B8 | Hợp đồng API, realtime, độ bền, tài khoản, phòng, xã hội | ⬜ Chưa bắt đầu |
-| C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, Codex review) |
+| C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, một Claude riêng chỉ đọc review) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
 | F | Beta với bạn bè | ⬜ |
@@ -67,7 +67,7 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 - [ ] Gọi `save_completed_hand()` từ table actor (B3–B4, chưa có actor)
 - [ ] Duyệt với chủ dự án
 
-**B3. Hợp đồng API** (Claude làm, Codex review)
+**B3. Hợp đồng API** (Claude làm, một Claude riêng chỉ đọc review)
 
 - [x] [`docs/api/ws-protocol.md`](docs/api/ws-protocol.md): envelope, `command_id`, ack/rejected, resync
 - [x] JSON Schema + fixtures, OpenAPI, sinh type TypeScript, CI kiểm schema
