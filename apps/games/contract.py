@@ -35,6 +35,12 @@ MESSAGE_TYPES: dict[Direction, list[str]] = {
     "client": ["command.act", "command.sit_out", "command.sit_in", "resync.request"],
 }
 
+# Server messages that change the room and add 1 to its version; every other server message
+# is a reply to one connection and carries the current version unchanged.
+STATE_EVENTS = frozenset(
+    {"hand.started", "action.applied", "turn.deadline", "hand.completed", "seat.updated"}
+)
+
 
 class ContractError(ValueError):
     def __init__(self, direction: Direction, errors: list[str]):
@@ -67,6 +73,13 @@ def message_validator(message_type: str) -> Draft202012Validator:
 
 def union_validator(direction: Direction) -> Draft202012Validator:
     return _validator(SCHEMA_DIR / f"{direction}-message.schema.json")
+
+
+def matches(value: Any, definition: str) -> bool:
+    """Whether ``value`` fits one definition of common.schema.json, e.g. ``"CommandId"``."""
+    common = (SCHEMA_DIR / "common.schema.json").as_uri()
+    schema = {"$ref": f"{common}#/$defs/{definition}"}
+    return Draft202012Validator(schema, registry=_registry()).is_valid(value)
 
 
 def enum(name: str) -> list[str]:

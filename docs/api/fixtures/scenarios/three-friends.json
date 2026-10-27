@@ -1,0 +1,103 @@
+{
+  "description": "Ba người bạn, blind 5/10, thưởng 7-2 là 50. Ván 1 chia sẵn: Lym (ghế 1) cầm 7h 2c; An và Bình là bot đánh theo kịch bản để Lym bluff thắng bằng 7-2 nếu Lym raise rồi bet. Từ ván 2 bộ bài xáo ngẫu nhiên theo seed.",
+  "room": {
+    "room_id": 1,
+    "name": "Bàn bạn bè",
+    "status": "open",
+    "max_seats": 9,
+    "small_blind": 5,
+    "big_blind": 10,
+    "think_time_seconds": 20,
+    "seven_deuce_bonus": 50
+  },
+  "players": [
+    {
+      "player_id": "1",
+      "display_name": "Lym",
+      "seat": 1,
+      "chips": 1000
+    },
+    {
+      "player_id": "2",
+      "display_name": "An",
+      "seat": 3,
+      "chips": 1000
+    },
+    {
+      "player_id": "3",
+      "display_name": "Bình",
+      "seat": 5,
+      "chips": 1000
+    }
+  ],
+  "first_hand_id": 41,
+  "decks": [
+    [
+      "Kd",
+      "9c",
+      "7h",
+      "Qs",
+      "9d",
+      "2c",
+      "3s",
+      "Ah",
+      "8d",
+      "Jc",
+      "4h",
+      "Td",
+      "5s",
+      "6c",
+      "Ks",
+      "3c",
+      "4c",
+      "5c",
+      "7c",
+      "8c",
+      "Tc",
+      "Qc",
+      "Kc",
+      "Ac",
+      "2d",
+      "3d",
+      "4d",
+      "5d",
+      "6d",
+      "7d",
+      "Jd",
+      "Qd",
+      "Ad",
+      "2h",
+      "3h",
+      "5h",
+      "6h",
+      "8h",
+      "9h",
+      "Th",
+      "Jh",
+      "Qh",
+      "Kh",
+      "2s",
+      "4s",
+      "6s",
+      "7s",
+      "8s",
+      "9s",
+      "Ts",
+      "Js",
+      "As"
+    ]
+  ],
+  "seed": 2026,
+  "bot_script": {
+    "1": {
+      "2": [
+        "fold"
+      ],
+      "3": [
+        "call",
+        "check",
+        "fold"
+      ]
+    }
+  }
+}
