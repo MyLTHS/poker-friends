@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HandCompletedMessage",
+  "description": "State event: the hand is over and settled. Cards shown at showdown, and the 7-2 winner's two cards, are visible to everyone; folded cards stay hidden.",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "$ref": "../common.schema.json#/$defs/ProtocolVersion"
+    },
+    "type": {
+      "const": "hand.completed"
+    },
+    "room_id": {
+      "$ref": "../common.schema.json#/$defs/RoomId"
+    },
+    "hand_id": {
+      "$ref": "../common.schema.json#/$defs/HandIdOrNull"
+    },
+    "version": {
+      "$ref": "../common.schema.json#/$defs/Version"
+    },
+    "server_time": {
+      "$ref": "../common.schema.json#/$defs/ServerTime"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "hand": {
+          "$ref": "../common.schema.json#/$defs/HandView"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "../common.schema.json#/$defs/PlayerResult"
+          },
+          "minItems": 2
+        },
+        "seven_deuce": {
+          "anyOf": [
+            {
+              "$ref": "../common.schema.json#/$defs/SevenDeuceAward"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "hand",
+        "results",
+        "seven_deuce"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "protocol_version",
+    "type",
+    "room_id",
+    "hand_id",
+    "version",
+    "server_time",
+    "payload"
+  ],
+  "additionalProperties": false
+}

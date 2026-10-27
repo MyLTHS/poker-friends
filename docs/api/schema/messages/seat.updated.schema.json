@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SeatUpdatedMessage",
+  "description": "State event: a seat changed (taken, left, sitting out or back, chips granted, connection). occupant null means the seat is now empty.",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "$ref": "../common.schema.json#/$defs/ProtocolVersion"
+    },
+    "type": {
+      "const": "seat.updated"
+    },
+    "room_id": {
+      "$ref": "../common.schema.json#/$defs/RoomId"
+    },
+    "hand_id": {
+      "$ref": "../common.schema.json#/$defs/HandIdOrNull"
+    },
+    "version": {
+      "$ref": "../common.schema.json#/$defs/Version"
+    },
+    "server_time": {
+      "$ref": "../common.schema.json#/$defs/ServerTime"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "seat": {
+          "$ref": "../common.schema.json#/$defs/SeatNumber"
+        },
+        "occupant": {
+          "anyOf": [
+            {
+              "$ref": "../common.schema.json#/$defs/SeatOccupant"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "seat",
+        "occupant"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "protocol_version",
+    "type",
+    "room_id",
+    "hand_id",
+    "version",
+    "server_time",
+    "payload"
+  ],
+  "additionalProperties": false
+}

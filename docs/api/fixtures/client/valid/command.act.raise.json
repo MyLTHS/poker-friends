@@ -1,0 +1,11 @@
+{
+  "protocol_version": 1,
+  "type": "command.act",
+  "room_id": 1,
+  "hand_id": 41,
+  "command_id": "6f1c2a9e-3b7d-4e58-9a10-2c4d8e7f1b30",
+  "payload": {
+    "kind": "raise",
+    "amount": 30
+  }
+}

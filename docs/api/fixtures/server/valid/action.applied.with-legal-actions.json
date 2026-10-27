@@ -1,0 +1,79 @@
+{
+  "protocol_version": 1,
+  "type": "action.applied",
+  "room_id": 1,
+  "hand_id": 41,
+  "version": 22,
+  "server_time": "2026-10-27T14:03:42.000Z",
+  "payload": {
+    "action": {
+      "player_id": "1",
+      "seat": 1,
+      "kind": "raise",
+      "amount": 50,
+      "timeout": false
+    },
+    "hand": {
+      "hand_id": 41,
+      "hand_no": 1,
+      "button_seat": 1,
+      "small_blind": 5,
+      "big_blind": 10,
+      "board": [
+        "Ah",
+        "8d",
+        "Jc"
+      ],
+      "pots": [
+        {
+          "amount": 65,
+          "eligible": [
+            "3",
+            "1"
+          ]
+        }
+      ],
+      "players": [
+        {
+          "player_id": "1",
+          "seat": 1,
+          "stack": 920,
+          "bet": 50,
+          "in_hand": true,
+          "cards": [
+            "??",
+            "??"
+          ]
+        },
+        {
+          "player_id": "2",
+          "seat": 3,
+          "stack": 995,
+          "bet": 0,
+          "in_hand": false,
+          "cards": []
+        },
+        {
+          "player_id": "3",
+          "seat": 5,
+          "stack": 970,
+          "bet": 0,
+          "in_hand": true,
+          "cards": [
+            "9c",
+            "9d"
+          ]
+        }
+      ],
+      "actor": "3",
+      "legal_actions": {
+        "can_fold": true,
+        "can_check": false,
+        "call_amount": 50,
+        "min_raise_to": 100,
+        "max_raise_to": 970
+      },
+      "complete": false
+    }
+  }
+}

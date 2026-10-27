@@ -1,0 +1,7 @@
+{
+  "protocol_version": 1,
+  "type": "command.sit_in",
+  "room_id": 1,
+  "command_id": "e4a6c8e0-2b4d-4f6a-8c0e-3d5f7b9d1f3a",
+  "payload": {}
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientMessage",
+  "description": "Any message the client sends. The type field tells which one.",
+  "oneOf": [
+    {
+      "$ref": "messages/command.act.schema.json"
+    },
+    {
+      "$ref": "messages/command.sit_out.schema.json"
+    },
+    {
+      "$ref": "messages/command.sit_in.schema.json"
+    },
+    {
+      "$ref": "messages/resync.request.schema.json"
+    }
+  ]
+}

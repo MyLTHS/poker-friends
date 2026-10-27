@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProtocolErrorMessage",
+  "description": "Reply to the sender only: a message could not be read well enough to find a command_id (bad JSON, unknown type, wrong protocol version).",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "$ref": "../common.schema.json#/$defs/ProtocolVersion"
+    },
+    "type": {
+      "const": "protocol.error"
+    },
+    "room_id": {
+      "$ref": "../common.schema.json#/$defs/RoomId"
+    },
+    "hand_id": {
+      "$ref": "../common.schema.json#/$defs/HandIdOrNull"
+    },
+    "version": {
+      "$ref": "../common.schema.json#/$defs/Version"
+    },
+    "server_time": {
+      "$ref": "../common.schema.json#/$defs/ServerTime"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "../common.schema.json#/$defs/ProtocolErrorCode"
+        },
+        "message": {
+          "type": "string",
+          "description": "For logs and developers, not for players."
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "protocol_version",
+    "type",
+    "room_id",
+    "hand_id",
+    "version",
+    "server_time",
+    "payload"
+  ],
+  "additionalProperties": false
+}

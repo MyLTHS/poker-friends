@@ -1,0 +1,7 @@
+{
+  "protocol_version": 1,
+  "type": "command.sit_out",
+  "room_id": 1,
+  "command_id": "5c8e2a40-9d1b-4f7e-a3c6-8b0d2e4f6a1c",
+  "payload": {}
+}

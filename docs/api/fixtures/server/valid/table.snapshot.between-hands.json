@@ -1,0 +1,54 @@
+{
+  "protocol_version": 1,
+  "type": "table.snapshot",
+  "room_id": 1,
+  "hand_id": null,
+  "version": 11,
+  "server_time": "2026-10-27T14:03:05.120Z",
+  "payload": {
+    "table": {
+      "room": {
+        "room_id": 1,
+        "name": "Bàn bạn bè",
+        "status": "playing",
+        "max_seats": 9,
+        "small_blind": 5,
+        "big_blind": 10,
+        "think_time_seconds": 20,
+        "seven_deuce_bonus": 50
+      },
+      "you": {
+        "player_id": "1",
+        "seat": 1
+      },
+      "seats": [
+        {
+          "seat": 1,
+          "player_id": "1",
+          "display_name": "Lym",
+          "stack": 1000,
+          "sitting_out": false,
+          "connected": true
+        },
+        {
+          "seat": 3,
+          "player_id": "2",
+          "display_name": "An",
+          "stack": 1000,
+          "sitting_out": false,
+          "connected": true
+        },
+        {
+          "seat": 5,
+          "player_id": "3",
+          "display_name": "Bình",
+          "stack": 1000,
+          "sitting_out": false,
+          "connected": true
+        }
+      ],
+      "hand": null,
+      "turn": null
+    }
+  }
+}

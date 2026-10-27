@@ -1,0 +1,63 @@
+{
+  "protocol_version": 1,
+  "type": "hand.started",
+  "room_id": 1,
+  "hand_id": 41,
+  "version": 12,
+  "server_time": "2026-10-27T14:03:05.120Z",
+  "payload": {
+    "hand": {
+      "hand_id": 41,
+      "hand_no": 1,
+      "button_seat": 1,
+      "small_blind": 5,
+      "big_blind": 10,
+      "board": [],
+      "pots": [],
+      "players": [
+        {
+          "player_id": "1",
+          "seat": 1,
+          "stack": 1000,
+          "bet": 0,
+          "in_hand": true,
+          "cards": [
+            "7h",
+            "2c"
+          ]
+        },
+        {
+          "player_id": "2",
+          "seat": 3,
+          "stack": 995,
+          "bet": 5,
+          "in_hand": true,
+          "cards": [
+            "??",
+            "??"
+          ]
+        },
+        {
+          "player_id": "3",
+          "seat": 5,
+          "stack": 990,
+          "bet": 10,
+          "in_hand": true,
+          "cards": [
+            "??",
+            "??"
+          ]
+        }
+      ],
+      "actor": "1",
+      "legal_actions": {
+        "can_fold": true,
+        "can_check": false,
+        "call_amount": 10,
+        "min_raise_to": 20,
+        "max_raise_to": 1000
+      },
+      "complete": false
+    }
+  }
+}

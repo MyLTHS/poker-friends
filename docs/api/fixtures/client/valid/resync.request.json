@@ -1,0 +1,8 @@
+{
+  "protocol_version": 1,
+  "type": "resync.request",
+  "room_id": 1,
+  "payload": {
+    "last_version": 14
+  }
+}

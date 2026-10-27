@@ -1,0 +1,73 @@
+{
+  "protocol_version": 1,
+  "type": "hand.completed",
+  "room_id": 1,
+  "hand_id": 42,
+  "version": 58,
+  "server_time": "2026-10-27T14:06:12.004Z",
+  "payload": {
+    "hand": {
+      "hand_id": 42,
+      "hand_no": 2,
+      "button_seat": 1,
+      "small_blind": 5,
+      "big_blind": 10,
+      "board": [
+        "Qh",
+        "7d",
+        "3c",
+        "Jh",
+        "6h"
+      ],
+      "pots": [
+        {
+          "amount": 0,
+          "eligible": [
+            "2"
+          ]
+        }
+      ],
+      "players": [
+        {
+          "player_id": "1",
+          "seat": 1,
+          "stack": 990,
+          "bet": 0,
+          "in_hand": false,
+          "cards": []
+        },
+        {
+          "player_id": "2",
+          "seat": 3,
+          "stack": 1010,
+          "bet": 0,
+          "in_hand": true,
+          "cards": [
+            "Ac",
+            "Ad"
+          ]
+        }
+      ],
+      "actor": null,
+      "legal_actions": null,
+      "complete": true
+    },
+    "results": [
+      {
+        "player_id": "1",
+        "seat": 1,
+        "hand_net": -10,
+        "seven_deuce_net": 0,
+        "stack": 990
+      },
+      {
+        "player_id": "2",
+        "seat": 3,
+        "hand_net": 10,
+        "seven_deuce_net": 0,
+        "stack": 1010
+      }
+    ],
+    "seven_deuce": null
+  }
+}
