@@ -31,6 +31,20 @@ async def _receive_until(socket, type_):
             return received
 
 
+def test_serves_the_test_page():
+    async def scenario(port):
+        reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        writer.write(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        await writer.drain()
+        response = await reader.read(200_000)
+        writer.close()
+        return response
+
+    response = asyncio.run(_with_server(scenario))
+    assert response.startswith(b"HTTP/1.1 200")
+    assert b"<html" in response
+
+
 def test_plays_over_websocket_and_acks_a_retried_command_once():
     async def scenario(port):
         async with connect(f"ws://127.0.0.1:{port}/ws/rooms/1/?player=1") as socket:

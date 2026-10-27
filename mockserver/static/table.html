@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bàn thử Poker Friends</title>
+<style>
+  :root {
+    --bg: #14181d; --panel: #1d232b; --line: #2e3742; --text: #e8edf2; --muted: #93a1b0;
+    --felt: #1f6b47; --felt-edge: #154d33; --accent: #f2c14e; --danger: #e5625e; --ok: #5cc28a;
+    --card: #fbfbf8; --red: #c8302c; --black: #1b1f24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 16px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  .status { font-size: 13px; color: var(--muted); }
+  .status b { color: var(--text); }
+  select, button, input { font: inherit; color: var(--text); background: #27303a;
+                          border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+  button { cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .table-wrap { position: relative; aspect-ratio: 16 / 10; max-width: 860px; width: 100%; margin: 56px auto 84px; }
+  .felt { position: absolute; inset: 4% 9%; border-radius: 50%; background: radial-gradient(ellipse at center, #2a8a5c 0%, var(--felt) 60%, var(--felt-edge) 100%);
+          border: 10px solid #3b2a1c; box-shadow: inset 0 0 40px rgba(0,0,0,.45); }
+  .center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; }
+  .board { display: flex; gap: 6px; justify-content: center; min-height: 64px; }
+  .pots { margin-top: 8px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px #000; }
+  .banner { margin-top: 8px; padding: 6px 10px; border-radius: 6px; background: rgba(0,0,0,.45); max-width: 360px; }
+  .banner.bonus { background: rgba(242,193,78,.92); color: #222; font-weight: 600; }
+
+  .seat { position: absolute; width: 112px; transform: translate(-50%, -50%); text-align: center; }
+  .seat .box { background: var(--panel); border: 2px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+  .seat.turn .box { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(242,193,78,.25); }
+  .seat.me .box { background: #243341; }
+  .seat.folded { opacity: .55; }
+  .seat .name { font-weight: 600; }
+  .seat .stack { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .seat .tags { font-size: 11px; color: var(--muted); min-height: 15px; }
+  .seat .cards { display: flex; gap: 4px; justify-content: center; margin-bottom: 4px; min-height: 52px; }
+  .seat .bet { margin-top: 4px; font-size: 12px; color: var(--accent); min-height: 17px; font-variant-numeric: tabular-nums; }
+  .seat.empty .box { border-style: dashed; color: var(--muted); }
+  .dealer { display: inline-block; width: 20px; height: 20px; line-height: 20px; border-radius: 50%; background: #fff; color: #000;
+            font-size: 11px; font-weight: 700; margin-left: 4px; }
+  .timer { height: 4px; background: var(--line); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+  .timer i { display: block; height: 100%; background: var(--accent); }
+
+  .card { width: 38px; height: 52px; border-radius: 5px; background: var(--card); color: var(--black);
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          font-weight: 700; font-size: 16px; line-height: 1; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  .card.red { color: var(--red); }
+  .card.back { background: repeating-linear-gradient(45deg, #2d4d8a, #2d4d8a 4px, #3a5fa6 4px, #3a5fa6 8px); border: 2px solid #fff; }
+  .board .card { width: 46px; height: 64px; font-size: 19px; }
+  @media (max-width: 600px) {
+    .table-wrap { aspect-ratio: 3 / 4; margin: 40px auto 60px; }
+    .felt { inset: 2% 12%; }
+    .seat { width: 88px; font-size: 12px; }
+    .seat.empty { display: none; }
+    .card { width: 28px; height: 40px; font-size: 13px; }
+    .seat .cards { min-height: 40px; }
+    .board .card { width: 34px; height: 48px; font-size: 15px; }
+  }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin-top: 12px; }
+  .actions input[type=range] { width: 160px; padding: 0; }
+  .actions input[type=number] { width: 90px; }
+  .hint { text-align: center; color: var(--muted); margin-top: 6px; min-height: 20px; }
+  .toast { text-align: center; color: var(--danger); min-height: 20px; margin-top: 4px; }
+
+  aside { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; min-height: 0; }
+  aside h2 { font-size: 14px; margin: 0 0 8px; }
+  .tools { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .tools small { color: var(--muted); }
+  .log { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: auto; max-height: 60vh; flex: 1;
+         border-top: 1px solid var(--line); padding-top: 8px; }
+  .log div { white-space: pre-wrap; word-break: break-word; border-bottom: 1px solid #252c35; padding: 2px 0; cursor: pointer; }
+  .log .in { color: #b9d4ff; } .log .out { color: #ffd98a; } .log .warn { color: var(--danger); } .log .info { color: var(--muted); }
+  .log pre { margin: 4px 0; color: var(--muted); display: none; }
+  .log div.open pre { display: block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bàn thử (mock server)</h1>
+  <label>Tôi là
+    <select id="player">
+      <option value="1">Lym (ghế 1)</option>
+      <option value="2">An (ghế 3)</option>
+      <option value="3">Bình (ghế 5)</option>
+      <option value="">Người xem</option>
+    </select>
+  </label>
+  <button id="connect">Kết nối</button>
+  <span class="status" id="status">Chưa kết nối</span>
+</header>
+<main>
+  <section>
+    <div class="table-wrap" id="table">
+      <div class="felt"></div>
+      <div class="center">
+        <div class="board" id="board"></div>
+        <div class="pots" id="pots"></div>
+        <div id="banner"></div>
+      </div>
+    </div>
+    <div class="actions" id="actions">
+      <button data-kind="fold">Fold</button>
+      <button data-kind="check">Check</button>
+      <button data-kind="call">Call</button>
+      <input type="range" id="raiseRange">
+      <input type="number" id="raiseAmount">
+      <button data-kind="raise" id="raiseBtn">Raise tới</button>
+    </div>
+    <div class="hint" id="hint"></div>
+    <div class="toast" id="toast"></div>
+  </section>
+  <aside>
+    <h2>Thử giao thức</h2>
+    <div class="tools">
+      <button id="sitOut">Sit-out (từ ván sau)</button>
+      <button id="sitIn">Vào chơi lại</button>
+      <button id="resend" disabled>Gửi lại lệnh cuối (cùng command_id)</button>
+      <small>Server chỉ áp một lần và trả <code>command.ack</code> với <code>duplicate: true</code>.</small>
+      <button id="drop">Bỏ qua sự kiện kế tiếp</button>
+      <small>Giả lập mất gói: sự kiện sau sẽ hụt <code>version</code>, trang tự gửi <code>resync.request</code>.</small>
+    </div>
+    <h2>Nhật ký message <span class="status">(bấm một dòng để xem JSON)</span></h2>
+    <div class="log" id="log"></div>
+  </aside>
+</main>
+<script>
+"use strict";
+// Plain JS client for docs/api/ws-protocol.md. No build step: open it from the mock server.
+
+const STATE_EVENTS = new Set(["hand.started", "action.applied", "turn.deadline", "hand.completed", "seat.updated"]);
+const REJECT_TEXT = {
+  invalid_command: "Lệnh sai định dạng", command_id_reused: "command_id đã dùng cho lệnh khác",
+  no_active_hand: "Không có ván nào đang chạy", stale_hand: "Lệnh của ván trước", not_seated: "Bạn không ngồi bàn này",
+  not_your_turn: "Chưa tới lượt bạn", cannot_fold: "Đang được check miễn phí, không cần fold",
+  cannot_check: "Phải call hoặc fold", nothing_to_call: "Không có gì để call, hãy check",
+  cannot_raise: "Không raise được nữa", invalid_amount: "Số chip raise không hợp lệ",
+  already_sitting_out: "Bạn đang sit-out rồi", not_sitting_out: "Bạn đang chơi rồi",
+  rate_limited: "Bấm chậm lại một chút", internal_error: "Lỗi server, thử lại",
+};
+const ROOM_ID = 1;
+const $ = (id) => document.getElementById(id);
+
+let socket = null;
+let table = null;          // TableState from the last snapshot, updated by events
+let lastVersion = -1;
+let waiting = [];          // state events held back while a resync is pending
+let resyncing = false;
+let dropNext = false;
+let clockOffset = 0;       // local time minus server time, in ms
+let lastCommand = null;
+let lastResult = null;     // {results, seven_deuce} of the last finished hand
+
+function newCommandId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function log(kind, text, data) {
+  const row = document.createElement("div");
+  row.className = kind;
+  row.textContent = text;
+  if (data) {
+    const pre = document.createElement("pre");
+    pre.textContent = JSON.stringify(data, null, 2);
+    row.appendChild(pre);
+    row.onclick = () => row.classList.toggle("open");
+  }
+  const box = $("log");
+  box.prepend(row);
+  while (box.children.length > 300) box.lastChild.remove();
+}
+
+function connect() {
+  if (socket) socket.close();
+  const player = $("player").value;
+  const host = location.protocol.startsWith("http") ? location.host : "localhost:8765";
+  const url = `ws://${host}/ws/rooms/${ROOM_ID}/` + (player ? `?player=${player}` : "");
+  table = null; lastVersion = -1; waiting = []; resyncing = false; lastResult = null;
+  socket = new WebSocket(url);
+  $("status").textContent = "Đang kết nối…";
+  socket.onopen = () => log("info", `Đã mở ${url}`);
+  socket.onclose = () => { $("status").textContent = "Mất kết nối. Bấm Kết nối để vào lại."; render(); };
+  socket.onmessage = (event) => receive(JSON.parse(event.data));
+}
+
+function send(message) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify(message));
+  log("out", `→ ${message.type}${message.payload && message.payload.kind ? " " + message.payload.kind + (message.payload.amount ? " " + message.payload.amount : "") : ""}`, message);
+}
+
+function command(type, payload, withHand) {
+  const message = { protocol_version: 1, type, room_id: ROOM_ID };
+  if (withHand) message.hand_id = table.hand.hand_id;
+  message.command_id = newCommandId();
+  message.payload = payload;
+  lastCommand = message;
+  $("resend").disabled = false;
+  send(message);
+}
+
+function receive(message) {
+  clockOffset = Date.now() - Date.parse(message.server_time);
+  if (STATE_EVENTS.has(message.type)) {
+    if (dropNext) {
+      dropNext = false;
+      $("drop").disabled = false;
+      log("warn", `✗ bỏ qua ${message.type} v${message.version} (giả lập mất gói)`, message);
+      return;
+    }
+    handleStateEvent(message);
+  } else {
+    handleReply(message);
+  }
+  render();
+}
+
+function handleStateEvent(message) {
+  if (resyncing || table === null) { waiting.push(message); return; }
+  if (message.version <= lastVersion) return; // already have it
+  if (message.version > lastVersion + 1) {
+    log("warn", `Hụt sự kiện: có v${lastVersion}, nhận v${message.version}. Gửi resync.request.`);
+    waiting.push(message);
+    resyncing = true;
+    send({ protocol_version: 1, type: "resync.request", room_id: ROOM_ID, payload: { last_version: lastVersion } });
+    return;
+  }
+  log("in", `← ${message.type} v${message.version}${describe(message)}`, message);
+  applyEvent(message);
+  lastVersion = message.version;
+}
+
+function describe(message) {
+  const p = message.payload;
+  switch (message.type) {
+    case "action.applied": {
+      const a = p.action;
+      return `: ${nameOf(a.player_id)} ${a.kind}${a.amount ? " " + a.amount : ""}${a.timeout ? " (hết giờ)" : ""}`;
+    }
+    case "turn.deadline": return `: lượt ${nameOf(p.turn.player_id)}`;
+    case "hand.started": return `: ván #${p.hand.hand_no}`;
+    case "seat.updated": return `: ghế ${p.seat}`;
+    default: return "";
+  }
+}
+
+function applyEvent(message) {
+  const p = message.payload;
+  switch (message.type) {
+    case "hand.started":
+      table.hand = p.hand; table.turn = null; table.room.status = "playing"; lastResult = null; break;
+    case "action.applied":
+      table.hand = p.hand; break;
+    case "turn.deadline":
+      table.turn = p.turn; break;
+    case "hand.completed":
+      table.hand = p.hand; table.turn = null;
+      lastResult = { results: p.results, seven_deuce: p.seven_deuce };
+      for (const r of p.results) {
+        const seat = table.seats.find((s) => s.player_id === r.player_id);
+        if (seat) seat.stack = r.stack;
+      }
+      break;
+    case "seat.updated": {
+      table.seats = table.seats.filter((s) => s.seat !== p.seat);
+      if (p.occupant) table.seats.push(p.occupant);
+      table.seats.sort((a, b) => a.seat - b.seat);
+      break;
+    }
+  }
+}
+
+function handleReply(message) {
+  const p = message.payload;
+  switch (message.type) {
+    case "table.snapshot":
+      log("in", `← table.snapshot v${message.version}`, message);
+      table = p.table;
+      lastVersion = message.version;
+      resyncing = false;
+      if (!table.hand || table.hand.complete) lastResult = null;
+      const later = waiting.filter((m) => m.version > lastVersion).sort((a, b) => a.version - b.version);
+      waiting = [];
+      later.forEach(handleStateEvent);
+      break;
+    case "command.ack":
+      log("in", `← command.ack ${p.duplicate ? "(trùng, không áp lại) " : ""}→ v${p.result_version}`, message);
+      break;
+    case "command.rejected":
+      log("warn", `← command.rejected ${p.code}`, message);
+      flash(REJECT_TEXT[p.code] || p.code);
+      break;
+    case "protocol.error":
+      log("warn", `← protocol.error ${p.code}`, message);
+      break;
+  }
+}
+
+let toastTimer = null;
+function flash(text) {
+  $("toast").textContent = text;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ($("toast").textContent = ""), 3000);
+}
+
+function nameOf(playerId) {
+  const seat = table && table.seats.find((s) => s.player_id === playerId);
+  return seat ? seat.display_name : `#${playerId}`;
+}
+
+function cardEl(code) {
+  const el = document.createElement("div");
+  if (code === "??") { el.className = "card back"; return el; }
+  const suit = { c: "♣", d: "♦", h: "♥", s: "♠" }[code[1]];
+  el.className = "card" + ("dh".includes(code[1]) ? " red" : "");
+  el.innerHTML = `<span>${code[0] === "T" ? "10" : code[0]}</span><span>${suit}</span>`;
+  return el;
+}
+
+function seatPosition(seat, mySeat) {
+  const angle = (90 + (seat - (mySeat || 1)) * 40) * (Math.PI / 180);
+  return { left: 50 + 40 * Math.cos(angle), top: 50 + 46 * Math.sin(angle) };
+}
+
+function render() {
+  const connected = socket && socket.readyState === WebSocket.OPEN;
+  document.querySelectorAll(".seat").forEach((el) => el.remove());
+  $("board").replaceChildren();
+  $("pots").textContent = "";
+  $("banner").replaceChildren();
+  if (!table) { renderActions(null); return; }
+
+  const me = table.you;
+  $("status").innerHTML = `${connected ? "Đã kết nối" : "Mất kết nối"} · bạn: <b>${me.seat ? nameOf(me.player_id) : "người xem"}</b> · version <b>${lastVersion}</b>` +
+    (table.hand ? ` · ván #${table.hand.hand_no}` : "");
+  const hand = table.hand;
+  const inHand = new Map(hand ? hand.players.map((p) => [p.player_id, p]) : []);
+
+  for (let seat = 1; seat <= table.room.max_seats; seat++) {
+    const occupant = table.seats.find((s) => s.seat === seat);
+    const pos = seatPosition(seat, me.seat);
+    const el = document.createElement("div");
+    el.className = "seat";
+    el.style.left = pos.left + "%";
+    el.style.top = pos.top + "%";
+    if (!occupant) {
+      el.classList.add("empty");
+      el.innerHTML = `<div class="cards"></div><div class="box">Ghế ${seat}<div class="tags">trống</div></div>`;
+      $("table").appendChild(el);
+      continue;
+    }
+    const player = inHand.get(occupant.player_id);
+    if (occupant.player_id === me.player_id) el.classList.add("me");
+    if (table.turn && table.turn.player_id === occupant.player_id) el.classList.add("turn");
+    if (player && !player.in_hand) el.classList.add("folded");
+    const cards = document.createElement("div");
+    cards.className = "cards";
+    if (player) player.cards.forEach((c) => cards.appendChild(cardEl(c)));
+    const tags = [];
+    if (occupant.sitting_out) tags.push("sit-out");
+    if (!occupant.connected) tags.push("bot / mất kết nối");
+    if (player && !player.in_hand) tags.push("đã fold");
+    // Once the hand is over, the room balance (bonus included) is the number that matters.
+    const stack = player && !hand.complete ? player.stack : occupant.stack;
+    const box = document.createElement("div");
+    box.className = "box";
+    box.innerHTML = `<div class="name">${occupant.display_name}${hand && hand.button_seat === seat ? '<span class="dealer">D</span>' : ""}</div>` +
+      `<div class="stack">${stack} chip</div><div class="tags">${tags.join(" · ")}</div>`;
+    if (table.turn && table.turn.player_id === occupant.player_id) {
+      box.insertAdjacentHTML("beforeend", '<div class="timer"><i data-timer></i></div>');
+    }
+    const bet = document.createElement("div");
+    bet.className = "bet";
+    bet.textContent = player && player.bet ? `cược ${player.bet}` : "";
+    el.append(cards, box, bet);
+    $("table").appendChild(el);
+  }
+
+  if (hand) {
+    hand.board.forEach((c) => $("board").appendChild(cardEl(c)));
+    const total = hand.pots.reduce((sum, p) => sum + p.amount, 0);
+    if (total) $("pots").textContent = `Pot ${total}` + (hand.pots.length > 1 ? ` (${hand.pots.map((p) => p.amount).join(" + ")})` : "");
+  }
+  if (lastResult) {
+    const lines = lastResult.results.map((r) => `${nameOf(r.player_id)} ${r.hand_net >= 0 ? "+" : ""}${r.hand_net}`).join(", ");
+    $("banner").insertAdjacentHTML("beforeend", `<div class="banner">Ván xong: ${lines}. Ván mới bắt đầu sau vài giây.</div>`);
+    const bonus = lastResult.seven_deuce;
+    if (bonus) {
+      const paid = bonus.payments.map((p) => `${nameOf(p.player_id)} ${p.amount}`).join(", ") || "không ai còn chip để trả";
+      $("banner").insertAdjacentHTML("beforeend",
+        `<div class="banner bonus">Thưởng 7-2! ${nameOf(bonus.player_id)} bluff thắng với ${bonus.cards.join(" ")}: nhận ${bonus.total} (${paid}).</div>`);
+    }
+  }
+  renderActions(hand && hand.actor === me.player_id ? hand.legal_actions : null);
+  tickTimer();
+}
+
+function renderActions(legal) {
+  const buttons = $("actions").querySelectorAll("button");
+  const range = $("raiseRange"), amount = $("raiseAmount");
+  if (!legal) {
+    buttons.forEach((b) => (b.disabled = true));
+    range.disabled = amount.disabled = true;
+    $("hint").textContent = table && table.hand && !table.hand.complete && table.you.seat ? "Chờ tới lượt bạn…" : "";
+    return;
+  }
+  $("actions").querySelector('[data-kind="fold"]').disabled = !legal.can_fold;
+  $("actions").querySelector('[data-kind="check"]').disabled = !legal.can_check;
+  const call = $("actions").querySelector('[data-kind="call"]');
+  call.disabled = legal.can_check;
+  call.textContent = legal.can_check ? "Call" : `Call ${legal.call_amount}`;
+  const canRaise = legal.min_raise_to !== null;
+  $("raiseBtn").disabled = range.disabled = amount.disabled = !canRaise;
+  if (canRaise) {
+    range.min = amount.min = legal.min_raise_to;
+    range.max = amount.max = legal.max_raise_to;
+    if (!(+amount.value >= legal.min_raise_to && +amount.value <= legal.max_raise_to)) amount.value = range.value = legal.min_raise_to;
+  }
+  $("hint").textContent = `Tới lượt bạn. Raise từ ${legal.min_raise_to ?? "-"} tới ${legal.max_raise_to ?? "-"}.`;
+}
+
+function tickTimer() {
+  const bar = document.querySelector("[data-timer]");
+  if (!bar || !table || !table.turn) return;
+  const left = Date.parse(table.turn.deadline) - (Date.now() - clockOffset);
+  bar.style.width = Math.max(0, Math.min(100, (left / 1000 / table.turn.think_time_seconds) * 100)) + "%";
+}
+setInterval(tickTimer, 200);
+
+$("actions").addEventListener("click", (event) => {
+  const kind = event.target.dataset && event.target.dataset.kind;
+  if (!kind || !table || !table.hand) return;
+  const amount = kind === "raise" ? Number($("raiseAmount").value) : null;
+  command("command.act", { kind, amount }, true);
+});
+$("raiseRange").addEventListener("input", () => ($("raiseAmount").value = $("raiseRange").value));
+$("raiseAmount").addEventListener("input", () => ($("raiseRange").value = $("raiseAmount").value));
+$("sitOut").onclick = () => command("command.sit_out", {}, false);
+$("sitIn").onclick = () => command("command.sit_in", {}, false);
+$("resend").onclick = () => lastCommand && send(lastCommand);
+$("drop").onclick = () => { dropNext = true; $("drop").disabled = true; log("info", "Sự kiện trạng thái kế tiếp sẽ bị bỏ qua."); };
+$("connect").onclick = connect;
+
+const fromUrl = new URLSearchParams(location.search).get("player");
+if (fromUrl !== null) $("player").value = fromUrl;
+connect();
+</script>
+</body>
+</html>

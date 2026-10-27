@@ -65,9 +65,9 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 
 **B3. Hợp đồng API** (Claude làm, Codex review)
 
-- [ ] `docs/api/ws-protocol.md`: envelope, `command_id`, ack/rejected, resync
-- [ ] JSON Schema + fixtures, OpenAPI, sinh type TypeScript, CI kiểm schema
-- [ ] Mock server + trang thử
+- [x] [`docs/api/ws-protocol.md`](docs/api/ws-protocol.md): envelope, `command_id`, ack/rejected, resync
+- [x] JSON Schema + fixtures, OpenAPI, sinh type TypeScript, CI kiểm schema
+- [x] Mock server + trang thử ([cách chạy](docs/api/mock-server.md))
 - [ ] ADR-001 Table actor
 
 **B4. Bàn chơi realtime**
@@ -130,6 +130,12 @@ uv sync
 .venv/bin/python -m apps.games.engine.simulate --hands 5000 --players 9
 ```
 
+Trang thử bàn chơi trên mock server (không cần Docker hay DB):
+
+```bash
+uv run python -m mockserver    # rồi mở http://localhost:8765/
+```
+
 ## Cấu trúc
 
 ```
@@ -138,8 +144,10 @@ apps/games/engine/   # lõi thuần Python, không phụ thuộc Django
   hand.py            # HandEngine: một ván, bọc PokerKit
   table.py           # TableSession: ghế, chip theo phòng (ledger), nhiều ván
   simulate.py        # bot ngẫu nhiên + kiểm tra bất biến
-apps/games/tests/    # golden tests, property tests
+apps/games/contract.py  # nạp JSON Schema trong docs/api/, kiểm message WebSocket
+apps/games/tests/    # golden tests, property tests, test hợp đồng API
+mockserver/          # mock server WebSocket + trang thử (static/table.html)
 config/              # Django settings (đọc biến môi trường)
-web/                 # frontend Next.js
+web/                 # frontend Next.js; src/api/ là type sinh từ docs/api/
 docs/                # đặc tả, lộ trình, hợp đồng API, trao đổi, bài học
 ```
