@@ -51,10 +51,13 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 
 **B2. Dữ liệu**
 
-- [ ] Models `User` (cờ khách), `Room`, `RoomSeat`, `LedgerEntry` (chỉ ghi thêm), `Hand`, `HandCommand`
-- [ ] Migration; ghi ledger trong transaction
-- [ ] Test: tổng ledger một phòng bằng tổng chip đã cấp
-- [ ] Trang thử: Django Admin
+- [x] Models `User` (cờ khách), `Room`, `RoomSeat`, `LedgerEntry` (chỉ ghi thêm), `Hand`, `HandCommand`
+- [x] Migration (`apps/games/migrations/0001_initial.py`)
+- [x] Test: tổng ledger một phòng bằng tổng chip đã cấp, không đổi khi chia kết quả ván, không
+  update/delete được một dòng ledger, ghế/lệnh không trùng
+- [x] Trang thử: Django Admin (`apps/games/admin.py`) — ledger chỉ xem, không sửa/xoá được
+- [ ] Ghi ledger trong transaction khi nối với table actor (B3–B4, chưa có actor nên chưa áp dụng)
+- [ ] Duyệt với chủ dự án
 
 **B3. Hợp đồng API** (Claude + Codex)
 
