@@ -9,6 +9,11 @@ export type RoomDetail = Schemas["RoomDetail"];
 export type LobbyRoom = Schemas["LobbyRoom"];
 export type TableSnapshot = Schemas["TableSnapshot"];
 export type SeatOccupant = TableSnapshot["table"]["seats"][number];
+export type HandReplay = Schemas["HandReplay"];
+
+export function roomSocketUrl(base: string, roomId: number): string {
+  return `${base}/ws/rooms/${roomId}/`;
+}
 
 export function inviteUrl(origin: string, token: string): string {
   return `${origin}/rooms/join?token=${encodeURIComponent(token)}`;
@@ -34,6 +39,10 @@ export function createRoomsApi(
     snapshot: (id: number) => request<TableSnapshot>("GET", room(id, "snapshot/")),
     takeSeat: (id: number, seat: number) => request<SeatOccupant>("POST", room(id, "seats/"), { seat }),
     leaveSeat: (id: number) => request<void>("DELETE", room(id, "seats/me/")),
+    chat: (id: number) => request<Schemas["ChatHistory"]>("GET", room(id, "chat/")),
+    hands: (id: number) => request<Schemas["HandList"]>("GET", room(id, "hands/")),
+    summary: (id: number) => request<Schemas["RoomSummary"]>("GET", room(id, "summary/")),
+    replay: (handId: number) => request<Schemas["HandReplay"]>("GET", `/api/hands/${handId}/replay/`),
   };
 }
 

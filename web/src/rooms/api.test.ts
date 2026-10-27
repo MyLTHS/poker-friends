@@ -33,6 +33,10 @@ describe("createRoomsApi", () => {
       [() => api.snapshot(7), "GET", "/api/rooms/7/snapshot/", undefined],
       [() => api.takeSeat(7, 4), "POST", "/api/rooms/7/seats/", { seat: 4 }],
       [() => api.leaveSeat(7), "DELETE", "/api/rooms/7/seats/me/", undefined],
+      [() => api.chat(7), "GET", "/api/rooms/7/chat/", undefined],
+      [() => api.hands(7), "GET", "/api/rooms/7/hands/", undefined],
+      [() => api.summary(7), "GET", "/api/rooms/7/summary/", undefined],
+      [() => api.replay(41), "GET", "/api/hands/41/replay/", undefined],
     ];
     for (const [call, method, url, body] of calls) {
       await call();
@@ -52,6 +56,13 @@ describe("createRoomsApi", () => {
   it("passes room errors through", async () => {
     const api = createRoomsApi(fakeFetch(403, { code: "kicked", message: "x" }), () => "");
     expect(await api.join("t")).toEqual({ ok: false, error: { code: "kicked", message: "x" } });
+  });
+});
+
+describe("roomSocketUrl", () => {
+  it("points at Django's WebSocket for the room", async () => {
+    const { roomSocketUrl } = await import("./api");
+    expect(roomSocketUrl("ws://localhost:8000", 7)).toBe("ws://localhost:8000/ws/rooms/7/");
   });
 });
 

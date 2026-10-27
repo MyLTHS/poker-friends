@@ -10,6 +10,7 @@ import { Card, formValues, NoticeBox, Shell, Submit, useSubmit } from "@/account
 
 import { createRoomsApi, inviteUrl, type RoomDetail, type RoomsApi, type TableSnapshot } from "./api";
 import { NumberField } from "./LobbyScreen";
+import { useRoomLive } from "./useRoomLive";
 
 type State = { detail: RoomDetail; table: TableSnapshot["table"] } | { error: Notice };
 
@@ -29,8 +30,9 @@ const STATUS_TEXT: Record<string, string> = {
 };
 
 /**
- * /rooms/<id> — seats and the owner's panel (B7 test page). Refreshes over REST every 3 seconds;
- * the live table over WebSocket is B4b.
+ * /rooms/<id> — seats, chat, spectators and the owner's panel (B7/B8 test page). The WebSocket
+ * brings chat and says when the table changed; the table itself is reloaded over REST (the live
+ * table view is B4b). A slow REST poll covers a dropped socket.
  */
 export function RoomScreen({ roomId }: { roomId: number }) {
   const rooms = useMemo(() => createRoomsApi(), []);
@@ -39,6 +41,11 @@ export function RoomScreen({ roomId }: { roomId: number }) {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const refresh = useCallback(() => loadRoom(rooms, roomId).then(setState), [rooms, roomId]);
+  const { live, say } = useRoomLive(rooms, roomId);
+
+  useEffect(() => {
+    if (live.tableChanges > 0) void loadRoom(rooms, roomId).then(setState);
+  }, [live.tableChanges, rooms, roomId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +54,7 @@ export function RoomScreen({ roomId }: { roomId: number }) {
         if (!cancelled) setState(next);
       });
     auth.config().then(tick);
-    const timer = window.setInterval(tick, 3000);
+    const timer = window.setInterval(tick, 10000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -141,6 +148,18 @@ export function RoomScreen({ roomId }: { roomId: number }) {
         </ul>
       </Card>
 
+      {live.closedBy && (
+        <NoticeBox
+          notice={{
+            kind: "error",
+            text: live.closedBy === "kicked" ? "Chủ phòng đã mời bạn ra khỏi phòng." : "Bạn không có quyền xem phòng này.",
+          }}
+        />
+      )}
+      <ChatPanel live={live} say={say} />
+      <Link href={`/rooms/${roomId}/history`} className="btn btn-secondary text-sm">
+        Lịch sử ván và bảng lời/lỗ
+      </Link>
       {detail.is_owner && (
         <OwnerPanel rooms={rooms} detail={detail} act={act} refresh={refresh} onSaved={setNotice} />
       )}
@@ -273,6 +292,51 @@ function OwnerPanel({
           Đóng phòng
         </button>
       )}
+    </Card>
+  );
+}
+
+function ChatPanel({ live, say }: { live: ReturnType<typeof useRoomLive>["live"]; say: (text: string) => void }) {
+  const [text, setText] = useState("");
+  return (
+    <Card>
+      <h2 className="font-[family-name:var(--font-display)] text-xl">Chat</h2>
+      <p className="mt-1 text-xs text-[var(--muted)]">
+        Đang xem: {live.spectators.length ? live.spectators.map((s) => s.display_name).join(", ") : "không ai"}
+      </p>
+      <ol className="mt-3 grid max-h-64 gap-1 overflow-y-auto text-sm" aria-live="polite">
+        {live.chat.map((line) => (
+          <li key={line.message_id}>
+            <b>{line.display_name}</b>: {line.text}
+          </li>
+        ))}
+        {live.chat.length === 0 && <li className="text-[var(--muted)]">Chưa ai nói gì.</li>}
+      </ol>
+      <form
+        className="mt-3 flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (text.trim()) say(text.trim());
+          setText("");
+        }}
+      >
+        <input
+          aria-label="Tin nhắn"
+          value={text}
+          maxLength={300}
+          onChange={(event) => setText(event.target.value)}
+          placeholder="Nói gì đó… 🙂"
+          className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--canvas)] px-4 py-2 text-[var(--ink)]"
+        />
+        {["👍", "😂", "😱"].map((emoji) => (
+          <button key={emoji} type="button" className="btn btn-ghost px-2! text-base" onClick={() => say(emoji)} aria-label={`Gửi ${emoji}`}>
+            {emoji}
+          </button>
+        ))}
+        <button type="submit" className="btn btn-primary text-xs">
+          Gửi
+        </button>
+      </form>
     </Card>
   );
 }

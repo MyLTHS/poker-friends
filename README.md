@@ -24,7 +24,7 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản
 | B5 | Độ bền + staging | 🟡 Phần code xong, chờ duyệt; staging chờ VPS |
 | B6 | Tài khoản | ✅ Xong code, chờ duyệt |
 | B7 | Phòng và quyền | ✅ Xong code, chờ duyệt |
-| B8 | Xã hội và quản trị | 🟡 Backend xong, trang thử đang làm |
+| B8 | Xã hội và quản trị | ✅ Xong code, chờ duyệt |
 | C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, một Claude riêng chỉ đọc review) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
@@ -138,7 +138,9 @@ xong code, chờ duyệt; B5 xong phần code. Đang làm **B8**, rồi ba bản
 - [x] Admin: staff có quyền chủ phòng ở mọi phòng (qua đúng API của chủ phòng); mọi thao tác chủ
   phòng/admin ghi vào `OwnerAction` (chỉ ghi thêm, trigger PostgreSQL); Django Admin chỉ xem phần
   do actor nắm, xoá được chat, bỏ kick được
-- [ ] Trang thử: chat, xem bàn, xem lại ván, bảng lời/lỗ
+- [x] Trang thử `web/`: chat trực tiếp + người xem ở `/rooms/<id>`, lịch sử + bảng lời/lỗ ở
+  `/rooms/<id>/history`, xem lại từng bước ở `/hands/<id>` (thử tay: 2 người chơi qua WebSocket, xem
+  bằng trình duyệt)
 - [ ] Duyệt với chủ dự án
 
 ### C. Thiết kế + frontend
