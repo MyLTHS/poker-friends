@@ -129,6 +129,20 @@ class TestLegalActions:
             engine.act(check("B"))
         assert exc.value.code == "hand_complete"
 
+    def test_check_raises_the_same_errors_as_act_without_changing_state(self):
+        engine = heads_up()
+        before = engine.view_for(None)
+        with pytest.raises(IllegalAction) as exc:
+            engine.check(raise_to("A", 3))
+        assert exc.value.code == "invalid_amount"
+        assert engine.view_for(None) == before
+
+    def test_check_passes_for_a_legal_action_without_applying_it(self):
+        engine = heads_up()
+        before = engine.view_for(None)
+        engine.check(call("A"))  # does not raise
+        assert engine.view_for(None) == before
+
     def test_short_all_in_does_not_reopen_raising(self):
         engine = build_hand(
             [(1, "SB", 100), (2, "BB", 100), (3, "UTG", 100), (4, "BTN", 13)],

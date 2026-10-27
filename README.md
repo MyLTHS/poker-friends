@@ -10,15 +10,20 @@ No-Limit Texas Hold'em chip ảo cho nhóm bạn. Backend Django + PokerKit.
 
 Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đoán, bài tập) ở [docs/roadmap.md](docs/roadmap.md).
 
-**Đang ở:** A và B1 đã được chủ dự án duyệt (bỏ qua bài tập/ghi bài học để đi nhanh). Đang làm
-**B2 — Dữ liệu**.
+**Đang ở:** A và B1 đã được chủ dự án duyệt; B2 và B3 đã gộp vào `main`, chờ duyệt. B4a và B6
+xong code, chờ duyệt. Đang làm **B5 (phần code)**, rồi B7, B8 và ba bản thiết kế cho C1; B4b (nối
+trang React với backend thật, Playwright) làm sau.
 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
 | A | Nền móng codebase | ✅ Đã duyệt |
 | B1 | Engine luật chơi | ✅ Đã duyệt |
-| B2 | Dữ liệu | 🟡 Đang làm |
-| B3–B8 | Hợp đồng API, realtime, độ bền, tài khoản, phòng, xã hội | 🟡 B3 xong chờ duyệt, B6 có code chờ duyệt, còn lại chưa xong |
+| B2 | Dữ liệu | ✅ Xong code, chờ duyệt |
+| B3 | Hợp đồng API | ✅ Xong code, chờ duyệt |
+| B4 | Bàn chơi realtime | 🟡 B4a (backend) xong code, chờ duyệt; B4b (nối React, Playwright) chưa bắt đầu |
+| B5 | Độ bền + staging | 🟡 Đang làm phần code; staging chờ VPS |
+| B6 | Tài khoản | ✅ Xong code, chờ duyệt |
+| B7–B8 | Phòng, xã hội | ⬜ Chưa bắt đầu |
 | C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, một Claude riêng chỉ đọc review) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
@@ -64,7 +69,7 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
   `TableSession._apply_seven_deuce_bonus()`
 - [x] Ghi một ván đã xong cùng toàn bộ ledger của ván trong một transaction:
   `apps/games/services.py` → `save_completed_hand()` (kiểm tổng bằng 0, gọi lại không ghi thêm)
-- [ ] Gọi `save_completed_hand()` từ table actor (B3–B4, chưa có actor)
+- [x] Gọi `save_completed_hand()` từ table actor (làm ở B4a, cả lúc khôi phục sau crash)
 - [ ] Duyệt với chủ dự án
 
 **B3. Hợp đồng API** (Claude làm, một Claude riêng chỉ đọc review)
@@ -77,9 +82,17 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 
 **B4. Bàn chơi realtime**
 
-- [ ] Table actor + Channels consumer, projection riêng từng người
-- [ ] Ownership ghế, nhiều tab, tự bắt đầu ván mới
-- [ ] Test lệnh đồng thời và lệnh trùng `command_id`; Playwright nhiều trình duyệt
+- [x] B4a: table actor theo [ADR-001](docs/adr/ADR-001-table-actor.md) (`apps/games/actor.py`) +
+  Channels consumer (`apps/games/consumers.py`), mỗi người nhận góc nhìn riêng, mọi message qua
+  `contract.validate_outgoing`
+- [x] B4a: REST vào ghế / rời ghế / snapshot; khách lưu DB ngay khi kết nối (Django session);
+  `manage.py create_demo_room` để thử tay
+- [x] B4a: một user một ghế, 2 tab cùng tài khoản dùng chung ghế, tự bắt đầu ván mới, xoay button,
+  hết giờ tự check/fold (đồng hồ tối thiểu, đầy đủ ở B5)
+- [x] B4a: test lệnh đồng thời, trùng `command_id`, hết giờ đua với lệnh, khôi phục sau crash
+  (kể cả ván xong mà chưa lưu), fail-stop; chơi thật một ván 2 người qua Daphne
+- [ ] B4b: trang React nối backend thật; Playwright nhiều trình duyệt
+- [ ] Duyệt với chủ dự án
 
 **B5. Độ bền + staging**
 
