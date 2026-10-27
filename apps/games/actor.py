@@ -549,7 +549,9 @@ class TableActor:
 
     def _hand_view(self, viewer: str) -> dict[str, Any] | None:
         engine = self.session.current_hand
-        if engine is None:
+        if engine is None or self.hand is None:
+            # Also while a new hand is dealt in memory but its Hand row is not saved yet
+            # (_maybe_start_hand awaits that save): to a snapshot it is still between hands.
             return None
         seated = viewer if viewer in engine.player_order else None
         return {"hand_id": self.hand.pk, "hand_no": self.session.hand_no, **engine.view_for(seated)}
@@ -582,7 +584,7 @@ class TableActor:
 
     def _turn_info(self) -> dict[str, Any] | None:
         engine = self.session.current_hand
-        if engine is None or engine.actor is None or self._deadline is None:
+        if engine is None or self.hand is None or engine.actor is None or self._deadline is None:
             return None
         return {
             "player_id": engine.actor,

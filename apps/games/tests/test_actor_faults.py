@@ -237,3 +237,26 @@ class TestAfterTheCommandIsRecorded:
 
         run_async(body)
 
+
+class TestSnapshotWhileDealing:
+    """Point 5: a snapshot taken while the new hand is being recorded must not crash."""
+
+    def test_snapshot_between_deal_and_record(self, monkeypatch):
+        room, a, b = heads_up_room()
+        errors = []
+        real_create = Hand.objects.acreate
+
+        async def slow_create(**kwargs):
+            try:
+                actor_module._actors[room.pk].snapshot_message(str(a.pk))
+            except Exception as error:  # noqa: BLE001 - recording what a GET would hit
+                errors.append(repr(error))
+            return await real_create(**kwargs)
+
+        async def body():
+            monkeypatch.setattr(Hand.objects, "acreate", slow_create)
+            ca, cb = await connect(room, a), await connect(room, b)
+            await started_hand(ca, cb)
+
+        run_async(body)
+        assert errors == []
