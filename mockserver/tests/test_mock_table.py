@@ -282,3 +282,26 @@ def test_a_projection_for_the_wrong_player_is_never_sent(table, monkeypatch):
     monkeypatch.setattr(table, "_hand_view", wrong_view)
     with pytest.raises(contract.ContractError, match="another player's cards"):
         table.tick()
+
+
+def test_a_command_id_is_unique_per_hand_not_forever(table, clock):
+    # Like the database's unique (hand, command_id): the same id in the next hand is a new command.
+    out = start(table, ("lym", "1"))
+    first_hand = to(out, "lym", "hand.started")[0]["hand_id"]
+    act(table, "lym", first_hand, "fold", command_id="cmd-same-0001")
+    out = []
+    for _ in range(30):
+        clock.advance(1.0)
+        out += table.tick()
+        if to(out, "lym", "hand.started"):
+            break
+    out += run_bots(table, clock)
+    second_hand = to(out, "lym", "hand.started")[0]["hand_id"]
+    assert second_hand == first_hand + 1
+
+    legal = table.session.current_hand.legal_actions("1")
+    kind = "check" if legal.can_check else "call"
+    out = act(table, "lym", second_hand, kind, command_id="cmd-same-0001")
+    assert [m["payload"]["code"] for m in to(out, "lym", "command.rejected")] == []
+    assert to(out, "lym", "command.ack")[0]["payload"]["duplicate"] is False
+    assert len(to(out, "lym", "action.applied")) == 1

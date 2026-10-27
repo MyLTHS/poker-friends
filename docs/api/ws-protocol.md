@@ -77,9 +77,16 @@ một lần thử lại.
 | Cùng `command_id` nhưng nội dung khác (ví dụ raise 30 rồi raise 60) | Trả `command.rejected` mã `command_id_reused`. Không áp gì |
 | Lần trước lệnh này bị từ chối | Lệnh bị từ chối không được lưu (ADR-001), nên được xét lại như lệnh mới; thường sẽ bị từ chối lại cùng mã |
 
-Phạm vi chống trùng: `command.act` theo **ván** (DB có ràng buộc duy nhất `(hand, command_id)` trên
-`HandCommand`); `command.sit_out` / `command.sit_in` theo **phòng**, actor nhớ trong bộ nhớ các
-`command_id` gần đây.
+Phạm vi chống trùng:
+
+- `command.act`: khoá là **`(hand_id, command_id)`**, giống ràng buộc duy nhất `(hand, command_id)`
+  của `HandCommand` trong DB, nên **bền qua khởi động lại**. Cùng `command_id` ở một ván khác là
+  một lệnh mới (dù client vẫn nên tạo id mới cho mỗi ý định).
+- `command.sit_out` / `command.sit_in`: khoá là `command_id` trong phạm vi **phòng**, và **chỉ nằm
+  trong bộ nhớ** của server: **không bền qua khởi động lại**. Sau khi server khởi động lại, gửi lại
+  một sit-out đã áp sẽ nhận `command.rejected` mã `already_sitting_out` (hoặc `not_sitting_out` với
+  sit-in) thay vì ack trùng. Client coi hai mã này là "ghế đã ở đúng trạng thái mình muốn". B5 xem
+  lại có cần lưu bền hay không.
 
 Ví dụ bấm đúp nút Call (cả hai lần cùng `command_id`):
 

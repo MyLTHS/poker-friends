@@ -86,8 +86,11 @@ class MockTable:
         self.version = 0
         self.connections: dict[str, str] = {}  # connection id -> player id
         self._spectators = 0
-        # command_id -> (what was asked, version of the first event it caused)
-        self._applied: dict[str, tuple[tuple, int]] = {}
+        # Applied commands, keyed like the contract scopes them: (hand_id, command_id) for
+        # command.act, like the database's unique (hand, command_id); (None, command_id) for
+        # sit-out/sit-in, which only this process remembers (lost on restart).
+        # Value: (what was asked, version of the first event it caused).
+        self._applied: dict[tuple[int | None, str], tuple[tuple, int]] = {}
         self._script: dict[str, list[str]] = {}  # bot moves left for the running hand
         self._turn_started = 0.0
         self._deadline: float | None = None
@@ -150,9 +153,10 @@ class MockTable:
     def _command(self, conn: str, message: dict[str, Any]) -> list[Outbound]:
         player_id = self.player_of(conn)
         command_id = message["command_id"]
-        asked = (player_id, message["type"], message.get("hand_id"), json.dumps(message["payload"]))
-        if command_id in self._applied:
-            first_asked, result_version = self._applied[command_id]
+        asked = (player_id, message["type"], json.dumps(message["payload"]))
+        key = (message.get("hand_id"), command_id)
+        if key in self._applied:
+            first_asked, result_version = self._applied[key]
             if first_asked != asked:
                 return [self._rejected(conn, command_id, "command_id_reused")]
             return [self._ack(conn, command_id, result_version, duplicate=True)]
@@ -167,7 +171,7 @@ class MockTable:
             out = handler(player_id, message)
         except Reject as reject:
             return [self._rejected(conn, command_id, reject.code, str(reject))]
-        self._applied[command_id] = (asked, result_version)
+        self._applied[key] = (asked, result_version)
         return out + [self._ack(conn, command_id, result_version)]
 
     def _act(self, player_id: str, message: dict[str, Any]) -> list[Outbound]:
