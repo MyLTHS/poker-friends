@@ -10,6 +10,7 @@ import os
 import django
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.security.websocket import AllowedHostsOriginValidator
 from django.core.asgi import get_asgi_application
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -22,6 +23,10 @@ from apps.games.routing import websocket_urlpatterns  # noqa: E402  (after djang
 application = ProtocolTypeRouter(
     {
         "http": http_application,
-        "websocket": AuthMiddlewareStack(URLRouter(websocket_urlpatterns)),
+        # Origin must be one of ALLOWED_HOSTS: another site cannot open a socket with our
+        # visitors' cookies. Browsers always send Origin; scripts must set it.
+        "websocket": AllowedHostsOriginValidator(
+            AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
+        ),
     }
 )

@@ -39,7 +39,7 @@ from .models import (
     RoomSeat,
     User,
 )
-from .services import HandPersistenceError, save_completed_hand
+from .services import save_completed_hand
 
 # save_completed_hand() is synchronous (one transaction.atomic block); run it in a thread.
 asave_completed_hand = database_sync_to_async(save_completed_hand)
@@ -154,6 +154,7 @@ class TableActor:
         self.resume_deadline: datetime | None = None  # set by _recover() for a hand in progress
         self.pending: dict[str, Any] = {}  # owner's setting changes waiting for the next hand
         self.closing = False  # the owner closed the room during a hand
+        self.banned: set[str] = set()  # kicked players (RoomBan), checked by the one writer
         self._audience: list[dict[str, str]] = []  # last spectator list sent (B8)
         self._task = asyncio.create_task(self._run())
 
@@ -237,6 +238,9 @@ class TableActor:
     async def _run(self) -> None:
         if self.hand is not None and self.session.current_hand.actor is not None:
             await self._schedule_turn(self.resume_deadline)
+        elif self.hand is None and not self.suspended:
+            # Restarted between hands with owner changes still waiting: apply them now.
+            await self._between_hands()
         while True:
             item = await self._queue.get()
             try:
@@ -270,6 +274,8 @@ class TableActor:
                 await self._on_chat(item)
             case _Call():
                 try:
+                    if self.suspended:
+                        raise Reject("room_suspended")
                     result = await item.fn()
                 except Exception as error:
                     item.future.set_exception(error)
@@ -280,6 +286,12 @@ class TableActor:
 
     async def _on_connect(self, item: _Connect) -> None:
         player_id = item.player_id
+        if player_id in self.banned:
+            # Kicked after the consumer checked, before this connection reached the queue.
+            layer = get_channel_layer()
+            if layer is not None:
+                await layer.send(item.channel, {"type": "table.close", "code": KICKED_CLOSE_CODE})
+            return
         was_connected = self._connected(player_id)
         self.connections[item.conn] = player_id
         self.channels[item.conn] = item.channel
@@ -517,7 +529,11 @@ class TableActor:
         new_entries = self.session.ledger[before:]
         try:
             await asave_completed_hand(self.room, hand_no, engine, new_entries)
-        except HandPersistenceError as error:
+        except Exception as error:
+            # Not stored, whatever the reason (a conflict, the database down): the in-memory
+            # ledger is now ahead of the database, so stop the room. A restart replays and
+            # stores the hand (ADR-001 mục 4.3).
+            log.exception("room %s: saving hand %s failed", self.room.pk, hand_pk)
             await self._fail_stop(f"save_completed_hand failed: {error}", hand_id=hand_pk)
             raise RoomSuspended from error
 
@@ -535,12 +551,19 @@ class TableActor:
             },
             hand_id=hand_pk,
         )
-        # Between hands now: the owner's changes made during the hand take effect.
-        if self.pending:
-            await self._apply_settings()
-        if self.closing:
-            await self._finish_close()
-        else:
+        await self._between_hands()
+
+    async def _between_hands(self) -> None:
+        """The owner's changes made during the hand take effect, then the next hand (or none)."""
+        try:
+            if self.pending:
+                await self._apply_settings()
+            if self.closing:
+                await self._finish_close()
+        except Exception:
+            # Not applied, still pending (and stored): log it, but never stall the table.
+            log.exception("room %s: applying the owner's changes failed", self.room.pk)
+        if not self.closed and not self.closing:
             self._schedule_next_hand()
 
     # ---- seats (REST) ----------------------------------------------------------------------
@@ -548,6 +571,10 @@ class TableActor:
     async def _on_take_seat(self, item: _TakeSeat) -> None:
         player_id = str(item.user.pk)
         try:
+            if self.suspended:
+                raise Reject("room_suspended")
+            if player_id in self.banned:
+                raise Reject("kicked")
             if self.closed or self.closing:
                 raise Reject("room_closed")
             if player_id in self.session.seats.values():
@@ -572,6 +599,8 @@ class TableActor:
     async def _on_leave_seat(self, item: _LeaveSeat) -> None:
         player_id = str(item.user.pk)
         try:
+            if self.suspended:
+                raise Reject("room_suspended")
             if player_id not in self.session.seats.values():
                 raise Reject("not_seated")
             seat = self._seat_of(player_id)
@@ -609,15 +638,32 @@ class TableActor:
         merged = {**current, **self.pending, **changes}
         if merged["small_blind"] >= merged["big_blind"]:
             raise Reject("validation_error", "small_blind must be below big_blind")
-        self.pending.update(changes)
         if self.hand is None:
+            self.pending.update(changes)
             await self._apply_settings()
+            return
+        # Kept in the database too, so a restart before the hand ends does not lose them.
+        await Room.objects.filter(pk=self.room.pk).aupdate(
+            pending_settings={**self.pending, **changes}
+        )
+        self.pending.update(changes)
+        self.room.pending_settings = dict(self.pending)
 
     async def _apply_settings(self) -> None:
-        changes, self.pending = self.pending, {}
+        changes = dict(self.pending)
+        before = {key: getattr(self.room, key) for key in changes}
         for key, value in changes.items():
             setattr(self.room, key, value)
-        await self.room.asave(update_fields=list(changes))
+        self.room.pending_settings = {}
+        try:
+            await self.room.asave(update_fields=[*changes, "pending_settings"])
+        except Exception:
+            # Not saved: memory goes back to what the database has.
+            for key, value in before.items():
+                setattr(self.room, key, value)
+            self.room.pending_settings = changes
+            raise
+        self.pending = {}
         self.session.small_blind = self.room.small_blind
         self.session.big_blind = self.room.big_blind
         self.session.seven_deuce_bonus = self.room.seven_deuce_bonus
@@ -633,6 +679,7 @@ class TableActor:
             await RoomSeat.objects.filter(room=self.room, user_id=user_id).adelete()
         await RoomBan.objects.aget_or_create(room=self.room, user_id=user_id)
         await RoomMember.objects.filter(room=self.room, user_id=user_id).adelete()
+        self.banned.add(player_id)
         # Drop their connections first so they get nothing more, then close them.
         kicked = [conn for conn, player in self.connections.items() if player == player_id]
         layer = get_channel_layer()
@@ -648,15 +695,20 @@ class TableActor:
         if self.closed:
             return True
         if self.hand is not None:
-            self.closing = True
+            await Room.objects.filter(pk=self.room.pk).aupdate(closing=True)
+            self.room.closing = self.closing = True
             return False
         await self._finish_close()
         return True
 
     async def _finish_close(self) -> None:
+        self.room.status, self.room.closing = Room.Status.CLOSED, False
+        try:
+            await self.room.asave(update_fields=["status", "closing"])
+        except Exception:
+            self.room.status, self.room.closing = Room.Status.OPEN, self.closing
+            raise
         self.closing = False
-        self.room.status = Room.Status.CLOSED
-        await self.room.asave(update_fields=["status"])
         await self._room_updated()
 
     async def _room_updated(self) -> None:
@@ -959,7 +1011,13 @@ async def _recover(room_id: int) -> TableActor:
             before = len(session.ledger)
             session.finish_hand()
             new_entries = session.ledger[before:]
-            await asave_completed_hand(room, last_hand.hand_no, engine, new_entries)
+            try:
+                await asave_completed_hand(room, last_hand.hand_no, engine, new_entries)
+            except Exception:
+                # Same reason it failed live, most likely: open suspended instead of failing
+                # every request to this room (docs/deploy.md: "Bàn tạm dừng").
+                log.exception("room %s: replay of hand %s failed to save", room.pk, last_hand.pk)
+                session.current_hand, poisoned = None, True
         else:
             hand_row = last_hand
             # Only what was left of the clock, counted from the last recorded command (or the
@@ -978,10 +1036,15 @@ async def _recover(room_id: int) -> TableActor:
                 _asked(str(c.player_id), "command.act", payload),
                 None,
             )
+    banned = {str(user_id) async for user_id in room.bans.values_list("user_id", flat=True)}
+    # No await from here on: the actor's task starts at the next one and must see all of this.
     actor = TableActor(room, session, hand_row)
     actor.names.update(names)
     actor._applied.update(applied)
     actor.suspended = poisoned
+    actor.banned = banned
+    actor.pending = dict(room.pending_settings)
+    actor.closing = room.closing
     if hand_row is not None:
         actor.resume_deadline = resume_deadline
     return actor

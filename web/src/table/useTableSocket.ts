@@ -32,10 +32,12 @@ export function useTableSocket(url: string) {
         }
         dispatch({ type: "server", message, receivedAt: Date.now() });
       };
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (socket.current === ws) socket.current = null;
         if (stopped) return;
         dispatch({ type: "socket.closed" });
+        // Kicked (4403) or no access (4404): retrying cannot help (docs/api/ws-protocol.md).
+        if (event.code === 4403 || event.code === 4404) return;
         retry = setTimeout(connect, RETRY_MS[Math.min(attempt++, RETRY_MS.length - 1)]);
       };
     };

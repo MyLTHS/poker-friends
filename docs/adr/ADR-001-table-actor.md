@@ -226,3 +226,16 @@ trùng theo `(hand, command_id)`, khôi phục mục 4 và fail-stop mục 5. Nh
   lại nhận `already_sitting_out` / `not_sitting_out`, client coi là đã đúng trạng thái. Lưu bền thì
   phải thêm bảng chỉ để đổi một mã lỗi thành một ack, không đáng.
 - **Một process ASGI** và cấu hình sau reverse proxy: [docs/deploy.md](../deploy.md).
+
+## Ghi chú khi cài (B7–B8)
+
+- **Thao tác chủ phòng đi qua hàng đợi** (`_Call`): cấp chip, đổi cấu hình, kick, đóng phòng. Nhờ
+  vậy chúng xếp thứ tự cùng ván đang chạy: cấu hình đổi giữa ván để dành (`Room.pending_settings`)
+  và áp ngay sau `hand.completed`; đóng giữa ván (`Room.closing`) cũng chờ ván xong. Cả hai lưu
+  trong DB nên không mất khi khởi động lại. Phòng tạm dừng từ chối các thao tác này.
+- **Người bị kick** nằm trong tập `banned` của actor (nạp từ `RoomBan`), để lệnh ngồi ghế hay kết
+  nối xếp hàng ngay sau lệnh kick cũng bị chặn.
+- **Thông báo** (`chat.message`, `audience.updated`) do actor gửi nhưng không tăng `version`.
+- **Mọi lỗi khi lưu ván xong** (không chỉ `HandPersistenceError`) đều fail-stop: sổ chip trong bộ
+  nhớ đã đi trước DB. Khởi động lại thì khôi phục lưu lại ván; lưu vẫn hỏng thì phòng mở tạm dừng.
+

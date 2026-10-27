@@ -406,8 +406,9 @@ không biết chắc trạng thái nên **dừng phòng** (fail-stop) thay vì �
 
 Chủ phòng đổi blind, thời gian suy nghĩ, thưởng 7-2 hay tên phòng (REST `PATCH /api/rooms/{id}/`),
 hoặc đóng phòng. `room` là `RoomInfo` mới, thay nguyên cục. Đổi lúc đang có ván thì **ván đó giữ
-cấu hình cũ**; sự kiện này được phát khi cấu hình mới bắt đầu có hiệu lực (ngay trước
-`hand.started` của ván sau). Đóng phòng giữa ván cũng chờ ván xong; sau đó `room.status` là
+cấu hình cũ**; sự kiện này được phát khi cấu hình mới bắt đầu có hiệu lực (ngay sau
+`hand.completed`, trước `hand.started` của ván sau). Thay đổi chờ ván sau được lưu
+trong DB nên không mất khi server khởi động lại. Đóng phòng giữa ván cũng chờ ván xong; sau đó `room.status` là
 `"closed"`, server không chia ván mới, vào ghế bị từ chối `room_closed`.
 
 ```json
@@ -422,7 +423,9 @@ cấu hình cũ**; sự kiện này được phát khi cấu hình mới bắt �
 
 Người bị chủ phòng kick: cả bàn nhận `seat.updated` (ghế trống); mọi kết nối của người đó bị server
 đóng với mã **4403**, và người đó không vào lại được phòng (REST trả `kicked`). Kết nối vào phòng
-private mà không có quyền xem: server đóng ngay khi bắt tay với mã **4404**.
+private mà không có quyền xem: mã **4404**. Chưa đăng nhập và IP này đã tạo quá nhiều khách
+(20/giờ): mã **4429**. Server nhận bắt tay rồi mới đóng, để trình duyệt thấy được mã (đóng ngay lúc
+bắt tay thì trình duyệt chỉ thấy 1006). Client **không thử kết nối lại** khi nhận 4403 hay 4404.
 
 ### `chat.message` (thông báo, B8)
 
@@ -487,6 +490,10 @@ số chip **raise tới**, kể cả khi là cược mở đầu vòng). Không 
 Không phải lệnh: không có `command_id`, không có ack. `text` 1–300 ký tự, không toàn khoảng trắng.
 Người ngồi ghế và người xem đều chat được. Gửi quá nhanh (quá 5 dòng trong 10 giây) thì nhận
 `protocol.error` mã `rate_limited` và dòng đó bị bỏ.
+
+Giới hạn chung (B7): mỗi người chơi tối đa 20 message trong 10 giây, mọi loại đều tính (lệnh,
+`resync.request`, chat, cả message sai). Quá thì lệnh nhận `command.rejected` mã `rate_limited`,
+message không phải lệnh nhận `protocol.error` mã `rate_limited`.
 
 ### `resync.request`
 

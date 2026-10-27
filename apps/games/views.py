@@ -9,12 +9,21 @@ import json
 from django.http import HttpRequest, HttpResponseNotAllowed, JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from apps.accounts.ratelimit import RateLimited
+
 from . import actor as actor_module
 from . import rooms
 from .accounts import player_for_request
 from .models import Room, User
 
-CONFLICT_CODES = {"already_seated", "seat_taken", "not_seated", "player_in_hand", "room_closed"}
+CONFLICT_CODES = {
+    "already_seated",
+    "seat_taken",
+    "not_seated",
+    "player_in_hand",
+    "room_closed",
+    "room_suspended",
+}
 
 
 def _error(code: str, message: str, status: int) -> JsonResponse:
@@ -29,7 +38,10 @@ async def _player_in_room(request: HttpRequest, room_id: int) -> tuple[Room, Use
     user = await request.auser()
     if room.is_private and not user.is_authenticated:
         return _error("room_not_found", "No such room.", 404)  # no guest for nothing
-    user = await player_for_request(request)
+    try:
+        user = await player_for_request(request)
+    except RateLimited as exc:
+        return rooms.rate_limited(exc)
     verdict = await rooms.access(room, user)
     if verdict == "hidden":
         return _error("room_not_found", "No such room.", 404)
@@ -41,6 +53,8 @@ async def _player_in_room(request: HttpRequest, room_id: int) -> tuple[Room, Use
 def _status_for(code: str) -> int:
     if code in CONFLICT_CODES:
         return 409
+    if code == "kicked":
+        return 403
     if code == "invalid_seat":
         return 400
     return 400

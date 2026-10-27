@@ -6,18 +6,19 @@ Owner actions go through the room's actor (ADR-001), so they are ordered with th
 """
 
 import json
+import re
 import secrets
 from typing import Any
 
 from asgiref.sync import sync_to_async
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.http import HttpRequest, JsonResponse
 
 from apps.accounts.ratelimit import RateLimit, RateLimited
 
 from . import actor as actor_module
 from .accounts import player_for_request
-from .models import OwnerAction, Room, RoomBan, RoomMember, RoomSeat, User
+from .models import Hand, OwnerAction, Room, RoomBan, RoomMember, RoomSeat, User
 
 ROOMS_PER_USER = RateLimit("rooms-user", limit=10, window=60 * 60)
 # Commands over WebSocket, per player (consumers.py): far above what a person clicks.
@@ -39,6 +40,7 @@ STATUS = {
     "player_in_hand": 409,
     "room_closed": 409,
     "negative_balance": 409,
+    "room_suspended": 409,
     "hand_voided": 409,
     "rate_limited": 429,
 }
@@ -97,11 +99,13 @@ def clean_settings(body: dict[str, Any], allowed: tuple[str, ...]) -> dict[str, 
         if not isinstance(value, kind) or (kind is int and isinstance(value, bool)):
             fields[key] = [f"Must be {kind.__name__}."]
             continue
+        if kind is str:
+            value = value.strip()  # check the length of what will be stored
         size = len(value) if kind is str else value
         if kind is not bool and ((low is not None and size < low) or (high and size > high)):
             fields[key] = [f"Must be between {low} and {high or '∞'}."]
             continue
-        clean[key] = value.strip() if kind is str else value
+        clean[key] = value
     if fields:
         raise BadRequest(fields)
     return clean
@@ -139,10 +143,16 @@ def room_info(room: Room) -> dict[str, Any]:
     live = actor_module._actors.get(room.pk)
     if live is not None:
         return live._room_info()
+    if room.status == Room.Status.CLOSED:
+        status = "closed"
+    else:
+        # No actor yet (nobody opened the room since the server started): an unfinished hand
+        # in the database will be resumed (or suspend the room) when someone does.
+        status = "playing" if getattr(room, "unfinished_hand", False) else "open"
     return {
         "room_id": room.pk,
         "name": room.name,
-        "status": "closed" if room.status == Room.Status.CLOSED else "open",
+        "status": status,
         "max_seats": room.max_seats,
         "small_blind": room.small_blind,
         "big_blind": room.big_blind,
@@ -164,6 +174,13 @@ def room_detail(room: Room, user) -> dict[str, Any]:
         "pending": dict(live.pending) if live is not None and live.pending else None,
         "closing": live.closing if live is not None else False,
     }
+
+
+PLAYER_ID = re.compile(r"[1-9][0-9]*")  # common.schema.json#/$defs/PlayerId, ASCII digits only
+
+
+def is_player_id(value: Any) -> bool:
+    return isinstance(value, str) and PLAYER_ID.fullmatch(value) is not None
 
 
 def new_invite_token() -> str:
@@ -192,7 +209,10 @@ async def _lobby(request: HttpRequest) -> JsonResponse:
         .filter(visible)
         .distinct()
         .select_related("owner")
-        .annotate(seated=Count("seats", distinct=True))
+        .annotate(
+            seated=Count("seats", distinct=True),
+            unfinished_hand=Exists(Hand.objects.filter(room=OuterRef("pk"), completed_at=None)),
+        )
         .order_by("-created_at")
     )
     rows = [
@@ -241,9 +261,11 @@ async def room_item(request: HttpRequest, room_id: int) -> JsonResponse:
     return error("method_not_allowed", "GET or PATCH.")
 
 
-async def _owned_room(request: HttpRequest, room_id: int) -> tuple[Room, Any] | JsonResponse:
-    if request.method != "POST" and request.method != "PATCH":
-        return error("method_not_allowed", "POST.")
+async def _owned_room(
+    request: HttpRequest, room_id: int, method: str = "POST"
+) -> tuple[Room, Any] | JsonResponse:
+    if request.method != method:
+        return error("method_not_allowed", f"{method} only.")
     user = await request.auser()
     if not user.is_authenticated:
         return error("not_authenticated", "Log in first.")
@@ -269,7 +291,7 @@ def _reject_response(reject: actor_module.Reject) -> JsonResponse:
 
 
 async def _update(request: HttpRequest, room_id: int) -> JsonResponse:
-    owned = await _owned_room(request, room_id)
+    owned = await _owned_room(request, room_id, method="PATCH")
     if isinstance(owned, JsonResponse):
         return owned
     room, user = owned
@@ -297,7 +319,7 @@ async def grant_chips(request: HttpRequest, room_id: int) -> JsonResponse:
         body = read_json(request)
         player_id, amount = body.get("player_id"), body.get("amount")
         fields = {}
-        if not isinstance(player_id, str) or not player_id.isdigit():
+        if not is_player_id(player_id):
             fields["player_id"] = ["A player_id string."]
         if not isinstance(amount, int) or isinstance(amount, bool) or amount == 0:
             fields["amount"] = ["A non-zero integer."]
@@ -322,7 +344,7 @@ async def kick(request: HttpRequest, room_id: int) -> JsonResponse:
     try:
         body = read_json(request)
         player_id = body.get("player_id")
-        if not isinstance(player_id, str) or not player_id.isdigit() or set(body) != {"player_id"}:
+        if not is_player_id(player_id) or set(body) != {"player_id"}:
             raise BadRequest({"player_id": ["A player_id string."]})
         if int(player_id) == user.pk:
             raise BadRequest({"player_id": ["The owner cannot kick themselves."]})
@@ -373,7 +395,10 @@ async def join(request: HttpRequest) -> JsonResponse:
     room = await Room.objects.select_related("owner").filter(invite_token=token).afirst()
     if room is None:
         return error("room_not_found", "Bad or old invite link.")
-    user = await player_for_request(request)
+    try:
+        user = await player_for_request(request)
+    except RateLimited as exc:
+        return rate_limited(exc)
     if await RoomBan.objects.filter(room=room, user=user).aexists():
         return error("kicked", "The owner removed you from this room.")
     if room.status == Room.Status.CLOSED:

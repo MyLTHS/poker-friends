@@ -38,6 +38,10 @@ class Room(models.Model):
     # link) see them. The token is in the invite link; rotating it kills old links.
     is_private = models.BooleanField(default=False)
     invite_token = models.CharField(max_length=43, unique=True, null=True, blank=True)
+    # Owner's changes made during a hand, applied when it ends (B7). Stored so a restart in
+    # the middle of that hand does not forget them.
+    pending_settings = models.JSONField(default=dict, blank=True)
+    closing = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

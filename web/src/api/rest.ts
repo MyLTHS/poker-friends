@@ -189,7 +189,9 @@ export interface paths {
          * Vào ghế (dự kiến B4)
          * @description Người gọi ngồi vào một ghế trống. Được dealt từ ván kế tiếp nếu có chip trong phòng.
          *     Cả bàn nhận `seat.updated` qua WebSocket. Phòng private cần quyền xem (`room_not_found`);
-         *     người đã bị kick nhận `kicked`; phòng đã đóng nhận `room_closed`.
+         *     người đã bị kick nhận `kicked`; phòng đã đóng nhận `room_closed`; phòng tạm dừng nhận
+         *     `room_suspended`. Chưa đăng nhập thì server tạo khách và đăng nhập luôn (tối đa 20 khách/giờ
+         *     mỗi IP, quá thì `rate_limited`); điều này đúng cho mọi API của bàn và cho WebSocket.
          */
         post: operations["takeSeat"];
         delete?: never;
@@ -820,7 +822,7 @@ export interface components {
              * @description Mã ổn định, client được phép `switch` theo mã.
              * @enum {string}
              */
-            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked" | "hand_not_found" | "hand_voided";
+            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked" | "hand_not_found" | "hand_voided" | "room_suspended";
             /** @description Để đọc log, không hiện cho người chơi. */
             message: string;
             /** @description Chỉ có khi `validation_error`, lỗi theo từng trường của body. */
@@ -1034,7 +1036,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`) */
+        /** @description Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`, `room_suspended`) */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -1147,6 +1149,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getRoom: {
@@ -1169,6 +1172,7 @@ export interface operations {
                     "application/json": components["schemas"]["RoomDetail"];
                 };
             };
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -1368,6 +1372,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
         };
     };
     leaveSeat: {
@@ -1389,8 +1394,10 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getTableSnapshot: {
@@ -1414,7 +1421,9 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getAuthConfig: {

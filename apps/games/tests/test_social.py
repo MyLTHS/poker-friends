@@ -246,7 +246,7 @@ class TestHistory:
 
         room, a, b = heads_up_room()
         hand = unfinished_hand(room, a, b)
-        call_command("void_hand", str(hand.pk), "--reason", "test")
+        call_command("void_hand", str(hand.pk), "--reason", "test", "--force")
         listing = Client().get(f"/api/rooms/{room.pk}/hands/").json()["hands"]
         assert listing[0]["voided"] is True and listing[0]["players"] == []
         response = Client().get(f"/api/hands/{hand.pk}/replay/")

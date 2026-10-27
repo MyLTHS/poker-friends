@@ -219,9 +219,10 @@ class TestPrivateRooms:
             conn.scope["url_route"] = {"kwargs": {"room_id": str(room_id)}}
             conn.scope["user"] = outsider
             conn.scope["session"] = None
-            connected, code = await conn.connect()
-            assert connected is False
-            assert code == 4404
+            # Accepted, then closed: a browser only sees the code after the handshake.
+            connected, _ = await conn.connect()
+            assert connected is True
+            assert await closed_with(conn) == 4404
 
         run_async(body)
 

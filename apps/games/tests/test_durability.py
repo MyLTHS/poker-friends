@@ -161,8 +161,8 @@ class TestPoisonedHand:
     def test_only_an_unfinished_hand_can_be_voided(self):
         room, a, b = heads_up_room()
         hand = unfinished_hand(room, a, b)
-        call_command("void_hand", str(hand.pk), "--reason", "x")
+        call_command("void_hand", str(hand.pk), "--reason", "x", "--force")
         with pytest.raises(CommandError, match="already finished"):
-            call_command("void_hand", str(hand.pk), "--reason", "x")
+            call_command("void_hand", str(hand.pk), "--reason", "x", "--force")
         with pytest.raises(CommandError, match="No hand"):
             call_command("void_hand", "999999", "--reason", "x")

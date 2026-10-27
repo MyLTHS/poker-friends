@@ -130,6 +130,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/rooms/{room_id}/:
     parameters:
       - $ref: "#/components/parameters/RoomId"
@@ -147,6 +149,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RoomDetail"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -316,7 +320,9 @@ paths:
       description: |
         Người gọi ngồi vào một ghế trống. Được dealt từ ván kế tiếp nếu có chip trong phòng.
         Cả bàn nhận `seat.updated` qua WebSocket. Phòng private cần quyền xem (`room_not_found`);
-        người đã bị kick nhận `kicked`; phòng đã đóng nhận `room_closed`.
+        người đã bị kick nhận `kicked`; phòng đã đóng nhận `room_closed`; phòng tạm dừng nhận
+        `room_suspended`. Chưa đăng nhập thì server tạo khách và đăng nhập luôn (tối đa 20 khách/giờ
+        mỗi IP, quá thì `rate_limited`); điều này đúng cho mọi API của bàn và cho WebSocket.
       x-phase: B4
       requestBody:
         required: true
@@ -343,6 +349,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/rooms/{room_id}/seats/me/:
     parameters:
       - $ref: "#/components/parameters/RoomId"
@@ -359,10 +367,14 @@ paths:
           description: Đã rời ghế
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/rooms/{room_id}/snapshot/:
     parameters:
       - $ref: "#/components/parameters/RoomId"
@@ -383,8 +395,12 @@ paths:
                 $ref: "#/components/schemas/TableSnapshot"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/auth/config/:
     get:
       tags: [auth]
@@ -1282,6 +1298,7 @@ components:
             - kicked
             - hand_not_found
             - hand_voided
+            - room_suspended
           description: Mã ổn định, client được phép `switch` theo mã.
         message:
           type: string
@@ -1321,7 +1338,7 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
     Conflict:
-      description: Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`)
+      description: Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`, `room_suspended`)
       content:
         application/json:
           schema:
