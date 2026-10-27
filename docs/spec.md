@@ -33,6 +33,7 @@ không tiền thật, không rake. Quy mô 10–20 người, 1 server.
 | 24 | TDD | Có |
 | 25 | API | Phục vụ web của dự án, thiết kế chuẩn để dùng lại cho app mobile |
 | 26 | Dự án | Django mới hoàn toàn |
+| 27 | Luật 7-2 | Luôn bật cho mọi phòng. Ai **thắng một ván tại showdown** (phải lật bài, thắng do mọi người khác fold trước không tính) mà cầm đúng hạng **7 và 2** (bất kỳ chất, cùng chất hay khác chất đều tính) thì **mọi người khác đang ngồi bàn** (kể cả đang sit-out) phải trả thêm một số chip **cố định, chủ phòng tự cấu hình theo phòng** (`Room.seven_deuce_bonus`, mặc định 0 = không có thưởng) cho người thắng, ngoài số chip thắng ở pot |
 
 ## Kiến trúc (tối giản cho 20 người)
 
@@ -57,10 +58,16 @@ apps/games/actor.py    # lớp điều phối — table actor + Channels consume
   `timeout` (tự check nếu được, không thì fold), `view_for(player)` — projection che bài úp của
   người khác, `record()`/`replay()` để tái tạo đúng kết quả từ (cấu hình + thứ tự bộ bài + danh
   sách action). Có chốt chặn nội bộ: tổng chip đổi khác 0 sau mỗi `act()` → ném `RuntimeError`
-  ngay, không để lọt.
+  ngay, không để lọt. `showdown_seven_deuce_winners()` — luật 7-2 (#27): trả về những người
+  thắng **tại showdown** (bài đã lật — thắng do người khác fold không tính, vì lúc đó không ai
+  chứng minh được bài gì) đang cầm đúng hạng 7 và 2 (`hole_card_statuses` toàn `True` mới coi là
+  đã lật; bất kỳ chất bài).
 - **`table.py` — `TableSession`** — nhiều ván liên tiếp trên một bàn: xoay ghế/button, sit-out /
-  sit-in, cấp chip giữa các ván, ledger tạm trong bộ nhớ, bảng tổng kết. Khi lên B2, phần ledger
-  này được thay bằng bản ghi DB bền vững (xem mục 2).
+  sit-in, cấp chip giữa các ván, ledger tạm trong bộ nhớ, bảng tổng kết. `seven_deuce_bonus`
+  (mặc định 0): khi `finish_hand()` phát hiện người thắng luật 7-2, mọi người khác đang ngồi bàn
+  (kể cả sit-out) bị trừ đúng số chip này, người thắng được cộng tổng — luôn cân bằng về 0 trong
+  phòng, không ảnh hưởng bất biến bảo toàn chip. Khi lên B2, phần ledger này được thay bằng bản
+  ghi DB bền vững (xem mục 2).
 - **`simulate.py`** — bot ngẫu nhiên chạy N ván, dùng trong test + CI để kiểm bất biến (không
   mất/sinh chip, không lộ bài) ở quy mô lớn (hàng nghìn ván) mà property test đơn lẻ khó phủ hết.
 
@@ -76,9 +83,9 @@ Model dự kiến:
 | Model | Vai trò | Ghi chú |
 |---|---|---|
 | `User` | Tài khoản, có cờ `is_guest` | Khách nâng cấp lên thật vẫn giữ nguyên `id` → giữ lịch sử + chip |
-| `Room` | Một bàn/phòng chơi | Trạng thái `open → playing → closed`; cấu hình blind, số ghế, thời gian suy nghĩ |
+| `Room` | Một bàn/phòng chơi | Trạng thái `open → playing → closed`; cấu hình blind, số ghế, thời gian suy nghĩ, `seven_deuce_bonus` (luật #27, 0 = tắt thưởng) |
 | `RoomSeat` | Một người ngồi ở một ghế của một `Room` | Gắn `User` ↔ `Room`, số ghế, trạng thái sit-out |
-| `LedgerEntry` | Bút toán chip | **Chỉ ghi thêm (append-only)** — không `UPDATE`/`DELETE` dòng cũ; mọi thay đổi chip (cấp, kết quả ván) là một dòng mới |
+| `LedgerEntry` | Bút toán chip | **Chỉ ghi thêm (append-only)** — không `UPDATE`/`DELETE` dòng cũ; mọi thay đổi chip (cấp, kết quả ván, thưởng luật 7-2) là một dòng mới. `kind`: `grant` / `hand` / `seven_deuce` |
 | `Hand` | Một ván đã chơi xong | Lưu `HandConfig` (ghế/stack/button/blind/bộ bài) + kết quả, đủ để `HandEngine.replay()` lại |
 | `HandCommand` | Một lệnh người chơi đã được áp dụng vào một `Hand` | Ghi **trước khi** áp vào engine (xem mục 3) — là nguồn phục hồi khi process chết giữa ván |
 

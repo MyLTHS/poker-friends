@@ -310,3 +310,31 @@ class TestReplay:
         record = self.play_sample_hand().record()
         kinds = [a["kind"] for a in record["actions"]]
         assert kinds[:8] == ["raise", "call", "raise", "call", "fold", "raise", "call", "check"]
+
+
+class TestSevenDeuceBonus:
+    def test_a_showdown_win_with_seven_deuce_is_flagged(self):
+        # A's 7h2h plus the board makes a full house, beating B's two pair of aces and sevens.
+        engine = heads_up(holes={"A": "7h2h", "B": "AsAd"}, board="7d7c2s9h4c")
+        engine.act(call("A"))
+        check_down(engine)
+        assert engine.showdown_seven_deuce_winners() == ("A",)
+
+    def test_winning_without_a_showdown_is_not_flagged(self):
+        # A would have held 7-2, but B folds: nobody's cards are proven, no bonus.
+        engine = heads_up(holes={"A": "7c2d", "B": "AcAd"}, board="KhQs9c5d3h")
+        engine.act(raise_to("A", 6))
+        engine.act(fold("B"))
+        assert engine.showdown_seven_deuce_winners() == ()
+
+    def test_a_showdown_loss_with_seven_deuce_is_not_flagged(self):
+        engine = heads_up(holes={"A": "7c2d", "B": "AcAd"}, board="KhQs9c5d3h")
+        engine.act(call("A"))
+        check_down(engine)
+        assert engine.showdown_seven_deuce_winners() == ()
+
+    def test_a_normal_showdown_win_is_not_flagged(self):
+        engine = heads_up(holes={"A": "AcAd", "B": "7c2d"}, board="KhQs9c5d3h")
+        engine.act(call("A"))
+        check_down(engine)
+        assert engine.showdown_seven_deuce_winners() == ()

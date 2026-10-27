@@ -20,6 +20,16 @@ def make_room(**kwargs) -> Room:
     return Room.objects.create(**defaults)
 
 
+class TestRoomConfig:
+    def test_seven_deuce_bonus_defaults_to_disabled(self):
+        room = make_room()
+        assert room.seven_deuce_bonus == 0
+
+    def test_a_room_can_configure_a_seven_deuce_bonus(self):
+        room = make_room(seven_deuce_bonus=50)
+        assert Room.objects.get(pk=room.pk).seven_deuce_bonus == 50
+
+
 def make_user(username: str, is_guest: bool = False) -> User:
     return User.objects.create_user(username=username, is_guest=is_guest)
 
@@ -46,6 +56,23 @@ class TestLedgerInvariant:
             room=room, user=alice, kind=LedgerKind.HAND, amount=50, hand_no=1
         )
         LedgerEntry.objects.create(room=room, user=bob, kind=LedgerKind.HAND, amount=-50, hand_no=1)
+
+        total = LedgerEntry.objects.filter(room=room).aggregate(total=Sum("amount"))["total"]
+        assert total == granted
+
+    def test_seven_deuce_bonus_does_not_change_the_room_total_either(self):
+        room = make_room()
+        alice, bob = make_user("alice"), make_user("bob")
+        LedgerEntry.objects.create(room=room, user=alice, kind=LedgerKind.GRANT, amount=1000)
+        LedgerEntry.objects.create(room=room, user=bob, kind=LedgerKind.GRANT, amount=1000)
+        granted = LedgerEntry.objects.filter(room=room).aggregate(total=Sum("amount"))["total"]
+
+        LedgerEntry.objects.create(
+            room=room, user=alice, kind=LedgerKind.SEVEN_DEUCE, amount=50, hand_no=1
+        )
+        LedgerEntry.objects.create(
+            room=room, user=bob, kind=LedgerKind.SEVEN_DEUCE, amount=-50, hand_no=1
+        )
 
         total = LedgerEntry.objects.filter(room=room).aggregate(total=Sum("amount"))["total"]
         assert total == granted

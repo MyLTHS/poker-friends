@@ -28,6 +28,9 @@ class Room(models.Model):
     small_blind = models.PositiveIntegerField()
     big_blind = models.PositiveIntegerField()
     think_time_seconds = models.PositiveIntegerField(default=30)
+    # Fixed chip bonus every other seated player (sit-out included) owes a showdown winner
+    # holding a 7 and a 2 (any suits). 0 means the room has no seven-deuce bonus.
+    seven_deuce_bonus = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
@@ -50,6 +53,7 @@ class RoomSeat(models.Model):
 class LedgerKind(models.TextChoices):
     GRANT = "grant", "Grant"
     HAND = "hand", "Hand"
+    SEVEN_DEUCE = "seven_deuce", "Seven-deuce bonus"
 
 
 class AppendOnlyError(ValueError):
@@ -61,7 +65,7 @@ class LedgerEntry(models.Model):
 
     room = models.ForeignKey(Room, on_delete=models.PROTECT, related_name="ledger_entries")
     user = models.ForeignKey(User, on_delete=models.PROTECT, related_name="ledger_entries")
-    kind = models.CharField(max_length=10, choices=LedgerKind.choices)
+    kind = models.CharField(max_length=11, choices=LedgerKind.choices)
     amount = models.IntegerField()
     hand_no = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -25,6 +25,7 @@ AUTOMATIONS = (
 )
 
 HIDDEN_CARD = "??"
+SEVEN_DEUCE_RANKS = frozenset({"7", "2"})
 
 
 class ActionKind(StrEnum):
@@ -153,6 +154,26 @@ class HandEngine:
         final = self.stacks()
         net = {p: final[p] - self._starting_stacks[i] for i, p in enumerate(self.player_order)}
         return HandResult(final_stacks=final, net=net)
+
+    def showdown_seven_deuce_winners(self) -> tuple[str, ...]:
+        """Winners who proved a 7 and a 2 (any suits) at showdown.
+
+        A win by everyone else folding is not a showdown: the winner's hole cards stay face
+        down (``hole_card_statuses`` all ``False``), so nobody actually proved what they held
+        and the bonus never applies to it, regardless of what the cards were.
+        """
+        net = self.result().net
+        winners = []
+        for i, player in enumerate(self.player_order):
+            if net[player] <= 0:
+                continue
+            shown = self._state.hole_card_statuses[i]
+            if not shown or not all(shown):
+                continue
+            ranks = {card_code(c)[0] for c in self._state.hole_cards[i]}
+            if ranks == SEVEN_DEUCE_RANKS:
+                winners.append(player)
+        return tuple(winners)
 
     # ---- actions -----------------------------------------------------------------------
 

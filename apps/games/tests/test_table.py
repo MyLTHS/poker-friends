@@ -5,7 +5,7 @@ import pytest
 from apps.games.engine.cards import shuffled_deck
 from apps.games.engine.table import LedgerKind, TableError, TableSession
 
-from .helpers import call, check_down, fold, raise_to
+from .helpers import call, check_down, fold, make_deck, raise_to
 
 
 def make_table(**kwargs) -> TableSession:
@@ -174,3 +174,71 @@ class TestChipsAndLedger:
         assert sum(row.net for row in summary.values()) == 0
         assert all(row.granted == 100 for row in summary.values())
         assert sum(row.stack for row in summary.values()) == 300
+
+
+class TestSevenDeuceBonus:
+    def test_disabled_by_default(self):
+        table = seated_table("A", "B")  # make_table() does not pass seven_deuce_bonus
+        assert table.seven_deuce_bonus == 0
+
+    def test_a_showdown_seven_deuce_win_charges_the_other_player(self):
+        table = make_table(seven_deuce_bonus=50)
+        table.take_seat("A", 1)
+        table.take_seat("B", 2)
+        table.grant_chips("A", 100)
+        table.grant_chips("B", 100)
+
+        # Button is seat 1 (A) on the first hand -> player_order is (B, A), A is the SB who
+        # acts first heads-up. A's 7h2h plus the board makes a full house over B's two pair.
+        deck = make_deck(["B", "A"], holes={"A": "7h2h", "B": "AsAd"}, board="7d7c2s9h4c")
+        table._shuffle = lambda: deck
+        hand = table.start_hand()
+        hand.act(call(hand.actor))
+        check_down(hand)
+        table.finish_hand()
+
+        bonus_entries = [e for e in table.ledger if e.kind == LedgerKind.SEVEN_DEUCE]
+        assert {(e.player_id, e.amount) for e in bonus_entries} == {("A", 50), ("B", -50)}
+        # Zero-sum: the room's total chips are unaffected by the bonus.
+        assert sum(table.stacks.values()) == 200
+
+    def test_no_bonus_entries_when_disabled(self):
+        table = make_table(seven_deuce_bonus=0)
+        table.take_seat("A", 1)
+        table.take_seat("B", 2)
+        table.grant_chips("A", 100)
+        table.grant_chips("B", 100)
+
+        deck = make_deck(["B", "A"], holes={"A": "7h2h", "B": "AsAd"}, board="7d7c2s9h4c")
+        table._shuffle = lambda: deck
+        hand = table.start_hand()
+        hand.act(call(hand.actor))
+        check_down(hand)
+        table.finish_hand()
+
+        assert [e for e in table.ledger if e.kind == LedgerKind.SEVEN_DEUCE] == []
+
+    def test_every_other_seated_player_pays_including_sitting_out(self):
+        """Unit test of the payout split: every other seated player owes the bonus, whether or
+        not they played this hand. Exercised directly rather than through real cards, because
+        crafting a 4-way showdown deck adds nothing over the 2-player integration test above.
+        """
+        table = make_table(seven_deuce_bonus=10)
+        for seat, player in enumerate(["A", "B", "C", "D"], start=1):
+            table.take_seat(player, seat)
+            table.grant_chips(player, 100)
+        table.sit_out("D")
+
+        class StubHand:
+            def showdown_seven_deuce_winners(self):
+                return ("A",)
+
+        table._apply_seven_deuce_bonus(StubHand())
+
+        bonus_entries = [e for e in table.ledger if e.kind == LedgerKind.SEVEN_DEUCE]
+        assert {(e.player_id, e.amount) for e in bonus_entries} == {
+            ("A", 30),
+            ("B", -10),
+            ("C", -10),
+            ("D", -10),
+        }

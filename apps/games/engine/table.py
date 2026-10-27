@@ -17,6 +17,7 @@ from .hand import HandConfig, HandEngine, Seat
 class LedgerKind(StrEnum):
     GRANT = "grant"  # host/admin grant or adjustment (may be negative)
     HAND = "hand"  # net result of one hand
+    SEVEN_DEUCE = "seven_deuce"  # bonus for winning a hand at showdown holding 7-2
 
 
 @dataclass(frozen=True)
@@ -47,10 +48,12 @@ class TableSession:
         big_blind: int,
         max_seats: int = 9,
         shuffle: Callable[[], tuple[str, ...]] = shuffled_deck,
+        seven_deuce_bonus: int = 0,
     ):
         self.small_blind = small_blind
         self.big_blind = big_blind
         self.max_seats = max_seats
+        self.seven_deuce_bonus = seven_deuce_bonus
         self._shuffle = shuffle
         self.seats: dict[int, str] = {}
         self.sitting_out: set[str] = set()
@@ -162,9 +165,33 @@ class TableSession:
         for player, delta in hand.result().net.items():
             if delta:
                 self.ledger.append(LedgerEntry(LedgerKind.HAND, player, delta, self.hand_no))
+        self._apply_seven_deuce_bonus(hand)
         self.history.append(hand.record())
         self.current_hand = None
         return hand
+
+    def _apply_seven_deuce_bonus(self, hand: HandEngine) -> None:
+        """Every other seated player (sitting out or not) owes the winner the room's bonus."""
+        if self.seven_deuce_bonus <= 0:
+            return
+        for winner in hand.showdown_seven_deuce_winners():
+            payers = [player for player in self.seats.values() if player != winner]
+            if not payers:
+                continue
+            for payer in payers:
+                self.ledger.append(
+                    LedgerEntry(
+                        LedgerKind.SEVEN_DEUCE, payer, -self.seven_deuce_bonus, self.hand_no
+                    )
+                )
+            self.ledger.append(
+                LedgerEntry(
+                    LedgerKind.SEVEN_DEUCE,
+                    winner,
+                    self.seven_deuce_bonus * len(payers),
+                    self.hand_no,
+                )
+            )
 
     def _next_button(self, eligible_seats: list[int]) -> int:
         if self._button_seat is None:
