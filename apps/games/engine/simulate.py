@@ -1,6 +1,7 @@
 """Random-bot simulation that checks engine invariants over many hands.
 
 python -m apps.games.engine.simulate --hands 5000 --players 9
+python -m apps.games.engine.simulate --hands 2000 --players 2 --seven-deuce-bonus 150
 """
 
 import argparse
@@ -11,13 +12,14 @@ from dataclasses import dataclass, field
 
 from .cards import shuffled_deck
 from .hand import Action, ActionKind, HandEngine
-from .table import TableSession
+from .table import LedgerKind, TableSession
 
 
 @dataclass
 class SimulationReport:
     hands_played: int = 0
     actions: int = 0
+    seven_deuce_hands: int = 0  # hands that paid the 7-2 bonus
     violations: list[str] = field(default_factory=list)
 
 
@@ -57,9 +59,15 @@ def run_simulation(
     chips: int = 200,
     small_blind: int = 1,
     big_blind: int = 2,
+    seven_deuce_bonus: int = 0,
 ) -> SimulationReport:
     rng = random.Random(seed)
-    table = TableSession(small_blind, big_blind, shuffle=lambda: shuffled_deck(rng))
+    table = TableSession(
+        small_blind,
+        big_blind,
+        shuffle=lambda: shuffled_deck(rng),
+        seven_deuce_bonus=seven_deuce_bonus,
+    )
     ids = [f"P{i}" for i in range(1, players + 1)]
     for player, seat in zip(ids, rng.sample(range(1, 10), players), strict=True):
         table.take_seat(player, seat)
@@ -84,10 +92,17 @@ def run_simulation(
         replayed = HandEngine.replay(json.loads(json.dumps(hand.record())))
         if replayed.result() != hand.result():
             report.violations.append(f"hand {hand_no}: replay result differs")
+        if replayed.view_for(None) != hand.view_for(None):
+            report.violations.append(f"hand {hand_no}: replay view differs")
 
+        ledger_before = len(table.ledger)
         table.finish_hand()
+        if any(e.kind == LedgerKind.SEVEN_DEUCE for e in table.ledger[ledger_before:]):
+            report.seven_deuce_hands += 1
         if sum(table.stacks.values()) != granted:
             report.violations.append(f"hand {hand_no}: room chips {sum(table.stacks.values())}")
+        if (low := min(table.stacks.values())) < 0:
+            report.violations.append(f"hand {hand_no}: negative stack {low}")
         report.hands_played += 1
     return report
 
@@ -97,13 +112,17 @@ def main() -> None:
     parser.add_argument("--hands", type=int, default=5000)
     parser.add_argument("--players", type=int, default=9)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seven-deuce-bonus", type=int, default=0)
     args = parser.parse_args()
 
     started = time.perf_counter()
-    report = run_simulation(args.hands, args.players, args.seed)
+    report = run_simulation(
+        args.hands, args.players, args.seed, seven_deuce_bonus=args.seven_deuce_bonus
+    )
     elapsed = time.perf_counter() - started
     print(
         f"{report.hands_played} hands, {report.actions} actions, "
+        f"{report.seven_deuce_hands} seven-deuce bonuses, "
         f"{len(report.violations)} violations in {elapsed:.1f}s"
     )
     for violation in report.violations[:20]:

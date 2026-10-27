@@ -241,6 +241,42 @@ class TestRoomSeatConstraints:
         room, alice = make_room(max_seats=6), make_user("alice")
         RoomSeat.objects.create(room=room, user=alice, seat=6)
 
+    @postgres_only
+    def test_the_database_rejects_a_seat_beyond_the_room(self):
+        room, alice = make_room(max_seats=6), make_user("alice")
+
+        with pytest.raises(IntegrityError, match="beyond"):
+            with transaction.atomic():
+                RoomSeat.objects.bulk_create([RoomSeat(room=room, user=alice, seat=7)])
+        assert not RoomSeat.objects.exists()
+
+    @postgres_only
+    def test_the_database_rejects_moving_to_a_seat_beyond_the_room(self):
+        room, alice = make_room(max_seats=6), make_user("alice")
+        seat = RoomSeat.objects.create(room=room, user=alice, seat=6)
+
+        with pytest.raises(IntegrityError, match="beyond"):
+            with transaction.atomic():
+                RoomSeat.objects.filter(pk=seat.pk).update(seat=7)
+        assert RoomSeat.objects.get(pk=seat.pk).seat == 6
+
+    @postgres_only
+    def test_a_room_cannot_shrink_below_an_occupied_seat(self):
+        room, alice = make_room(max_seats=9), make_user("alice")
+        RoomSeat.objects.create(room=room, user=alice, seat=8)
+
+        with pytest.raises(IntegrityError, match="occupied"):
+            with transaction.atomic():
+                Room.objects.filter(pk=room.pk).update(max_seats=6)
+        assert Room.objects.get(pk=room.pk).max_seats == 9
+
+    def test_a_room_can_shrink_down_to_its_highest_occupied_seat(self):
+        room, alice = make_room(max_seats=9), make_user("alice")
+        RoomSeat.objects.create(room=room, user=alice, seat=6)
+
+        Room.objects.filter(pk=room.pk).update(max_seats=6)
+        assert Room.objects.get(pk=room.pk).max_seats == 6
+
 
 class TestLedgerConstraints:
     def test_amount_cannot_be_zero(self):
@@ -319,6 +355,64 @@ class TestHandCommandIdempotency:
                 HandCommand.objects.create(
                     hand=hand, player=alice, sequence=2, command_id="cmd-1", kind="call"
                 )
+
+
+def make_command() -> HandCommand:
+    hand = make_hand(make_room())
+    return HandCommand.objects.create(
+        hand=hand, player=make_user("alice"), sequence=1, command_id="a", kind="call"
+    )
+
+
+class TestHandCommandAppendOnly:
+    """The command log is how a crashed hand is recovered: like the ledger, never rewritten."""
+
+    def test_cannot_modify_a_stored_command(self):
+        command = make_command()
+        command.kind = "fold"
+        with pytest.raises(AppendOnlyError):
+            command.save()
+
+    def test_cannot_delete_a_stored_command(self):
+        command = make_command()
+        with pytest.raises(AppendOnlyError):
+            command.delete()
+
+    def test_queryset_update_is_blocked(self):
+        command = make_command()
+        with pytest.raises(AppendOnlyError):
+            HandCommand.objects.filter(pk=command.pk).update(kind="fold")
+        assert HandCommand.objects.get(pk=command.pk).kind == "call"
+
+    def test_queryset_delete_is_blocked(self):
+        command = make_command()
+        with pytest.raises(AppendOnlyError):
+            HandCommand.objects.filter(pk=command.pk).delete()
+        assert HandCommand.objects.filter(pk=command.pk).exists()
+
+    def test_bulk_update_is_blocked(self):
+        command = make_command()
+        command.kind = "fold"
+        with pytest.raises(AppendOnlyError):
+            HandCommand.objects.bulk_update([command], ["kind"])
+
+    @postgres_only
+    def test_the_database_rejects_a_raw_update(self):
+        command = make_command()
+        with pytest.raises(DatabaseError, match="append-only"):
+            with transaction.atomic(), connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE games_handcommand SET kind = 'fold' WHERE id = %s", [command.pk]
+                )
+        assert HandCommand.objects.get(pk=command.pk).kind == "call"
+
+    @postgres_only
+    def test_the_database_rejects_a_raw_delete(self):
+        command = make_command()
+        with pytest.raises(DatabaseError, match="append-only"):
+            with transaction.atomic(), connection.cursor() as cursor:
+                cursor.execute("DELETE FROM games_handcommand WHERE id = %s", [command.pk])
+        assert HandCommand.objects.filter(pk=command.pk).exists()
 
 
 class TestHandCommandLog:
