@@ -1,8 +1,8 @@
 """Persistence layer: accounts, rooms, seats, the chip ledger, hands and hand commands.
 
-Chips belong to a room, not to a global wallet (see docs/spec.md). ``LedgerEntry`` is
-append-only by construction: once created, a row is never updated or deleted, so the room's
-chip history can always be replayed from the ledger alone.
+Chips belong to a room, not to a global wallet (see docs/spec.md). ``LedgerEntry`` and
+``HandCommand`` are append-only: once created, a row is never updated or deleted, so a room's
+chip history and every hand can always be replayed from them alone.
 """
 
 from django.contrib.auth.models import AbstractUser
@@ -85,24 +85,43 @@ class AppendOnlyError(ValueError):
     pass
 
 
-class LedgerEntryQuerySet(models.QuerySet):
-    """Blocks the bulk paths that skip ``LedgerEntry.save()``/``delete()``.
+def _append_only(model, action: str) -> AppendOnlyError:
+    return AppendOnlyError(f"{model.__name__} is append-only; a row can never be {action}.")
 
-    A PostgreSQL trigger (migration 0003) rejects UPDATE/DELETE for everything else, raw SQL
-    included.
-    """
+
+class AppendOnlyQuerySet(models.QuerySet):
+    """Blocks the bulk paths that skip ``AppendOnlyModel.save()``/``delete()``."""
 
     def update(self, **kwargs):
-        raise AppendOnlyError("LedgerEntry is append-only; create a new row instead.")
+        raise _append_only(self.model, "updated")
 
     def bulk_update(self, objs, fields, batch_size=None):
-        raise AppendOnlyError("LedgerEntry is append-only; create a new row instead.")
+        raise _append_only(self.model, "updated")
 
     def delete(self):
-        raise AppendOnlyError("LedgerEntry is append-only; it can never be deleted.")
+        raise _append_only(self.model, "deleted")
 
 
-class LedgerEntry(models.Model):
+class AppendOnlyModel(models.Model):
+    """Rows are only ever inserted. PostgreSQL triggers (migrations 0003 and 0007) also reject
+    UPDATE/DELETE from every other path, raw SQL included.
+    """
+
+    objects = AppendOnlyQuerySet.as_manager()
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            raise _append_only(type(self), "updated")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise _append_only(type(self), "deleted")
+
+
+class LedgerEntry(AppendOnlyModel):
     """A chip change for one player in one room. Append-only: never update or delete a row."""
 
     room = models.ForeignKey(Room, on_delete=models.PROTECT, related_name="ledger_entries")
@@ -115,8 +134,6 @@ class LedgerEntry(models.Model):
         "Hand", on_delete=models.PROTECT, related_name="ledger_entries", null=True, blank=True
     )
     created_at = models.DateTimeField(auto_now_add=True)
-
-    objects = LedgerEntryQuerySet.as_manager()
 
     class Meta:
         constraints = [
@@ -133,14 +150,6 @@ class LedgerEntry(models.Model):
                 name="ledgerentry_hand_matches_kind",
             ),
         ]
-
-    def save(self, *args, **kwargs):
-        if self.pk is not None:
-            raise AppendOnlyError("LedgerEntry is append-only; create a new row instead.")
-        super().save(*args, **kwargs)
-
-    def delete(self, *args, **kwargs):
-        raise AppendOnlyError("LedgerEntry is append-only; it can never be deleted.")
 
 
 class Hand(models.Model):
@@ -185,14 +194,15 @@ class Hand(models.Model):
         }
 
 
-class HandCommand(models.Model):
+class HandCommand(AppendOnlyModel):
     """A player command already applied to a hand; ``command_id`` makes replays idempotent.
 
     ``sequence`` (1, 2, 3...) is the order the engine applied the commands in, which is the
     order a replay must use.
     """
 
-    # PROTECT: the command log is how a hand is recovered, so it must outlive any delete.
+    # The command log is how a hand is recovered: append-only, and PROTECT so deleting the
+    # hand cannot take it along.
     hand = models.ForeignKey(Hand, on_delete=models.PROTECT, related_name="commands")
     player = models.ForeignKey(User, on_delete=models.PROTECT, related_name="hand_commands")
     sequence = models.PositiveIntegerField()

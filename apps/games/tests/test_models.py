@@ -357,6 +357,64 @@ class TestHandCommandIdempotency:
                 )
 
 
+def make_command() -> HandCommand:
+    hand = make_hand(make_room())
+    return HandCommand.objects.create(
+        hand=hand, player=make_user("alice"), sequence=1, command_id="a", kind="call"
+    )
+
+
+class TestHandCommandAppendOnly:
+    """The command log is how a crashed hand is recovered: like the ledger, never rewritten."""
+
+    def test_cannot_modify_a_stored_command(self):
+        command = make_command()
+        command.kind = "fold"
+        with pytest.raises(AppendOnlyError):
+            command.save()
+
+    def test_cannot_delete_a_stored_command(self):
+        command = make_command()
+        with pytest.raises(AppendOnlyError):
+            command.delete()
+
+    def test_queryset_update_is_blocked(self):
+        command = make_command()
+        with pytest.raises(AppendOnlyError):
+            HandCommand.objects.filter(pk=command.pk).update(kind="fold")
+        assert HandCommand.objects.get(pk=command.pk).kind == "call"
+
+    def test_queryset_delete_is_blocked(self):
+        command = make_command()
+        with pytest.raises(AppendOnlyError):
+            HandCommand.objects.filter(pk=command.pk).delete()
+        assert HandCommand.objects.filter(pk=command.pk).exists()
+
+    def test_bulk_update_is_blocked(self):
+        command = make_command()
+        command.kind = "fold"
+        with pytest.raises(AppendOnlyError):
+            HandCommand.objects.bulk_update([command], ["kind"])
+
+    @postgres_only
+    def test_the_database_rejects_a_raw_update(self):
+        command = make_command()
+        with pytest.raises(DatabaseError, match="append-only"):
+            with transaction.atomic(), connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE games_handcommand SET kind = 'fold' WHERE id = %s", [command.pk]
+                )
+        assert HandCommand.objects.get(pk=command.pk).kind == "call"
+
+    @postgres_only
+    def test_the_database_rejects_a_raw_delete(self):
+        command = make_command()
+        with pytest.raises(DatabaseError, match="append-only"):
+            with transaction.atomic(), connection.cursor() as cursor:
+                cursor.execute("DELETE FROM games_handcommand WHERE id = %s", [command.pk])
+        assert HandCommand.objects.filter(pk=command.pk).exists()
+
+
 class TestHandCommandLog:
     def test_a_sequence_number_is_used_once_per_hand(self):
         room, alice = make_room(), make_user("alice")
