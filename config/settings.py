@@ -171,3 +171,14 @@ SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
 SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_STORE_TOKENS = False
+
+# The table's own log (apps/games/actor.py): rejected commands at INFO (ADR-001 mục 3), suspended
+# rooms at CRITICAL. Without a handler of its own, Python would drop everything under WARNING.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {
+        "games": {"handlers": ["console"], "level": "INFO"},
+    },
+}

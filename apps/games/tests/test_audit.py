@@ -3,6 +3,8 @@
 Each test here failed before its fix: the audit's probes asserted the faulty behaviour.
 """
 
+import logging
+
 import pytest
 from asgiref.sync import async_to_sync
 from django.test import AsyncClient, Client
@@ -126,3 +128,27 @@ class TestKickRotatesThePrivateInvite:
         room = Room.objects.get(pk=room.pk)
         assert room.invite_token is None
         assert OwnerAction.objects.get(room=room).details == {"player_id": str(a.pk)}
+
+
+class TestRejectedCommandsAreLogged:
+    """ADR-001 mục 3: a rejected command is written nowhere but the log; it was not logged."""
+
+    def test_the_log_line_has_room_hand_sender_command_and_code(self, caplog):
+        caplog.set_level(logging.INFO, logger="games.actor")
+        room, a, b = heads_up_room()
+        seen = {}
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            a_to_act = started["payload"]["hand"]["actor"] == str(a.pk)
+            conn, seen["waiting"] = (cb, b) if a_to_act else (ca, a)
+            seen["hand_id"] = started["hand_id"]
+            await send_act(conn, room, started["hand_id"], "out-of-turn-1", "fold")
+            await drain(conn)
+
+        run_async(body)
+        [line] = [r.getMessage() for r in caplog.records if "out-of-turn-1" in r.getMessage()]
+        for part in (f"room {room.pk}", f"hand {seen['hand_id']}", f"player {seen['waiting'].pk}"):
+            assert part in line
+        assert "not_your_turn" in line

@@ -935,6 +935,16 @@ class TableActor:
         await self._reply(conn, "command.ack", payload)
 
     async def _rejected(self, conn, command_id, code, message="") -> None:
+        # The only trace of a rejected command (ADR-001 mục 3): it never reaches HandCommand.
+        log.info(
+            "room %s hand %s: rejected command %s from player %s: %s %s",
+            self.room.pk,
+            self.hand.pk if self.hand else None,
+            command_id,
+            self.connections.get(conn),
+            code,
+            message,
+        )
         payload = {"command_id": command_id, "code": code, "message": message or code}
         await self._reply(conn, "command.rejected", payload)
 
