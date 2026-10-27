@@ -19,7 +19,7 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 | B1 | Engine luật chơi | ✅ Đã duyệt |
 | B2 | Dữ liệu | 🟡 Đang làm |
 | B3–B8 | Hợp đồng API, realtime, độ bền, tài khoản, phòng, xã hội | ⬜ Chưa bắt đầu |
-| C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Codex làm trên mock từ sau B3) |
+| C1–C5 | Thiết kế + frontend | ⬜ Chưa bắt đầu (Claude làm trên mock từ sau B3, Codex review) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
 | F | Beta với bạn bè | ⬜ |
@@ -67,12 +67,13 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 - [ ] Gọi `save_completed_hand()` từ table actor (B3–B4, chưa có actor)
 - [ ] Duyệt với chủ dự án
 
-**B3. Hợp đồng API** (Claude + Codex)
+**B3. Hợp đồng API** (Claude làm, Codex review)
 
-- [ ] `docs/api/ws-protocol.md`: envelope, `command_id`, ack/rejected, resync
-- [ ] JSON Schema + fixtures, OpenAPI, sinh type TypeScript, CI kiểm schema
-- [ ] Mock server (Codex)
-- [ ] ADR-001 Table actor
+- [x] [`docs/api/ws-protocol.md`](docs/api/ws-protocol.md): envelope, `command_id`, ack/rejected, resync
+- [x] JSON Schema + fixtures, OpenAPI, sinh type TypeScript, CI kiểm schema
+- [x] Mock server WebSocket ([cách chạy](docs/api/mock-server.md)); trang thử React làm ở đợt frontend
+- [x] [ADR-001 Table actor](docs/adr/ADR-001-table-actor.md)
+- [ ] Duyệt với chủ dự án
 
 **B4. Bàn chơi realtime**
 
@@ -134,6 +135,14 @@ uv sync
 .venv/bin/python -m apps.games.engine.simulate --hands 5000 --players 9
 ```
 
+Mock server WebSocket (không cần Docker hay DB), nối bằng client WebSocket như hướng dẫn ở
+[docs/api/mock-server.md](docs/api/mock-server.md):
+
+```bash
+uv run python -m mockserver
+uv run python -m websockets "ws://localhost:8765/ws/rooms/1/?player=1"   # terminal thứ hai
+```
+
 ## Cấu trúc
 
 ```
@@ -142,8 +151,10 @@ apps/games/engine/   # lõi thuần Python, không phụ thuộc Django
   hand.py            # HandEngine: một ván, bọc PokerKit
   table.py           # TableSession: ghế, chip theo phòng (ledger), nhiều ván
   simulate.py        # bot ngẫu nhiên + kiểm tra bất biến
-apps/games/tests/    # golden tests, property tests
+apps/games/contract.py  # nạp JSON Schema trong docs/api/, kiểm message WebSocket
+apps/games/tests/    # golden tests, property tests, test hợp đồng API
+mockserver/          # mock server WebSocket theo docs/api/
 config/              # Django settings (đọc biến môi trường)
-web/                 # frontend Next.js (Codex)
+web/                 # frontend Next.js; src/api/ là type sinh từ docs/api/
 docs/                # đặc tả, lộ trình, hợp đồng API, trao đổi, bài học
 ```

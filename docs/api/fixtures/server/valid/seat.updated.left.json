@@ -1,0 +1,12 @@
+{
+  "protocol_version": 1,
+  "type": "seat.updated",
+  "room_id": 1,
+  "hand_id": null,
+  "version": 27,
+  "server_time": "2026-10-27T14:03:05.120Z",
+  "payload": {
+    "seat": 5,
+    "occupant": null
+  }
+}

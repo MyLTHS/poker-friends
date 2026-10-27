@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerMessage",
+  "description": "Any message the server sends. The type field tells which one.",
+  "oneOf": [
+    {
+      "$ref": "messages/table.snapshot.schema.json"
+    },
+    {
+      "$ref": "messages/hand.started.schema.json"
+    },
+    {
+      "$ref": "messages/action.applied.schema.json"
+    },
+    {
+      "$ref": "messages/turn.deadline.schema.json"
+    },
+    {
+      "$ref": "messages/hand.completed.schema.json"
+    },
+    {
+      "$ref": "messages/seat.updated.schema.json"
+    },
+    {
+      "$ref": "messages/room.suspended.schema.json"
+    },
+    {
+      "$ref": "messages/command.ack.schema.json"
+    },
+    {
+      "$ref": "messages/command.rejected.schema.json"
+    },
+    {
+      "$ref": "messages/protocol.error.schema.json"
+    }
+  ]
+}

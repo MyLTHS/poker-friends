@@ -1,0 +1,10 @@
+{
+  "protocol_version": 1,
+  "type": "command.act",
+  "room_id": 1,
+  "hand_id": 41,
+  "payload": {
+    "kind": "check",
+    "amount": null
+  }
+}

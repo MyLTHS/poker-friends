@@ -45,3 +45,19 @@ jobs:
         run: |
           uv run python -m apps.games.engine.simulate --hands 2000 --players 2 --seven-deuce-bonus 150 --seed ${{ github.run_number }} | tee sim72.txt
           grep -q " 0 violations" sim72.txt
+
+  api-types:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Generated TypeScript types match docs/api/
+        run: npm run api:check

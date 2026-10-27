@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResyncRequestMessage",
+  "description": "The client missed a version; the server answers with table.snapshot. Not a command: it changes nothing, so it has no command_id.",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "$ref": "../common.schema.json#/$defs/ProtocolVersion"
+    },
+    "type": {
+      "const": "resync.request"
+    },
+    "room_id": {
+      "$ref": "../common.schema.json#/$defs/RoomId"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "last_version": {
+          "$ref": "../common.schema.json#/$defs/Version"
+        }
+      },
+      "required": [
+        "last_version"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "protocol_version",
+    "type",
+    "room_id",
+    "payload"
+  ],
+  "additionalProperties": false
+}

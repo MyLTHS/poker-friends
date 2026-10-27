@@ -1,0 +1,106 @@
+{
+  "protocol_version": 1,
+  "type": "hand.completed",
+  "room_id": 1,
+  "hand_id": 41,
+  "version": 25,
+  "server_time": "2026-10-27T14:03:51.700Z",
+  "payload": {
+    "hand": {
+      "hand_id": 41,
+      "hand_no": 1,
+      "button_seat": 1,
+      "small_blind": 5,
+      "big_blind": 10,
+      "board": [
+        "Ah",
+        "8d",
+        "Jc"
+      ],
+      "pots": [
+        {
+          "amount": 0,
+          "eligible": [
+            "1"
+          ]
+        }
+      ],
+      "players": [
+        {
+          "player_id": "1",
+          "seat": 1,
+          "stack": 1035,
+          "bet": 0,
+          "in_hand": true,
+          "cards": [
+            "7h",
+            "2c"
+          ]
+        },
+        {
+          "player_id": "2",
+          "seat": 3,
+          "stack": 995,
+          "bet": 0,
+          "in_hand": false,
+          "cards": []
+        },
+        {
+          "player_id": "3",
+          "seat": 5,
+          "stack": 970,
+          "bet": 0,
+          "in_hand": false,
+          "cards": []
+        }
+      ],
+      "actor": null,
+      "legal_actions": null,
+      "complete": true
+    },
+    "results": [
+      {
+        "player_id": "1",
+        "seat": 1,
+        "hand_net": 35,
+        "seven_deuce_net": 100,
+        "stack": 1135
+      },
+      {
+        "player_id": "2",
+        "seat": 3,
+        "hand_net": -5,
+        "seven_deuce_net": -50,
+        "stack": 945
+      },
+      {
+        "player_id": "3",
+        "seat": 5,
+        "hand_net": -30,
+        "seven_deuce_net": -50,
+        "stack": 920
+      }
+    ],
+    "seven_deuce": {
+      "player_id": "1",
+      "seat": 1,
+      "cards": [
+        "7h"
+      ],
+      "bonus": 50,
+      "payments": [
+        {
+          "player_id": "2",
+          "seat": 3,
+          "amount": 50
+        },
+        {
+          "player_id": "3",
+          "seat": 5,
+          "amount": 50
+        }
+      ],
+      "total": 100
+    }
+  }
+}

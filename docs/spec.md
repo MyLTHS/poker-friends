@@ -105,8 +105,10 @@ Quyết định kiến trúc (thống nhất với Codex ở `docs/collab/`, s�
   Channels/Redis.**
   Ghi trước-rồi-áp đảm bảo: nếu process chết giữa lúc áp dụng, khởi động lại chỉ cần
   `HandEngine.replay()` từ các `HandCommand` đã ghi — không mất, không lặp lại hiệu ứng.
-- Lệnh bị từ chối (sai lượt, sai luật, `command_id` trùng) **chỉ ghi log**, không ghi
-  `HandCommand`, trả `command.rejected` với mã lỗi ổn định cho client.
+- Lệnh bị từ chối (sai lượt, sai luật, `command_id` trùng nhưng nội dung khác) **chỉ ghi log**,
+  không ghi `HandCommand`, trả `command.rejected` với mã lỗi ổn định cho client. Lệnh gửi lại
+  **y nguyên** (cùng `command_id`, cùng nội dung) thì không bị từ chối: server không áp lại mà trả
+  `command.ack` của lần áp đầu (`duplicate: true`).
 - Giao thức WebSocket (chi tiết đầy đủ ở `docs/api/ws-protocol.md`, làm ở B3):
   - Envelope mỗi message: `protocol_version`, `room_id`, `hand_id`, `version` (số thứ tự sự kiện
     tăng dần trong phòng), `server_time`.

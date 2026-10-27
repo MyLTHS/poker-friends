@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ActCommandMessage",
+  "description": "Command: the sender acts in the current hand. hand_id must be the running hand.",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "$ref": "../common.schema.json#/$defs/ProtocolVersion"
+    },
+    "type": {
+      "const": "command.act"
+    },
+    "room_id": {
+      "$ref": "../common.schema.json#/$defs/RoomId"
+    },
+    "hand_id": {
+      "$ref": "../common.schema.json#/$defs/HandId"
+    },
+    "command_id": {
+      "$ref": "../common.schema.json#/$defs/CommandId"
+    },
+    "payload": {
+      "oneOf": [
+        {
+          "description": "fold, check or call: no amount.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "fold",
+                "check",
+                "call"
+              ]
+            },
+            "amount": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "kind",
+            "amount"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "raise (or opening bet): amount is the total to raise to.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "raise"
+            },
+            "amount": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "kind",
+            "amount"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "protocol_version",
+    "type",
+    "room_id",
+    "hand_id",
+    "command_id",
+    "payload"
+  ],
+  "additionalProperties": false
+}

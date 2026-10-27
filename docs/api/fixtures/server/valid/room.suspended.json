@@ -1,0 +1,12 @@
+{
+  "protocol_version": 1,
+  "type": "room.suspended",
+  "room_id": 1,
+  "hand_id": 41,
+  "version": 23,
+  "server_time": "2026-10-27T14:03:44.902Z",
+  "payload": {
+    "reason": "recovery_needed",
+    "message": "Chip conservation violated after a recorded command."
+  }
+}

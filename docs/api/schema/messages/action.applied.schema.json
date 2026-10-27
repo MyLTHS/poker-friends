@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ActionAppliedMessage",
+  "description": "State event: one action was applied. hand is the state right after it (new board cards included), projected for the receiver. Always about one hand, so hand_id is never null.",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "$ref": "../common.schema.json#/$defs/ProtocolVersion"
+    },
+    "type": {
+      "const": "action.applied"
+    },
+    "room_id": {
+      "$ref": "../common.schema.json#/$defs/RoomId"
+    },
+    "hand_id": {
+      "$ref": "../common.schema.json#/$defs/HandId"
+    },
+    "version": {
+      "$ref": "../common.schema.json#/$defs/Version"
+    },
+    "server_time": {
+      "$ref": "../common.schema.json#/$defs/ServerTime"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "../common.schema.json#/$defs/AppliedAction"
+        },
+        "hand": {
+          "$ref": "../common.schema.json#/$defs/HandView"
+        }
+      },
+      "required": [
+        "action",
+        "hand"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "protocol_version",
+    "type",
+    "room_id",
+    "hand_id",
+    "version",
+    "server_time",
+    "payload"
+  ],
+  "additionalProperties": false
+}

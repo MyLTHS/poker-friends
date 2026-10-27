@@ -1,0 +1,11 @@
+{
+  "protocol_version": 1,
+  "type": "command.act",
+  "room_id": 1,
+  "hand_id": 41,
+  "command_id": "a7c3e1f9-2b4d-4a6c-8e0f-1a3b5c7d9e2f",
+  "payload": {
+    "kind": "fold",
+    "amount": null
+  }
+}

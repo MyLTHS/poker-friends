@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SitInCommandMessage",
+  "description": "Command: the sender is dealt in again from the next hand.",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "$ref": "../common.schema.json#/$defs/ProtocolVersion"
+    },
+    "type": {
+      "const": "command.sit_in"
+    },
+    "room_id": {
+      "$ref": "../common.schema.json#/$defs/RoomId"
+    },
+    "command_id": {
+      "$ref": "../common.schema.json#/$defs/CommandId"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "protocol_version",
+    "type",
+    "room_id",
+    "command_id",
+    "payload"
+  ],
+  "additionalProperties": false
+}

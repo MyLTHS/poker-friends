@@ -1,0 +1,61 @@
+{
+  "protocol_version": 1,
+  "type": "action.applied",
+  "room_id": 1,
+  "hand_id": 41,
+  "version": 16,
+  "server_time": "2026-10-27T14:03:29.482Z",
+  "payload": {
+    "action": {
+      "player_id": "2",
+      "seat": 3,
+      "kind": "fold",
+      "amount": null,
+      "timeout": true
+    },
+    "hand": {
+      "hand_id": 41,
+      "hand_no": 1,
+      "button_seat": 1,
+      "small_blind": 5,
+      "big_blind": 10,
+      "board": [],
+      "pots": [],
+      "players": [
+        {
+          "player_id": "1",
+          "seat": 1,
+          "stack": 970,
+          "bet": 30,
+          "in_hand": true,
+          "cards": [
+            "??",
+            "??"
+          ]
+        },
+        {
+          "player_id": "2",
+          "seat": 3,
+          "stack": 995,
+          "bet": 5,
+          "in_hand": false,
+          "cards": []
+        },
+        {
+          "player_id": "3",
+          "seat": 5,
+          "stack": 990,
+          "bet": 10,
+          "in_hand": true,
+          "cards": [
+            "??",
+            "??"
+          ]
+        }
+      ],
+      "actor": "3",
+      "legal_actions": null,
+      "complete": false
+    }
+  }
+}
