@@ -1,6 +1,6 @@
 # ADR-001: Mỗi bàn một table actor
 
-- **Trạng thái:** Đề xuất (27/10/2026), chờ chủ dự án duyệt. Cài ở B4, độ bền ở B5.
+- **Trạng thái:** Đã cài ở B4a (27/10/2026, `apps/games/actor.py`), chờ chủ dự án duyệt. Độ bền ở B5. Chỗ lệch so với đề xuất: mục "Ghi chú khi cài (B4a)" cuối file.
 - **Liên quan:** [docs/spec.md](../spec.md) mục 3, [giao thức WebSocket](../api/ws-protocol.md),
   `apps/games/models.py` (`Hand`, `HandCommand`), `apps/games/services.py`
   (`save_completed_hand`).
@@ -166,3 +166,37 @@ process) và một worker toàn cục cho mọi bàn (một bàn chậm làm ch�
 - Lệnh "độc" (engine lỗi sau khi đã ghi): phòng phát `room.suspended`, từ chối lệnh sau bằng
   `room_suspended`, không ghi thêm `HandCommand`; khôi phục bằng replay cũng hỏng thì phòng vẫn tạm
   dừng; phòng khác vẫn chạy bình thường.
+
+## Ghi chú khi cài (B4a)
+
+Cài đúng thứ tự mục 2 (`HandEngine.check` → ghi `HandCommand` → `HandEngine.act` → phát), chống
+trùng theo `(hand, command_id)`, khôi phục mục 4 và fail-stop mục 5. Những chỗ khác hoặc chưa làm:
+
+- **Snapshot không đi qua hàng đợi.** `resync.request` và `GET /api/rooms/{id}/snapshot/` dựng
+  snapshot thẳng từ trạng thái trong bộ nhớ (`TableActor.snapshot_message`), vì chỉ đọc. Snapshot có
+  thể đã chứa một thay đổi mà sự kiện của nó tới ngay sau; sự kiện mang trạng thái đầy đủ (`hand`,
+  `occupant`) nên client áp lại cũng không sai. Ván vừa xong thì actor chuyển sang "giữa hai ván"
+  ngay khi `finish_hand()` (không có `await` ở giữa), nên snapshot không bao giờ có `hand_id` mà
+  thiếu `hand`.
+- **Chống trùng sau khởi động lại** nạp từ `HandCommand` (kind + amount là toàn bộ payload), nên
+  vẫn phân biệt được gửi lại (ack `duplicate`, `result_version: null`) với dùng lại mã cho lệnh khác
+  (`command_id_reused`).
+- **Đồng hồ tối thiểu.** Mỗi lượt đặt một hẹn giờ `think_time_seconds`; tới hạn thì xếp lệnh hết
+  giờ (gắn `hand` **và** người tới lượt) vào cùng hàng đợi; lượt đã qua thì bỏ qua. Lệnh hết giờ ghi
+  `command_id` = `timeout-<hand_id>-<sequence>`. Khôi phục giữa ván cho người đang tới lượt đủ thời
+  gian lại từ đầu (mục 4.5 để B5 chốt). Mất kết nối không đổi đồng hồ.
+- **Fail-stop chưa tự khôi phục** (mục 5.4): phòng giữ trạng thái tạm dừng tới khi process khởi
+  động lại; lúc đó khôi phục chạy như mục 4. Nếu lệnh "độc" làm replay hỏng thì actor của phòng không
+  dựng được và kết nối vào phòng đó thất bại, thay vì nhận snapshot `status: "suspended"`. Làm ở B5.
+- **Ván mới tự bắt đầu** khi không có ván, phòng không tạm dừng, có ít nhất 2 người đủ chip và có
+  ít nhất một kết nối (giống mock: không chia bài cho phòng trống). Giữa hai ván nghỉ
+  `TableActor.next_hand_delay` (4 giây).
+- **Vào/rời ghế (REST) cũng đi qua hàng đợi** của phòng, để `seat.updated` có `version` đúng thứ tự
+  với lệnh WebSocket. Rời ghế xoá dòng `RoomSeat`; chip vẫn trong sổ của phòng.
+- **Danh tính tạm (trước B6):** mỗi Django session một user khách (`apps/games/accounts.py`),
+  tạo ngay lần đầu gọi REST hoặc mở WebSocket. Hai tab cùng session là cùng người: dùng chung ghế,
+  cùng nhận góc nhìn. `GET snapshot` phát cookie `csrftoken` cho các request POST/DELETE.
+- **Cấp chip** qua API là B7. Để thử tay: `manage.py create_demo_room --players N --chips C` tạo
+  phòng, xếp sẵn N khách có chip và in `sessionid` của từng người; chạy **trước** khi server mở
+  phòng đó (actor chỉ đọc sổ chip lúc khôi phục).
+- Chỉ một process ASGI: ghi ở `config/asgi.py`; tài liệu deploy ở B5.
