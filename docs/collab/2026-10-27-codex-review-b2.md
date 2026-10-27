@@ -39,18 +39,21 @@ ván xong (bài người đã fold vẫn úp); người trả tối đa số chi
 `seven_deuce_bonus` để record/replay mang theo luật của ván và lật bài y hệt khi replay. Đã sửa
 `docs/spec.md` (#27 và phần engine) và README.
 
-Chờ Lym quyết:
+### Lượt 3: dọn các thắc mắc còn lại của B2 (27/10/2026)
 
-- **Walk** (mọi người fold tới big blind, BB cầm 7-2, BB chưa hề hành động): tạm tính **được
-  thưởng** theo câu chữ. Test riêng: `test_a_walk_counts_as_a_bluff_for_now` trong
-  `apps/games/tests/test_hand.py`; đổi luật thì sửa test này và `seven_deuce_bluff_winner()`.
+Lym trả lời trực tiếp hai câu hỏi luật; các việc kỹ thuật Claude tự làm, mỗi việc một commit, test viết trước.
 
-Còn để ngỏ (chưa làm trong lượt này):
+| Thắc mắc | Kết quả |
+|---|---|
+| Walk (fold hết tới BB, BB cầm 7-2) có được thưởng? | **Lym chốt: có.** Test đổi tên thành `test_a_walk_counts_as_a_bluff`; spec #27 bỏ chữ "tạm". |
+| `max_seats` tối thiểu là 2? | **Lym chốt: 2** (heads-up). Spec #3 ghi rõ "từ 2 đến 9 ghế". |
+| Ghế vượt `max_seats` chỉ chặn ở `save()` | **Đã sửa** (`c93820b`): migration `0006`, hai trigger PostgreSQL (thêm/đổi ghế, và giảm `max_seats` của phòng đang có người ngồi ghế cao); lỗi ra `IntegrityError`. |
+| `HandCommand` chưa chỉ-ghi-thêm | **Đã sửa** (`d535ed2`): lớp nền `AppendOnlyModel` dùng chung cho `LedgerEntry` và `HandCommand`; migration `0007` thêm trigger. |
+| `simulate.py` không bật được thưởng 7-2 | **Đã sửa** (`d0faddb`): thêm `--seven-deuce-bonus`, kiểm thêm "không stack âm" và "replay ra cùng `view_for`"; CI chạy thêm 2.000 ván heads-up có thưởng. |
+| Trigger không chặn `TRUNCATE` | **Giữ nguyên, có chủ đích.** `TRUNCATE` là lệnh dọn cả bảng, chỉ chủ bảng mới chạy được; test kiểu `transaction=True` và `manage.py flush` cần nó. Chặn thật sự ở production thì làm bằng quyền DB (tài khoản ứng dụng không phải chủ bảng), để đợt E. |
+| Migration `0004`/`0005` giả định chưa có dữ liệu thật | **Không cần làm**: chưa migration nào của `games` lên `main`, chưa có dữ liệu thật ở đâu. Ai có DB dev cũ thì xóa DB dev rồi `migrate` lại. |
+| Bài tập "tổng ledger một phòng bằng tổng chip đã cấp" | **Để Lym tự làm** (bài tập B2 trong roadmap). |
+| PR quá 400 dòng | **Phiên điều phối quyết** cách tách PR (có thể tách theo commit). |
 
-- Ghế vượt `max_seats` chỉ chặn ở `save()`: `bulk_create` hoặc giảm `max_seats` của phòng đang có người ngồi ghế cao vẫn lọt. Muốn chặn ở DB thì cần trigger.
-- `HandCommand` chưa append-only như ledger (chỉ chặn xóa theo `Hand`).
-- Trigger chặn `UPDATE`/`DELETE` nhưng không chặn `TRUNCATE` (để test kiểu `transaction=True` vẫn dọn được DB).
-- `max_seats` tối thiểu 2 là suy từ spec ("tối đa 9, hỗ trợ heads-up"); Lym xác nhận lại.
-- Migration `0004`/`0005` giả định chưa có dữ liệu thật: DB dev đã có dòng ledger `hand` cũ (dùng `hand_no`) hoặc `Hand` đã xong mà chưa có `result` sẽ không qua được ràng buộc mới.
-- Bài tập "tổng ledger một phòng bằng tổng chip đã cấp" để Lym tự viết.
-- `simulate.py` chưa có tùy chọn bật thưởng 7-2; mục 6 được kiểm thêm bằng một lượt mô phỏng tạm (3.000 ván, có thưởng và người trả thiếu chip, 0 vi phạm), chưa đưa vào CI.
+Việc chuyển sang đợt sau (không thuộc B2): gọi `save_completed_hand()` từ table actor và đồng
+bộ `RoomSeat` với `TableSession` (B3–B4).

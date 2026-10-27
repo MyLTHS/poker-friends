@@ -41,6 +41,10 @@ jobs:
         run: |
           uv run python -m apps.games.engine.simulate --hands 500 --players 9 --seed ${{ github.run_number }} | tee sim.txt
           grep -q " 0 violations" sim.txt
+      - name: Simulation with the 7-2 bonus (2000 hands, heads-up)
+        run: |
+          uv run python -m apps.games.engine.simulate --hands 2000 --players 2 --seven-deuce-bonus 150 --seed ${{ github.run_number }} | tee sim72.txt
+          grep -q " 0 violations" sim72.txt
 
   api-types:
     runs-on: ubuntu-latest
