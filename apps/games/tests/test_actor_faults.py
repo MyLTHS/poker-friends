@@ -260,3 +260,33 @@ class TestSnapshotWhileDealing:
 
         run_async(body)
         assert errors == []
+
+
+class TestResendAfterCrash:
+    """Point 6: resending the last command of a hand settled during recovery is a duplicate."""
+
+    def test_the_resend_gets_a_duplicate_ack(self):
+        room, a, b = heads_up_room()
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            hand_id = started["hand_id"]
+            user = a if started["payload"]["hand"]["actor"] == str(a.pk) else b
+            # Recorded, then the process died before applying it: recovery finishes the hand.
+            await HandCommand.objects.acreate(
+                hand_id=hand_id, player=user, sequence=1, command_id="last-cmd-01", kind="fold"
+            )
+            await ca.disconnect()
+            await cb.disconnect()
+            await actor_module.reset_registry_for_tests()
+            again = await connect(room, user)
+            await send_act(again, room, hand_id, "last-cmd-01", "fold")
+            acks = by_type(await drain(again), "command.ack")
+            assert acks and acks[0]["payload"]["duplicate"] is True
+            assert acks[0]["payload"]["result_version"] is None
+            await send_act(again, room, hand_id, "last-cmd-01", "check")
+            codes = [m["payload"]["code"] for m in by_type(await drain(again), "command.rejected")]
+            assert codes == ["command_id_reused"]
+
+        run_async(body)

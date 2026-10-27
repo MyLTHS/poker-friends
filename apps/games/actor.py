@@ -252,6 +252,8 @@ class TableActor:
         if self.suspended:
             await self._rejected(item.conn, command_id, "room_suspended")
             return
+        if key not in self._applied and kind == "command.act":
+            await self._remember_from_log(key, message["hand_id"], command_id)
         if key in self._applied:
             first_asked, result_version = self._applied[key]
             if first_asked != asked:
@@ -273,6 +275,18 @@ class TableActor:
             return
         self._applied[key] = (asked, result_version)
         await self._ack(item.conn, command_id, result_version)
+
+    async def _remember_from_log(self, key: tuple, hand_id: Any, command_id: str) -> None:
+        """A command for another hand than the running one may still be in the log: the last
+        command of a hand that recovery finished (the client resends it after reconnecting).
+        Then it is a duplicate (result_version null), not a stale_hand rejection.
+        """
+        if self.hand is not None and hand_id == self.hand.pk:
+            return  # the running hand's commands are already in _applied
+        stored = await HandCommand.objects.filter(hand_id=hand_id, command_id=command_id).afirst()
+        if stored is not None:
+            payload = {"kind": stored.kind, "amount": stored.amount}
+            self._applied[key] = (_asked(str(stored.player_id), "command.act", payload), None)
 
     def _dedup_key(self, kind: str, message: dict[str, Any]) -> tuple:
         if kind == "command.act":
