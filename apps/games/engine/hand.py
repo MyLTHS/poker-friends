@@ -193,22 +193,24 @@ class HandEngine:
             max_raise_to=state.max_completion_betting_or_raising_to_amount if can_raise else None,
         )
 
-    def act(self, action: Action) -> None:
+    def check(self, action: Action) -> None:
+        """Raise ``IllegalAction`` unless ``action`` is legal right now; never changes state.
+
+        Shared by the table actor's pre-check (ADR-001 step 1, before anything is written) and
+        ``act()`` (step 3), so "passed the check but failed to apply" cannot happen for a reason
+        this method could have caught.
+        """
         legal = self.legal_actions(action.player_id)
-        state = self._state
         match action.kind:
             case ActionKind.FOLD:
                 if not legal.can_fold:
                     raise IllegalAction("cannot_fold")
-                state.fold()
             case ActionKind.CHECK:
                 if not legal.can_check:
                     raise IllegalAction("cannot_check")
-                state.check_or_call()
             case ActionKind.CALL:
                 if legal.can_check:
                     raise IllegalAction("nothing_to_call")
-                state.check_or_call()
             case ActionKind.RAISE:
                 if legal.min_raise_to is None or legal.max_raise_to is None:
                     raise IllegalAction("cannot_raise")
@@ -217,9 +219,19 @@ class HandEngine:
                     legal.min_raise_to <= amount <= legal.max_raise_to
                 ):
                     raise IllegalAction("invalid_amount")
-                state.complete_bet_or_raise_to(amount)
             case _:
                 raise IllegalAction("unknown_action")
+
+    def act(self, action: Action) -> None:
+        self.check(action)
+        state = self._state
+        match action.kind:
+            case ActionKind.FOLD:
+                state.fold()
+            case ActionKind.CHECK | ActionKind.CALL:
+                state.check_or_call()
+            case ActionKind.RAISE:
+                state.complete_bet_or_raise_to(action.amount)
         self._actions.append(action)
         self._advance()
         if self.total_chips() != self._chip_total:
