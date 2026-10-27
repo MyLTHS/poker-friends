@@ -52,15 +52,19 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 **B2. Dữ liệu**
 
 - [x] Models `User` (cờ khách), `Room`, `RoomSeat`, `LedgerEntry` (chỉ ghi thêm), `Hand`, `HandCommand`
-- [x] Migration (`apps/games/migrations/0001_initial.py`)
+- [x] Migration `0001`–`0007` (`apps/games/migrations/`), kể cả trigger PostgreSQL chặn sửa/xóa
+  ledger và log lệnh, chặn ghế vượt `max_seats`
 - [x] Test: tổng ledger một phòng bằng tổng chip đã cấp, không đổi khi chia kết quả ván, không
-  update/delete được một dòng ledger, ghế/lệnh không trùng
+  update/delete được một dòng ledger hay một lệnh (kể cả bằng SQL thô), ghế/lệnh không trùng,
+  ràng buộc blind/ghế/amount, replay từ DB ra đúng kết quả đã lưu
 - [x] Trang thử: Django Admin (`apps/games/admin.py`) — ledger chỉ xem, không sửa/xoá được
 - [x] Luật 7-2 (#27 trong `docs/spec.md`, chốt lại 27/10/2026): ăn pot bằng bluff khi cầm 7-2
   (bất kỳ chất) thì bài được lật cho cả bàn và mọi người khác ở bàn (kể cả sit-out) trả thêm tối
   đa `Room.seven_deuce_bonus` chip, không ai bị âm — `HandEngine.seven_deuce_bluff_winner()` +
   `TableSession._apply_seven_deuce_bonus()`
-- [ ] Ghi ledger trong transaction khi nối với table actor (B3–B4, chưa có actor nên chưa áp dụng)
+- [x] Ghi một ván đã xong cùng toàn bộ ledger của ván trong một transaction:
+  `apps/games/services.py` → `save_completed_hand()` (kiểm tổng bằng 0, gọi lại không ghi thêm)
+- [ ] Gọi `save_completed_hand()` từ table actor (B3–B4, chưa có actor)
 - [ ] Duyệt với chủ dự án
 
 **B3. Hợp đồng API** (Claude + Codex)

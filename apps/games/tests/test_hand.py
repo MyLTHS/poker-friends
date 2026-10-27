@@ -348,8 +348,8 @@ class TestSevenDeuceBonus:
         engine.act(fold("A"))
         assert engine.seven_deuce_bluff_winner() == "B"
 
-    def test_a_walk_counts_as_a_bluff_for_now(self):
-        # Pending Lym's decision: everyone folds to the big blind, who never had to act.
+    def test_a_walk_counts_as_a_bluff(self):
+        # Everyone folds to the big blind, who never had to act: still a bonus (rule #27).
         engine = three_handed(holes={"A": "7d2c", "B": "AcAd", "C": "KcKd"}, board="")
         engine.act(fold("B"))
         engine.act(fold("C"))
