@@ -36,8 +36,21 @@ Gửi lại đúng dòng đó lần nữa: server trả `command.ack` với `dup
 Gửi `{"protocol_version": 1, "type": "resync.request", "room_id": 1, "payload": {"last_version": 0}}`
 để nhận lại `table.snapshot`. Thoát bằng `Ctrl+D`.
 
-Trang thử có giao diện sẽ làm bằng React trong `web/`, dùng chung thiết kế với mockup UI, ở đợt
-frontend sau khi chủ dự án chốt thiết kế. Không có trang HTML tĩnh.
+## Chơi bằng trang web (React)
+
+Trang thử trong `web/` (Next.js, giao diện hướng A của mockup) nối thẳng tới mock server. Hai
+terminal ở thư mục gốc của repo:
+
+```bash
+uv run python -m mockserver          # terminal 1
+```
+
+```bash
+cd web && npm ci && npm run dev      # terminal 2
+```
+
+Mở <http://localhost:3000>, chọn Lym, bấm **TỐ** trước flop rồi **CƯỢC** sau flop để thấy màn
+thưởng 7-2. Chi tiết và các tuỳ chọn: [web/README.md](../../web/README.md). Không có trang HTML tĩnh.
 
 ## Kịch bản
 

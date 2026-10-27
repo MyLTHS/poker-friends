@@ -27,7 +27,7 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 
 ### A. Nền móng codebase
 
-- [x] Repo GitHub, monorepo `apps/` (Django), `web/` (Next.js, đang trống), `docs/`
+- [x] Repo GitHub, monorepo `apps/` (Django), `web/` (Next.js), `docs/`
 - [x] Docker Compose dev: Django/Daphne, Postgres 17, Redis 7
 - [x] Settings đọc `.env`; chặn secret yếu khi tắt `DEBUG`
 - [x] GitHub Actions: ruff, Django check, kiểm migration, pytest, mô phỏng 500 ván — xanh trên `main`
@@ -71,7 +71,7 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 
 - [x] [`docs/api/ws-protocol.md`](docs/api/ws-protocol.md): envelope, `command_id`, ack/rejected, resync
 - [x] JSON Schema + fixtures, OpenAPI, sinh type TypeScript, CI kiểm schema
-- [x] Mock server WebSocket ([cách chạy](docs/api/mock-server.md)); trang thử React làm ở đợt frontend
+- [x] Mock server WebSocket ([cách chạy](docs/api/mock-server.md)); trang thử React trong `web/` ([cách chạy](web/README.md))
 - [x] [ADR-001 Table actor](docs/adr/ADR-001-table-actor.md)
 - [ ] Duyệt với chủ dự án
 
@@ -135,12 +135,12 @@ uv sync
 .venv/bin/python -m apps.games.engine.simulate --hands 5000 --players 9
 ```
 
-Mock server WebSocket (không cần Docker hay DB), nối bằng client WebSocket như hướng dẫn ở
-[docs/api/mock-server.md](docs/api/mock-server.md):
+Mock server WebSocket (không cần Docker hay DB) và trang thử React chơi một ván giả
+([docs/api/mock-server.md](docs/api/mock-server.md), [web/README.md](web/README.md)):
 
 ```bash
-uv run python -m mockserver
-uv run python -m websockets "ws://localhost:8765/ws/rooms/1/?player=1"   # terminal thứ hai
+uv run python -m mockserver          # terminal 1
+cd web && npm ci && npm run dev      # terminal 2, rồi mở http://localhost:3000
 ```
 
 ## Cấu trúc
@@ -155,6 +155,6 @@ apps/games/contract.py  # nạp JSON Schema trong docs/api/, kiểm message WebS
 apps/games/tests/    # golden tests, property tests, test hợp đồng API
 mockserver/          # mock server WebSocket theo docs/api/
 config/              # Django settings (đọc biến môi trường)
-web/                 # frontend Next.js; src/api/ là type sinh từ docs/api/
+web/                 # frontend Next.js (trang thử bàn chơi); src/api/ là type sinh từ docs/api/
 docs/                # đặc tả, lộ trình, hợp đồng API, trao đổi, bài học
 ```
