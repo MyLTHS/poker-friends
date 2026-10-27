@@ -60,6 +60,23 @@ class AppendOnlyError(ValueError):
     pass
 
 
+class LedgerEntryQuerySet(models.QuerySet):
+    """Blocks the bulk paths that skip ``LedgerEntry.save()``/``delete()``.
+
+    A PostgreSQL trigger (migration 0003) rejects UPDATE/DELETE for everything else, raw SQL
+    included.
+    """
+
+    def update(self, **kwargs):
+        raise AppendOnlyError("LedgerEntry is append-only; create a new row instead.")
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise AppendOnlyError("LedgerEntry is append-only; create a new row instead.")
+
+    def delete(self):
+        raise AppendOnlyError("LedgerEntry is append-only; it can never be deleted.")
+
+
 class LedgerEntry(models.Model):
     """A chip change for one player in one room. Append-only: never update or delete a row."""
 
@@ -69,6 +86,8 @@ class LedgerEntry(models.Model):
     amount = models.IntegerField()
     hand_no = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = LedgerEntryQuerySet.as_manager()
 
     def save(self, *args, **kwargs):
         if self.pk is not None:

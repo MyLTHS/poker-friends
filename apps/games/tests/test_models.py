@@ -6,12 +6,26 @@ hand), they never create or destroy any.
 """
 
 import pytest
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.db.models import Sum
 
-from apps.games.models import Hand, HandCommand, LedgerEntry, LedgerKind, Room, RoomSeat, User
+from apps.games.models import (
+    AppendOnlyError,
+    Hand,
+    HandCommand,
+    LedgerEntry,
+    LedgerKind,
+    Room,
+    RoomSeat,
+    User,
+)
 
 pytestmark = pytest.mark.django_db
+
+# Triggers and cross-table foreign keys only exist on PostgreSQL (what CI and Docker run).
+postgres_only = pytest.mark.skipif(
+    connection.vendor != "postgresql", reason="needs the PostgreSQL-only constraints"
+)
 
 
 def make_room(**kwargs) -> Room:
@@ -32,6 +46,12 @@ class TestRoomConfig:
 
 def make_user(username: str, is_guest: bool = False) -> User:
     return User.objects.create_user(username=username, is_guest=is_guest)
+
+
+def make_grant(amount: int = 1000) -> LedgerEntry:
+    return LedgerEntry.objects.create(
+        room=make_room(), user=make_user("alice"), kind=LedgerKind.GRANT, amount=amount
+    )
 
 
 class TestLedgerInvariant:
@@ -108,6 +128,57 @@ class TestLedgerAppendOnly:
 
         with pytest.raises(ValueError):
             entry.delete()
+
+    def test_queryset_update_is_blocked(self):
+        entry = make_grant()
+
+        with pytest.raises(AppendOnlyError):
+            LedgerEntry.objects.filter(pk=entry.pk).update(amount=999999)
+        assert LedgerEntry.objects.get(pk=entry.pk).amount == 1000
+
+    def test_queryset_delete_is_blocked(self):
+        entry = make_grant()
+
+        with pytest.raises(AppendOnlyError):
+            LedgerEntry.objects.filter(pk=entry.pk).delete()
+        assert LedgerEntry.objects.filter(pk=entry.pk).exists()
+
+    def test_bulk_update_is_blocked(self):
+        entry = make_grant()
+        entry.amount = 999999
+
+        with pytest.raises(AppendOnlyError):
+            LedgerEntry.objects.bulk_update([entry], ["amount"])
+        assert LedgerEntry.objects.get(pk=entry.pk).amount == 1000
+
+    @postgres_only
+    def test_the_database_rejects_a_raw_update(self):
+        entry = make_grant()
+
+        with pytest.raises(DatabaseError, match="append-only"):
+            with transaction.atomic(), connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE games_ledgerentry SET amount = 999999 WHERE id = %s", [entry.pk]
+                )
+        assert LedgerEntry.objects.get(pk=entry.pk).amount == 1000
+
+    @postgres_only
+    def test_the_database_rejects_a_raw_delete(self):
+        entry = make_grant()
+
+        with pytest.raises(DatabaseError, match="append-only"):
+            with transaction.atomic(), connection.cursor() as cursor:
+                cursor.execute("DELETE FROM games_ledgerentry WHERE id = %s", [entry.pk])
+        assert LedgerEntry.objects.filter(pk=entry.pk).exists()
+
+    @postgres_only
+    def test_the_base_manager_cannot_bypass_the_database_either(self):
+        entry = make_grant()
+
+        with pytest.raises(DatabaseError, match="append-only"):
+            with transaction.atomic():
+                LedgerEntry._base_manager.filter(pk=entry.pk).update(amount=999999)
+        assert LedgerEntry.objects.get(pk=entry.pk).amount == 1000
 
 
 class TestRoomSeat:
