@@ -250,6 +250,11 @@ def _guest_username() -> str:
             return name
 
 
+def new_guest(username: str | None = None) -> User:
+    """Create (not log in) a guest. Also used by the table for visitors without a session."""
+    return User.objects.create_user(username=username or _guest_username(), is_guest=True)
+
+
 def create_guest(request, username: str | None, ip: str) -> tuple[User, bool]:
     """Log in a new guest. A caller who already has a session keeps it: ``(user, False)``."""
     if request.user.is_authenticated:
@@ -258,7 +263,7 @@ def create_guest(request, username: str | None, ip: str) -> tuple[User, bool]:
     if username and username_in_use(username):
         raise AccountError("username_taken", "This name is already used.")
     try:
-        user = User.objects.create_user(username=username or _guest_username(), is_guest=True)
+        user = new_guest(username)
     except IntegrityError as error:
         raise AccountError("username_taken", "This name is already used.") from error
     login(request, user, backend=MODEL_BACKEND)

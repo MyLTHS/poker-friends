@@ -82,7 +82,8 @@ def heads_up_room(**kwargs) -> tuple[Room, User, User]:
 async def connect(room: Room, user: User) -> WebsocketCommunicator:
     communicator = WebsocketCommunicator(RoomConsumer.as_asgi(), f"/ws/rooms/{room.pk}/")
     communicator.scope["url_route"] = {"kwargs": {"room_id": str(room.pk)}}
-    communicator.scope["session"] = FakeSession({"games_user_id": user.pk})
+    communicator.scope["user"] = user  # what AuthMiddlewareStack puts in the scope
+    communicator.scope["session"] = FakeSession()
     connected, _ = await communicator.connect()
     assert connected
     first = await communicator.receive_json_from(timeout=2)

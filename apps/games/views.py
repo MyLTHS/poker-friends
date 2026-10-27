@@ -10,7 +10,7 @@ from django.http import HttpRequest, HttpResponseNotAllowed, JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from . import actor as actor_module
-from .accounts import aget_or_create_session_user
+from .accounts import player_for_request
 from .models import Room
 
 CONFLICT_CODES = {"already_seated", "seat_taken", "not_seated", "player_in_hand", "room_closed"}
@@ -46,7 +46,7 @@ async def take_seat(request: HttpRequest, room_id: int) -> JsonResponse:
     except (TypeError, ValueError, KeyError):
         return _error("validation_error", "seat (int) is required.", 400)
 
-    user = await aget_or_create_session_user(request.session)
+    user = await player_for_request(request)
     act = await actor_module.get_actor(room_id)
     try:
         occupant = await act.take_seat(user, seat)
@@ -60,7 +60,7 @@ async def leave_seat(request: HttpRequest, room_id: int) -> JsonResponse:
         return HttpResponseNotAllowed(["DELETE"])
     if await _room_or_404(room_id) is None:
         return _error("room_not_found", "No such room.", 404)
-    user = await aget_or_create_session_user(request.session)
+    user = await player_for_request(request)
     act = await actor_module.get_actor(room_id)
     try:
         await act.leave_seat(user)
@@ -75,7 +75,7 @@ async def get_snapshot(request: HttpRequest, room_id: int) -> JsonResponse:
         return HttpResponseNotAllowed(["GET"])
     if await _room_or_404(room_id) is None:
         return _error("room_not_found", "No such room.", 404)
-    user = await aget_or_create_session_user(request.session)
+    user = await player_for_request(request)
     act = await actor_module.get_actor(room_id)
     message = act.snapshot_message(str(user.pk))
     return JsonResponse(

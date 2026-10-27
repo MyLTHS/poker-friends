@@ -13,13 +13,13 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 
 from . import actor as actor_module
 from . import contract
-from .accounts import aget_or_create_session_user
+from .accounts import player_for_scope
 
 
 class RoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_id = int(self.scope["url_route"]["kwargs"]["room_id"])
-        user = await aget_or_create_session_user(self.scope["session"])
+        user = await player_for_scope(self.scope)
         self.player_id = str(user.pk)
         self.conn = uuid.uuid4().hex
         await self.accept()
