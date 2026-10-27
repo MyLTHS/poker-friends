@@ -33,6 +33,7 @@ def build_hand(
     board: str = "",
     small_blind: int = 1,
     big_blind: int = 2,
+    seven_deuce_bonus: int = 0,
 ) -> HandEngine:
     seat_objs = tuple(Seat(seat=s, player_id=p, stack=stack) for s, p, stack in seats)
     order = deal_order(seat_objs, button_seat)
@@ -46,6 +47,7 @@ def build_hand(
         small_blind=small_blind,
         big_blind=big_blind,
         deck=deck,
+        seven_deuce_bonus=seven_deuce_bonus,
     )
     return HandEngine(config)
 

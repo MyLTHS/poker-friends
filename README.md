@@ -56,10 +56,10 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 - [x] Test: tổng ledger một phòng bằng tổng chip đã cấp, không đổi khi chia kết quả ván, không
   update/delete được một dòng ledger, ghế/lệnh không trùng
 - [x] Trang thử: Django Admin (`apps/games/admin.py`) — ledger chỉ xem, không sửa/xoá được
-- [x] Luật 7-2 (#27 trong `docs/spec.md`): thắng showdown bằng 7-2 (bất kỳ chất) được mọi người
-  khác ở bàn (kể cả sit-out) trả thêm `Room.seven_deuce_bonus` chip — `HandEngine.
-  showdown_seven_deuce_winners()` + `TableSession._apply_seven_deuce_bonus()`, đã chạy mô
-  phỏng 3.000 ván với luật bật: 0 vi phạm bảo toàn chip
+- [x] Luật 7-2 (#27 trong `docs/spec.md`, chốt lại 27/10/2026): ăn pot bằng bluff khi cầm 7-2
+  (bất kỳ chất) thì bài được lật cho cả bàn và mọi người khác ở bàn (kể cả sit-out) trả thêm tối
+  đa `Room.seven_deuce_bonus` chip, không ai bị âm — `HandEngine.seven_deuce_bluff_winner()` +
+  `TableSession._apply_seven_deuce_bonus()`
 - [ ] Ghi ledger trong transaction khi nối với table actor (B3–B4, chưa có actor nên chưa áp dụng)
 - [ ] Duyệt với chủ dự án
 

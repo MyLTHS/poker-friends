@@ -12,13 +12,13 @@ from apps.games.engine.table import TableSession
 from apps.games.models import Hand, LedgerEntry, LedgerKind, Room, User
 from apps.games.services import HandPersistenceError, save_completed_hand
 
-from .helpers import call, check_down, make_deck
+from .helpers import fold, make_deck, raise_to
 
 pytestmark = pytest.mark.django_db
 
 
 class Setup:
-    """A 2-player room where A (seat 1) wins a showdown holding 7-2 against B (seat 2)."""
+    """A 2-player room where A (seat 1) bluffs B (seat 2) off the pot holding 7-2."""
 
     def __init__(self, seven_deuce_bonus: int = 50):
         self.room = Room.objects.create(
@@ -34,14 +34,14 @@ class Setup:
             LedgerEntry.objects.create(room=self.room, user=user, kind=LedgerKind.GRANT, amount=100)
 
     def play_seven_deuce_hand(self):
-        # Button is seat 1 (A): player order is (B, A). A's 7h2h makes a full house.
+        # Button is seat 1 (A): player order is (B, A), A acts first and B folds to a raise.
         deck = make_deck(
             [self.b, self.a], holes={self.a: "7h2h", self.b: "AsAd"}, board="7d7c2s9h4c"
         )
         self.table._shuffle = lambda: deck
         hand = self.table.start_hand()
-        hand.act(call(hand.actor))
-        check_down(hand)
+        hand.act(raise_to(hand.actor, 6))
+        hand.act(fold(hand.actor))
         self.table.finish_hand()
         entries = [e for e in self.table.ledger if e.hand_no == self.table.hand_no]
         return hand, entries

@@ -21,7 +21,7 @@
 **Kết luận: chưa nên gộp.**
 ## Claude xử lý (27/10/2026)
 
-Sửa trên nhánh tách từ `claude/b2-data-models`, mỗi mục một commit, test viết trước và đã thấy đỏ.
+Sửa trên nhánh tách từ `claude/b2-data-models`, mỗi mục một commit, test viết trước và đã thấy đỏ. Mục 6 (luật 7-2 mới) là commit riêng.
 
 | Phát hiện | Trạng thái | Cách sửa |
 |---|---|---|
@@ -30,8 +30,20 @@ Sửa trên nhánh tách từ `claude/b2-data-models`, mỗi mục một commit,
 | DB chưa đủ bảo đảm replay | **Đã sửa** (`6675e38`) | `HandCommand.sequence` + unique `(hand, sequence)` + `ordering`; `HandCommand.hand` đổi `CASCADE` → `PROTECT`; `Hand.result` lưu `HandResult` lúc ván xong (ràng buộc: có `completed_at` thì có `result`); `Hand.replay_record()`. Test: lưu log ngược thứ tự → đọc từ DB → `replay()` → kết quả trùng `Hand.result`. |
 | Thiếu ràng buộc dữ liệu | **Đã sửa** (`2803537`) | `CheckConstraint`: `max_seats` 2..9, `small_blind` > 0 và < `big_blind`, ghế 1..9, ledger `amount` ≠ 0, `hand`/`seven_deuce` phải có `hand` còn `grant` thì không. `LedgerEntry.hand_no` thay bằng FK nullable tới `Hand`, thêm FK ghép `(room, hand)` trên PostgreSQL để hand luôn cùng phòng. Ghế vượt `max_seats` của phòng chặn ở `RoomSeat.save()`. |
 | `LedgerKind` định nghĩa hai lần | **Đã sửa** (`775a269`) | Giữ tách lớp; thêm test buộc hai tập giá trị trùng nhau (đã thử thêm kind một bên → test đỏ). |
-| Thưởng 7-2 có thể làm stack âm | **Chờ Lym quyết** | Là luật chơi: người trả thiếu chip thì trả bao nhiêu, người thắng nhận bao nhiêu. Chưa sửa code. |
-| Nhận diện winner 7-2 bằng `net > 0` sai khi chia pot | **Chờ Lym quyết** | Hòa/chia pot, hai người cùng cầm 7-2: ai được thưởng, ai trả ai. Chưa sửa code. |
+| Thưởng 7-2 có thể làm stack âm | **Đã sửa theo luật Lym chốt** (mục 6) | Mỗi người trả `min(bonus, chip còn lại sau pot)`, người thắng nhận đúng tổng thực trả; ai còn 0 chip không có dòng ledger. Test: thiếu chip, 0 chip, sit-out, nhiều người trả, tổng chip trước = sau. |
+| Nhận diện winner 7-2 bằng `net > 0` sai khi chia pot | **Hết áp dụng** (mục 6) | Luật mới chỉ thưởng khi ăn pot vì mọi người khác fold, nên không còn showdown/chia pot/nhiều winner. `seven_deuce_bluff_winner()` xác định từ danh sách action (người duy nhất không fold), không dựa vào `net`. |
+
+**Mục 6 — luật 7-2 mới (Lym chốt 27/10/2026, thay #27 cũ):** chỉ thưởng khi bluff thành công
+bằng 7-2, thắng showdown không thưởng; server tự lật 2 lá 7-2 của người thắng cho cả bàn sau khi
+ván xong (bài người đã fold vẫn úp); người trả tối đa số chip còn lại. `HandConfig` có thêm
+`seven_deuce_bonus` để record/replay mang theo luật của ván và lật bài y hệt khi replay. Đã sửa
+`docs/spec.md` (#27 và phần engine) và README.
+
+Chờ Lym quyết:
+
+- **Walk** (mọi người fold tới big blind, BB cầm 7-2, BB chưa hề hành động): tạm tính **được
+  thưởng** theo câu chữ. Test riêng: `test_a_walk_counts_as_a_bluff_for_now` trong
+  `apps/games/tests/test_hand.py`; đổi luật thì sửa test này và `seven_deuce_bluff_winner()`.
 
 Còn để ngỏ (chưa làm trong lượt này):
 
@@ -41,3 +53,4 @@ Còn để ngỏ (chưa làm trong lượt này):
 - `max_seats` tối thiểu 2 là suy từ spec ("tối đa 9, hỗ trợ heads-up"); Lym xác nhận lại.
 - Migration `0004`/`0005` giả định chưa có dữ liệu thật: DB dev đã có dòng ledger `hand` cũ (dùng `hand_no`) hoặc `Hand` đã xong mà chưa có `result` sẽ không qua được ràng buộc mới.
 - Bài tập "tổng ledger một phòng bằng tổng chip đã cấp" để Lym tự viết.
+- `simulate.py` chưa có tùy chọn bật thưởng 7-2; mục 6 được kiểm thêm bằng một lượt mô phỏng tạm (3.000 ván, có thưởng và người trả thiếu chip, 0 vi phạm), chưa đưa vào CI.

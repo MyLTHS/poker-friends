@@ -17,7 +17,7 @@ from .hand import HandConfig, HandEngine, Seat
 class LedgerKind(StrEnum):
     GRANT = "grant"  # host/admin grant or adjustment (may be negative)
     HAND = "hand"  # net result of one hand
-    SEVEN_DEUCE = "seven_deuce"  # bonus for winning a hand at showdown holding 7-2
+    SEVEN_DEUCE = "seven_deuce"  # bonus for taking a pot holding 7-2 after everyone folded
 
 
 @dataclass(frozen=True)
@@ -152,6 +152,7 @@ class TableSession:
                 small_blind=self.small_blind,
                 big_blind=self.big_blind,
                 deck=tuple(self._shuffle()),
+                seven_deuce_bonus=self.seven_deuce_bonus,
             )
         )
         return self.current_hand
@@ -171,27 +172,26 @@ class TableSession:
         return hand
 
     def _apply_seven_deuce_bonus(self, hand: HandEngine) -> None:
-        """Every other seated player (sitting out or not) owes the winner the room's bonus."""
-        if self.seven_deuce_bonus <= 0:
+        """Every other seated player (sitting out or not) owes the bluffer the room's bonus.
+
+        Runs after the pot is settled; a payer short of the bonus pays what they have left, so
+        no stack goes negative, and the winner receives exactly what was paid.
+        """
+        # The hand's own config, not the table's current one: it is what the record replays.
+        bonus = hand.config.seven_deuce_bonus
+        winner = hand.seven_deuce_bluff_winner()
+        if bonus <= 0 or winner is None:
             return
-        for winner in hand.showdown_seven_deuce_winners():
-            payers = [player for player in self.seats.values() if player != winner]
-            if not payers:
+        stacks = self.stacks
+        total = 0
+        for payer in self.seats.values():
+            paid = min(bonus, stacks.get(payer, 0))
+            if payer == winner or paid <= 0:
                 continue
-            for payer in payers:
-                self.ledger.append(
-                    LedgerEntry(
-                        LedgerKind.SEVEN_DEUCE, payer, -self.seven_deuce_bonus, self.hand_no
-                    )
-                )
-            self.ledger.append(
-                LedgerEntry(
-                    LedgerKind.SEVEN_DEUCE,
-                    winner,
-                    self.seven_deuce_bonus * len(payers),
-                    self.hand_no,
-                )
-            )
+            self.ledger.append(LedgerEntry(LedgerKind.SEVEN_DEUCE, payer, -paid, self.hand_no))
+            total += paid
+        if total:
+            self.ledger.append(LedgerEntry(LedgerKind.SEVEN_DEUCE, winner, total, self.hand_no))
 
     def _next_button(self, eligible_seats: list[int]) -> int:
         if self._button_seat is None:

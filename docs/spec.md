@@ -33,7 +33,7 @@ không tiền thật, không rake. Quy mô 10–20 người, 1 server.
 | 24 | TDD | Có |
 | 25 | API | Phục vụ web của dự án, thiết kế chuẩn để dùng lại cho app mobile |
 | 26 | Dự án | Django mới hoàn toàn |
-| 27 | Luật 7-2 | Luôn bật cho mọi phòng. Ai **thắng một ván tại showdown** (phải lật bài, thắng do mọi người khác fold trước không tính) mà cầm đúng hạng **7 và 2** (bất kỳ chất, cùng chất hay khác chất đều tính) thì **mọi người khác đang ngồi bàn** (kể cả đang sit-out) phải trả thêm một số chip **cố định, chủ phòng tự cấu hình theo phòng** (`Room.seven_deuce_bonus`, mặc định 0 = không có thưởng) cho người thắng, ngoài số chip thắng ở pot |
+| 27 | Luật 7-2 | Chủ phòng cấu hình theo phòng (`Room.seven_deuce_bonus`, mặc định 0 = tắt). Chỉ thưởng khi người cầm đúng hạng **7 và 2** (bất kỳ chất) **ăn pot vì mọi người khác đã fold** (bluff thành công); thắng ở showdown thì **không** thưởng, nên mỗi ván có tối đa một người nhận. Khi đó server **tự lật 2 lá 7-2** của người thắng cho cả bàn (kể cả người xem) sau khi ván xong; bài của người đã fold vẫn úp. **Mọi người khác đang ngồi bàn** (kể cả sit-out) trả người thắng `min(bonus, chip còn lại sau khi chia pot)`, không bao giờ âm; người thắng nhận đúng tổng thực trả; ai còn 0 chip thì không trả. Trường hợp *walk* (mọi người fold tới big blind, BB cầm 7-2): **chưa chốt**, tạm tính là được thưởng (quyết định 27/10/2026, thay bản cũ "thắng tại showdown") |
 
 ## Kiến trúc (tối giản cho 20 người)
 
@@ -58,15 +58,15 @@ apps/games/actor.py    # lớp điều phối — table actor + Channels consume
   `timeout` (tự check nếu được, không thì fold), `view_for(player)` — projection che bài úp của
   người khác, `record()`/`replay()` để tái tạo đúng kết quả từ (cấu hình + thứ tự bộ bài + danh
   sách action). Có chốt chặn nội bộ: tổng chip đổi khác 0 sau mỗi `act()` → ném `RuntimeError`
-  ngay, không để lọt. `showdown_seven_deuce_winners()` — luật 7-2 (#27): trả về những người
-  thắng **tại showdown** (bài đã lật — thắng do người khác fold không tính, vì lúc đó không ai
-  chứng minh được bài gì) đang cầm đúng hạng 7 và 2 (`hole_card_statuses` toàn `True` mới coi là
-  đã lật; bất kỳ chất bài).
+  ngay, không để lọt. `seven_deuce_bluff_winner()` — luật 7-2 (#27): người
+  ăn pot vì mọi người khác fold mà đang cầm đúng hạng 7 và 2 (bất kỳ chất), hoặc `None`; xác định
+  từ danh sách action nên replay luôn ra cùng kết quả. `HandConfig.seven_deuce_bonus` > 0 thì
+  `view_for` lật 2 lá đó cho mọi người sau khi ván xong.
 - **`table.py` — `TableSession`** — nhiều ván liên tiếp trên một bàn: xoay ghế/button, sit-out /
   sit-in, cấp chip giữa các ván, ledger tạm trong bộ nhớ, bảng tổng kết. `seven_deuce_bonus`
-  (mặc định 0): khi `finish_hand()` phát hiện người thắng luật 7-2, mọi người khác đang ngồi bàn
-  (kể cả sit-out) bị trừ đúng số chip này, người thắng được cộng tổng — luôn cân bằng về 0 trong
-  phòng, không ảnh hưởng bất biến bảo toàn chip. Khi lên B2, phần ledger này được thay bằng bản
+  (mặc định 0): khi `finish_hand()` có người thắng luật 7-2, mọi người khác đang ngồi bàn (kể cả
+  sit-out) trả `min(bonus, chip còn lại sau pot)`, người thắng nhận đúng tổng thực trả — luôn cân
+  bằng về 0 trong phòng, không ai bị âm chip. Khi lên B2, phần ledger này được thay bằng bản
   ghi DB bền vững (xem mục 2).
 - **`simulate.py`** — bot ngẫu nhiên chạy N ván, dùng trong test + CI để kiểm bất biến (không
   mất/sinh chip, không lộ bài) ở quy mô lớn (hàng nghìn ván) mà property test đơn lẻ khó phủ hết.
