@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChatMessageMessage",
+  "description": "Notice (does not change version): someone in the room said something. Sent to everyone connected, the sender included. History: GET /api/rooms/{id}/chat/.",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "$ref": "../common.schema.json#/$defs/ProtocolVersion"
+    },
+    "type": {
+      "const": "chat.message"
+    },
+    "room_id": {
+      "$ref": "../common.schema.json#/$defs/RoomId"
+    },
+    "hand_id": {
+      "$ref": "../common.schema.json#/$defs/HandIdOrNull"
+    },
+    "version": {
+      "$ref": "../common.schema.json#/$defs/Version"
+    },
+    "server_time": {
+      "$ref": "../common.schema.json#/$defs/ServerTime"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "$ref": "../common.schema.json#/$defs/ChatMessage"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "protocol_version",
+    "type",
+    "room_id",
+    "hand_id",
+    "version",
+    "server_time",
+    "payload"
+  ],
+  "additionalProperties": false
+}

@@ -8,6 +8,8 @@ info:
     - `B4`: cần để chơi realtime (vào ghế, rời ghế, lấy snapshot).
     - `B6`: tài khoản (`/api/auth/`, tag `auth`) — **đã cài**.
     - `B7`: phòng và quyền (lobby, tạo/xem phòng, link mời, quyền chủ phòng) — **đã cài**.
+    - `B8`: chat, lịch sử ván, replay, bảng lời/lỗ (tag `history`) — **đã cài**. Người có quyền
+      xem phòng (như `getRoom`) xem được; staff có quyền chủ phòng ở mọi phòng.
 
     Đăng nhập dùng cookie phiên của Django (`sessionid`). Mọi request không phải GET gửi header
     `X-CSRFToken` bằng giá trị cookie `csrftoken` (gọi `GET /api/auth/config/` để có cookie này),
@@ -37,6 +39,8 @@ tags:
     description: Ghế trong phòng
   - name: auth
     description: Tài khoản (B6) — email/mật khẩu, khách, nâng cấp khách, Google
+  - name: history
+    description: Chat, lịch sử ván, replay, bảng lời/lỗ (B8)
 paths:
   /api/rooms/:
     get:
@@ -680,6 +684,106 @@ paths:
       responses:
         "302":
           description: Chuyển sang Google, hoặc về trang web với `?error=google_disabled`
+  /api/rooms/{room_id}/chat/:
+    parameters:
+      - $ref: "#/components/parameters/RoomId"
+    get:
+      tags: [history]
+      operationId: getChatHistory
+      summary: 50 dòng chat gần nhất
+      description: Cũ trước, mới sau. Dòng mới tới qua WebSocket `chat.message`. Cần quyền xem phòng như `getRoom` (`room_not_found` nếu không, `kicked` nếu đã bị kick).
+      x-phase: B8
+      security: [{}, {session: []}]
+      responses:
+        "200":
+          description: Chat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatHistory"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/rooms/{room_id}/hands/:
+    parameters:
+      - $ref: "#/components/parameters/RoomId"
+    get:
+      tags: [history]
+      operationId: listHands
+      summary: Lịch sử ván của phòng
+      description: |
+        100 ván đã xong gần nhất, mới trước. Ván đang chơi không có ở đây. Ván bị người quản trị huỷ
+        (`void_hand`) có `voided: true` và không ai có lời/lỗ. Cần quyền xem phòng như `getRoom` (`room_not_found` nếu không, `kicked` nếu đã bị kick).
+      x-phase: B8
+      security: [{}, {session: []}]
+      responses:
+        "200":
+          description: Các ván
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandList"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/rooms/{room_id}/summary/:
+    parameters:
+      - $ref: "#/components/parameters/RoomId"
+    get:
+      tags: [history]
+      operationId: getRoomSummary
+      summary: Bảng tổng kết lời/lỗ
+      description: |
+        Mỗi người từng có chip trong phòng: đã được cấp bao nhiêu, thắng/thua bao nhiêu ở các ván,
+        thưởng 7-2 nhận/trả, số dư hiện tại và lời/lỗ (`net` = số dư − đã cấp). Tính từ sổ chip;
+        tổng `net` của cả phòng luôn bằng 0. Cần quyền xem phòng như `getRoom` (`room_not_found` nếu không, `kicked` nếu đã bị kick).
+      x-phase: B8
+      security: [{}, {session: []}]
+      responses:
+        "200":
+          description: Bảng tổng kết
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomSummary"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/hands/{hand_id}/replay/:
+    parameters:
+      - name: hand_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      tags: [history]
+      operationId: getHandReplay
+      summary: Xem lại một ván từng bước
+      description: |
+        Dựng lại ván từ cấu hình và các lệnh đã lưu. Mỗi bước là `HandView` **theo góc nhìn người
+        gọi tại thời điểm đó**: chỉ thấy bài của chính mình (nếu đã ngồi ván đó) và bài đã lật tới
+        bước đó; bài úp của người khác luôn là `"??"`. Chỉ ván đã xong (`hand_not_found` cho ván đang
+        chơi hoặc không có quyền xem); ván đã huỷ: `hand_voided`. `legal_actions` luôn `null`.
+      x-phase: B8
+      security: [{}, {session: []}]
+      responses:
+        "200":
+          description: Các bước
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandReplay"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 components:
   securitySchemes:
     session:
@@ -1013,6 +1117,127 @@ components:
         - social_account_taken
         - not_guest
         - account_inactive
+    ChatHistory:
+      type: object
+      properties:
+        messages:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "./schema/common.schema.json#/$defs/ChatMessage"
+      required: [messages]
+      additionalProperties: false
+    HandList:
+      type: object
+      properties:
+        hands:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/HandSummary"
+      required: [hands]
+      additionalProperties: false
+    HandSummary:
+      type: object
+      properties:
+        hand_id:
+          type: integer
+          minimum: 1
+        hand_no:
+          type: integer
+          minimum: 1
+        completed_at:
+          $ref: "./schema/common.schema.json#/$defs/ServerTime"
+        voided:
+          type: boolean
+        players:
+          type: array
+          items:
+            type: object
+            properties:
+              player_id:
+                $ref: "./schema/common.schema.json#/$defs/PlayerId"
+              display_name:
+                type: string
+              seat:
+                $ref: "./schema/common.schema.json#/$defs/SeatNumber"
+              net:
+                type: integer
+                description: Lời (+) / lỗ (−) của ván, gồm cả thưởng 7-2.
+            required: [player_id, display_name, seat, net]
+            additionalProperties: false
+      required: [hand_id, hand_no, completed_at, voided, players]
+      additionalProperties: false
+    HandReplay:
+      type: object
+      properties:
+        hand_id:
+          type: integer
+          minimum: 1
+        hand_no:
+          type: integer
+          minimum: 1
+        room_id:
+          $ref: "./schema/common.schema.json#/$defs/RoomId"
+        completed_at:
+          $ref: "./schema/common.schema.json#/$defs/ServerTime"
+        steps:
+          type: array
+          minItems: 1
+          description: Bước đầu là lúc vừa chia bài (`action` null); mỗi bước sau là một hành động đã áp.
+          items:
+            type: object
+            properties:
+              action:
+                anyOf:
+                  - $ref: "./schema/common.schema.json#/$defs/AppliedAction"
+                  - type: "null"
+              hand:
+                $ref: "./schema/common.schema.json#/$defs/HandView"
+            required: [action, hand]
+            additionalProperties: false
+        results:
+          type: array
+          items:
+            $ref: "./schema/common.schema.json#/$defs/PlayerResult"
+        seven_deuce:
+          anyOf:
+            - $ref: "./schema/common.schema.json#/$defs/SevenDeuceAward"
+            - type: "null"
+      required: [hand_id, hand_no, room_id, completed_at, steps, results, seven_deuce]
+      additionalProperties: false
+    RoomSummary:
+      type: object
+      properties:
+        players:
+          type: array
+          items:
+            type: object
+            properties:
+              player_id:
+                $ref: "./schema/common.schema.json#/$defs/PlayerId"
+              display_name:
+                type: string
+              granted:
+                type: integer
+                description: Tổng chip chủ phòng đã cấp (trừ đi phần đã trừ bớt).
+              hands_net:
+                type: integer
+                description: Thắng (+) / thua (−) ở các ván.
+              seven_deuce_net:
+                type: integer
+              balance:
+                $ref: "./schema/common.schema.json#/$defs/Chips"
+              net:
+                type: integer
+                description: Lời/lỗ = balance − granted = hands_net + seven_deuce_net.
+              hands_played:
+                type: integer
+                minimum: 0
+            required: [player_id, display_name, granted, hands_net, seven_deuce_net, balance, net, hands_played]
+            additionalProperties: false
+      required: [players]
+      additionalProperties: false
     ApiError:
       type: object
       properties:
@@ -1040,6 +1265,8 @@ components:
             - invalid_amount
             - negative_balance
             - kicked
+            - hand_not_found
+            - hand_voided
           description: Mã ổn định, client được phép `switch` theo mã.
         message:
           type: string
@@ -1073,13 +1300,13 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
     NotFound:
-      description: Không có phòng hoặc không được xem phòng này (`room_not_found`)
+      description: Không có phòng hoặc không được xem phòng này (`room_not_found`); không có ván, ván chưa xong hoặc không được xem (`hand_not_found`)
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ApiError"
     Conflict:
-      description: Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`)
+      description: Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`)
       content:
         application/json:
           schema:

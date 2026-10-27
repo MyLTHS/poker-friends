@@ -59,6 +59,7 @@ Message **client gửi** có `protocol_version`, `type`, `room_id`, `payload`; l
 |---|---|---|---|
 | **Sự kiện trạng thái** | `hand.started`, `action.applied`, `turn.deadline`, `hand.completed`, `seat.updated`, `room.suspended`, `room.updated` | Cả bàn (mỗi người một bản đã che bài theo góc nhìn của họ) | Tăng đúng **1** mỗi sự kiện |
 | **Trả lời riêng** | `table.snapshot`, `command.ack`, `command.rejected`, `protocol.error` | Chỉ người gửi lệnh / người kết nối | Không tăng; mang `version` hiện tại của phòng |
+| **Thông báo** (B8) | `chat.message`, `audience.updated` | Cả phòng | Không tăng; mang `version` hiện tại. Không phải trạng thái bàn: hụt một thông báo không cần resync |
 
 Cùng một sự kiện trạng thái thì mọi người nhận cùng `version`, chỉ khác phần bài được che.
 
@@ -122,7 +123,7 @@ bỏ mã là đổi phá vỡ. Trường `message` đi kèm chỉ để đọc l
 | `invalid_amount` | `amount` ngoài khoảng `min_raise_to`..`max_raise_to` |
 | `already_sitting_out` | `command.sit_out` khi đã sit-out |
 | `not_sitting_out` | `command.sit_in` khi đang chơi |
-| `rate_limited` | Gửi lệnh quá nhanh (B7) |
+| `rate_limited` | Gửi lệnh quá nhanh (B7); với `protocol.error`: chat quá nhanh (B8) |
 | `room_suspended` | Phòng đang tạm dừng chờ khôi phục (xem mục 8, `room.suspended`) |
 | `internal_error` | Lỗi phía server xảy ra **trước khi** lệnh được ghi (`HandCommand`): lệnh chưa áp dụng, gửi lại cùng `command_id` là an toàn. Lỗi **sau khi** đã ghi không bao giờ trả mã này (xem `room.suspended`) |
 
@@ -423,6 +424,34 @@ Người bị chủ phòng kick: cả bàn nhận `seat.updated` (ghế trống)
 đóng với mã **4403**, và người đó không vào lại được phòng (REST trả `kicked`). Kết nối vào phòng
 private mà không có quyền xem: server đóng ngay khi bắt tay với mã **4404**.
 
+### `chat.message` (thông báo, B8)
+
+Một dòng chat, gửi cho mọi người đang kết nối phòng, kể cả người gửi (client hiện dòng của mình
+khi nhận lại, không tự thêm trước). Emoji là ký tự bình thường trong `text`. Lịch sử (50 dòng gần
+nhất) lấy qua `GET /api/rooms/{room_id}/chat/`, ví dụ khi vừa kết nối lại.
+
+```json
+{
+  "protocol_version": 1, "type": "chat.message", "room_id": 1, "hand_id": 41,
+  "version": 18, "server_time": "2026-10-27T14:03:12.400Z",
+  "payload": {"message": {"message_id": 9, "player_id": "2", "display_name": "An",
+              "text": "bluff à 😏", "sent_at": "2026-10-27T14:03:12.398Z"}}
+}
+```
+
+### `audience.updated` (thông báo, B8)
+
+Danh sách người đang xem mà không ngồi ghế (người xem). Gửi cho cả phòng mỗi khi danh sách đổi, và
+gửi riêng cho kết nối mới ngay sau `table.snapshot`. Một người mở nhiều tab vẫn chỉ tính một lần.
+
+```json
+{
+  "protocol_version": 1, "type": "audience.updated", "room_id": 1, "hand_id": null,
+  "version": 12, "server_time": "2026-10-27T14:00:01.000Z",
+  "payload": {"spectators": [{"player_id": "5", "display_name": "Chi"}]}
+}
+```
+
 ### `protocol.error` (trả lời riêng)
 
 Message hỏng tới mức không tìm được `command_id`. Server không đóng kết nối.
@@ -448,6 +477,16 @@ số chip **raise tới**, kể cả khi là cược mở đầu vòng). Không 
 
 `payload` rỗng `{}`. Người gửi là người sit-out / quay lại.
 [sit_out](fixtures/client/valid/command.sit_out.json), [sit_in](fixtures/client/valid/command.sit_in.json).
+
+### `chat.send` (B8)
+
+```json
+{"protocol_version": 1, "type": "chat.send", "room_id": 1, "payload": {"text": "gg 🎉"}}
+```
+
+Không phải lệnh: không có `command_id`, không có ack. `text` 1–300 ký tự, không toàn khoảng trắng.
+Người ngồi ghế và người xem đều chat được. Gửi quá nhanh (quá 5 dòng trong 10 giây) thì nhận
+`protocol.error` mã `rate_limited` và dòng đó bị bỏ.
 
 ### `resync.request`
 
@@ -484,8 +523,9 @@ Góc nhìn Lym, ván ví dụ ở mục 8 (`v` = `version`):
 - Heartbeat ở tầng giao thức: không có và không cần. Server (Daphne) ping ở tầng WebSocket khi
   kết nối im 20 giây và đóng nếu 30 giây không có pong; trình duyệt tự trả pong. Kết nối đóng thì
   cả bàn nhận `seat.updated` với `connected: false` (B5).
-- Chat, emoji, vào/ra của người xem: B8.
 - (Đã có từ B7) Chủ phòng cấp chip, kick: REST, kết quả phát bằng `seat.updated`; đổi cấu hình
   và đóng phòng: `room.updated`.
+- (Đã có từ B8) Chat (`chat.send` → `chat.message`), danh sách người xem (`audience.updated`);
+  lịch sử ván, replay và bảng lời/lỗ qua REST ([`openapi.yaml`](openapi.yaml), tag `history`).
 
 Các thứ này sẽ là **thêm message mới** (đổi tương thích), không đổi message đã có.

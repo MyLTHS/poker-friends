@@ -1,0 +1,17 @@
+{
+  "protocol_version": 1,
+  "type": "chat.message",
+  "room_id": 1,
+  "hand_id": null,
+  "version": 3,
+  "server_time": "2026-10-27T14:00:01.000Z",
+  "payload": {
+    "message": {
+      "message_id": 1,
+      "player_id": "2",
+      "display_name": "An",
+      "text": "",
+      "sent_at": "2026-10-27T14:00:01.000Z"
+    }
+  }
+}

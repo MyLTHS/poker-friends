@@ -501,6 +501,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rooms/{room_id}/chat/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 50 dòng chat gần nhất
+         * @description Cũ trước, mới sau. Dòng mới tới qua WebSocket `chat.message`. Cần quyền xem phòng như `getRoom` (`room_not_found` nếu không, `kicked` nếu đã bị kick).
+         */
+        get: operations["getChatHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/hands/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Lịch sử ván của phòng
+         * @description 100 ván đã xong gần nhất, mới trước. Ván đang chơi không có ở đây. Ván bị người quản trị huỷ
+         *     (`void_hand`) có `voided: true` và không ai có lời/lỗ. Cần quyền xem phòng như `getRoom` (`room_not_found` nếu không, `kicked` nếu đã bị kick).
+         */
+        get: operations["listHands"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/summary/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Bảng tổng kết lời/lỗ
+         * @description Mỗi người từng có chip trong phòng: đã được cấp bao nhiêu, thắng/thua bao nhiêu ở các ván,
+         *     thưởng 7-2 nhận/trả, số dư hiện tại và lời/lỗ (`net` = số dư − đã cấp). Tính từ sổ chip;
+         *     tổng `net` của cả phòng luôn bằng 0. Cần quyền xem phòng như `getRoom` (`room_not_found` nếu không, `kicked` nếu đã bị kick).
+         */
+        get: operations["getRoomSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hands/{hand_id}/replay/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hand_id: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * Xem lại một ván từng bước
+         * @description Dựng lại ván từ cấu hình và các lệnh đã lưu. Mỗi bước là `HandView` **theo góc nhìn người
+         *     gọi tại thời điểm đó**: chỉ thấy bài của chính mình (nếu đã ngồi ván đó) và bài đã lật tới
+         *     bước đó; bài úp của người khác luôn là `"??"`. Chỉ ván đã xong (`hand_not_found` cho ván đang
+         *     chơi hoặc không có quyền xem); ván đã huỷ: `hand_voided`. `legal_actions` luôn `null`.
+         */
+        get: operations["getHandReplay"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -664,12 +758,59 @@ export interface components {
          * @enum {string}
          */
         GoogleError: "google_disabled" | "google_failed" | "email_taken" | "email_not_verified" | "social_account_taken" | "not_guest" | "account_inactive";
+        ChatHistory: {
+            messages: components["schemas"]["ChatMessage"][];
+        };
+        HandList: {
+            hands: components["schemas"]["HandSummary"][];
+        };
+        HandSummary: {
+            hand_id: number;
+            hand_no: number;
+            completed_at: components["schemas"]["ServerTime"];
+            voided: boolean;
+            players: {
+                player_id: components["schemas"]["PlayerId"];
+                display_name: string;
+                seat: components["schemas"]["SeatNumber"];
+                /** @description Lời (+) / lỗ (−) của ván, gồm cả thưởng 7-2. */
+                net: number;
+            }[];
+        };
+        HandReplay: {
+            hand_id: number;
+            hand_no: number;
+            room_id: components["schemas"]["RoomId"];
+            completed_at: components["schemas"]["ServerTime"];
+            /** @description Bước đầu là lúc vừa chia bài (`action` null); mỗi bước sau là một hành động đã áp. */
+            steps: {
+                action: components["schemas"]["AppliedAction"] | null;
+                hand: components["schemas"]["HandView"];
+            }[];
+            results: components["schemas"]["PlayerResult"][];
+            seven_deuce: components["schemas"]["SevenDeuceAward"] | null;
+        };
+        RoomSummary: {
+            players: {
+                player_id: components["schemas"]["PlayerId"];
+                display_name: string;
+                /** @description Tổng chip chủ phòng đã cấp (trừ đi phần đã trừ bớt). */
+                granted: number;
+                /** @description Thắng (+) / thua (−) ở các ván. */
+                hands_net: number;
+                seven_deuce_net: number;
+                balance: components["schemas"]["Chips"];
+                /** @description Lời/lỗ = balance − granted = hands_net + seven_deuce_net. */
+                net: number;
+                hands_played: number;
+            }[];
+        };
         ApiError: {
             /**
              * @description Mã ổn định, client được phép `switch` theo mã.
              * @enum {string}
              */
-            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked";
+            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked" | "hand_not_found" | "hand_voided";
             /** @description Để đọc log, không hiện cho người chơi. */
             message: string;
             /** @description Chỉ có khi `validation_error`, lỗi theo từng trường của body. */
@@ -810,6 +951,75 @@ export interface components {
             hand: components["schemas"]["HandView"] | null;
             turn: components["schemas"]["Turn"] | null;
         };
+        /**
+         * ChatText
+         * @description 1 to 300 characters; not blank.
+         */
+        ChatText: string;
+        /**
+         * ChatMessage
+         * @description One chat line in a room (B8). Emoji are ordinary characters in text.
+         */
+        ChatMessage: {
+            message_id: number;
+            player_id: components["schemas"]["PlayerId"];
+            display_name: string;
+            text: components["schemas"]["ChatText"];
+            sent_at: components["schemas"]["ServerTime"];
+        };
+        /**
+         * AppliedAction
+         * @description One applied action. Like command.act: fold, check and call have no amount; raise has the total raised to. timeout is true when the server acted because the clock ran out.
+         */
+        AppliedAction: {
+            player_id: components["schemas"]["PlayerId"];
+            seat: components["schemas"]["SeatNumber"];
+            /** @enum {string} */
+            kind: "fold" | "check" | "call";
+            amount: null;
+            timeout: boolean;
+        } | {
+            player_id: components["schemas"]["PlayerId"];
+            seat: components["schemas"]["SeatNumber"];
+            /** @constant */
+            kind: "raise";
+            amount: number;
+            timeout: boolean;
+        };
+        /**
+         * PlayerResult
+         * @description One player's outcome. stack is the room balance after the hand and the 7-2 bonus.
+         */
+        PlayerResult: {
+            player_id: components["schemas"]["PlayerId"];
+            seat: components["schemas"]["SeatNumber"];
+            /** @description Chips won (+) or lost (-) in the pot. */
+            hand_net: number;
+            /** @description Seven-deuce bonus received (+) or paid (-); 0 when none. */
+            seven_deuce_net: number;
+            stack: components["schemas"]["Chips"];
+        };
+        /** SevenDeucePayment */
+        SevenDeucePayment: {
+            player_id: components["schemas"]["PlayerId"];
+            seat: components["schemas"]["SeatNumber"];
+            /** @description What this player actually paid: min(bonus, chips left after the pot). */
+            amount: number;
+        };
+        /**
+         * SevenDeuceAward
+         * @description Rule #27: the pot was taken holding 7-2 after everyone else folded. The two cards are shown to the whole table. total is the sum of payments: exactly what the winner received.
+         */
+        SevenDeuceAward: {
+            player_id: components["schemas"]["PlayerId"];
+            seat: components["schemas"]["SeatNumber"];
+            cards: components["schemas"]["VisibleCard"][];
+            /** @description The room's bonus for this hand. */
+            bonus: number;
+            /** @description One row per player who paid; players with 0 chips left are absent. */
+            payments: components["schemas"]["SevenDeucePayment"][];
+            total: components["schemas"]["Chips"];
+        };
     };
     responses: {
         /** @description Body sai (`validation_error`, `invalid_seat`, `invalid_credentials`, `invalid_token`, `invalid_amount`) */
@@ -839,7 +1049,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Không có phòng hoặc không được xem phòng này (`room_not_found`) */
+        /** @description Không có phòng hoặc không được xem phòng này (`room_not_found`); không có ván, ván chưa xong hoặc không được xem (`hand_not_found`) */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -848,7 +1058,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`) */
+        /** @description Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`) */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -1532,6 +1742,103 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    getChatHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Chat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatHistory"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listHands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Các ván */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandList"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRoomSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bảng tổng kết */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomSummary"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getHandReplay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hand_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Các bước */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandReplay"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
 }

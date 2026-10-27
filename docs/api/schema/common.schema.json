@@ -22,7 +22,10 @@
     "HandIdOrNull": {
       "title": "HandIdOrNull",
       "description": "The hand running when the message was sent, or null between hands.",
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 1
     },
     "Version": {
@@ -76,20 +79,49 @@
       "title": "ActionKind",
       "description": "raise also covers an opening bet; its amount is the total to raise to.",
       "type": "string",
-      "enum": ["fold", "check", "call", "raise"]
+      "enum": [
+        "fold",
+        "check",
+        "call",
+        "raise"
+      ]
     },
     "LegalActions": {
       "title": "LegalActions",
       "description": "What the player to act may do, computed by the server (HandEngine.legal_actions).",
       "type": "object",
       "properties": {
-        "can_fold": { "type": "boolean" },
-        "can_check": { "type": "boolean" },
-        "call_amount": { "$ref": "#/$defs/Chips" },
-        "min_raise_to": { "type": ["integer", "null"], "minimum": 1 },
-        "max_raise_to": { "type": ["integer", "null"], "minimum": 1 }
+        "can_fold": {
+          "type": "boolean"
+        },
+        "can_check": {
+          "type": "boolean"
+        },
+        "call_amount": {
+          "$ref": "#/$defs/Chips"
+        },
+        "min_raise_to": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "max_raise_to": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
       },
-      "required": ["can_fold", "can_check", "call_amount", "min_raise_to", "max_raise_to"],
+      "required": [
+        "can_fold",
+        "can_check",
+        "call_amount",
+        "min_raise_to",
+        "max_raise_to"
+      ],
       "additionalProperties": false
     },
     "HandPlayer": {
@@ -97,31 +129,57 @@
       "description": "One player in the hand as the receiver may see them. cards hold ?? for every card the receiver may not see; they are empty once the player folded.",
       "type": "object",
       "properties": {
-        "player_id": { "$ref": "#/$defs/PlayerId" },
-        "seat": { "$ref": "#/$defs/SeatNumber" },
-        "stack": { "$ref": "#/$defs/Chips" },
-        "bet": { "$ref": "#/$defs/Chips" },
-        "in_hand": { "type": "boolean" },
+        "player_id": {
+          "$ref": "#/$defs/PlayerId"
+        },
+        "seat": {
+          "$ref": "#/$defs/SeatNumber"
+        },
+        "stack": {
+          "$ref": "#/$defs/Chips"
+        },
+        "bet": {
+          "$ref": "#/$defs/Chips"
+        },
+        "in_hand": {
+          "type": "boolean"
+        },
         "cards": {
           "type": "array",
-          "items": { "$ref": "#/$defs/Card" },
+          "items": {
+            "$ref": "#/$defs/Card"
+          },
           "maxItems": 2
         }
       },
-      "required": ["player_id", "seat", "stack", "bet", "in_hand", "cards"],
+      "required": [
+        "player_id",
+        "seat",
+        "stack",
+        "bet",
+        "in_hand",
+        "cards"
+      ],
       "additionalProperties": false
     },
     "Pot": {
       "title": "Pot",
       "type": "object",
       "properties": {
-        "amount": { "$ref": "#/$defs/Chips" },
+        "amount": {
+          "$ref": "#/$defs/Chips"
+        },
         "eligible": {
           "type": "array",
-          "items": { "$ref": "#/$defs/PlayerId" }
+          "items": {
+            "$ref": "#/$defs/PlayerId"
+          }
         }
       },
-      "required": ["amount", "eligible"],
+      "required": [
+        "amount",
+        "eligible"
+      ],
       "additionalProperties": false
     },
     "HandView": {
@@ -129,35 +187,70 @@
       "description": "The hand as one receiver may see it: HandEngine.view_for(receiver) plus hand_id and hand_no. Spectators get view_for(None).",
       "type": "object",
       "properties": {
-        "hand_id": { "$ref": "#/$defs/HandId" },
-        "hand_no": { "type": "integer", "minimum": 1 },
-        "button_seat": { "$ref": "#/$defs/SeatNumber" },
-        "small_blind": { "type": "integer", "minimum": 1 },
-        "big_blind": { "type": "integer", "minimum": 1 },
+        "hand_id": {
+          "$ref": "#/$defs/HandId"
+        },
+        "hand_no": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "button_seat": {
+          "$ref": "#/$defs/SeatNumber"
+        },
+        "small_blind": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "big_blind": {
+          "type": "integer",
+          "minimum": 1
+        },
         "board": {
           "type": "array",
-          "items": { "$ref": "#/$defs/VisibleCard" },
+          "items": {
+            "$ref": "#/$defs/VisibleCard"
+          },
           "maxItems": 5
         },
         "pots": {
           "type": "array",
-          "items": { "$ref": "#/$defs/Pot" }
+          "items": {
+            "$ref": "#/$defs/Pot"
+          }
         },
         "players": {
           "type": "array",
-          "items": { "$ref": "#/$defs/HandPlayer" },
+          "items": {
+            "$ref": "#/$defs/HandPlayer"
+          },
           "minItems": 2,
           "maxItems": 9
         },
         "actor": {
           "description": "The player to act, or null when nobody is (hand complete).",
-          "anyOf": [{ "$ref": "#/$defs/PlayerId" }, { "type": "null" }]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlayerId"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "legal_actions": {
           "description": "Only for the receiver when they are the actor; null for everyone else.",
-          "anyOf": [{ "$ref": "#/$defs/LegalActions" }, { "type": "null" }]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LegalActions"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
-        "complete": { "type": "boolean" }
+        "complete": {
+          "type": "boolean"
+        }
       },
       "required": [
         "hand_id",
@@ -179,28 +272,78 @@
       "description": "Who sits in a seat. stack is the room balance from the ledger: during a hand it is the balance before that hand; the live stack is in HandView.",
       "type": "object",
       "properties": {
-        "seat": { "$ref": "#/$defs/SeatNumber" },
-        "player_id": { "$ref": "#/$defs/PlayerId" },
-        "display_name": { "type": "string", "minLength": 1, "maxLength": 50 },
-        "stack": { "$ref": "#/$defs/Chips" },
-        "sitting_out": { "type": "boolean" },
-        "connected": { "type": "boolean" }
+        "seat": {
+          "$ref": "#/$defs/SeatNumber"
+        },
+        "player_id": {
+          "$ref": "#/$defs/PlayerId"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "stack": {
+          "$ref": "#/$defs/Chips"
+        },
+        "sitting_out": {
+          "type": "boolean"
+        },
+        "connected": {
+          "type": "boolean"
+        }
       },
-      "required": ["seat", "player_id", "display_name", "stack", "sitting_out", "connected"],
+      "required": [
+        "seat",
+        "player_id",
+        "display_name",
+        "stack",
+        "sitting_out",
+        "connected"
+      ],
       "additionalProperties": false
     },
     "RoomInfo": {
       "title": "RoomInfo",
       "type": "object",
       "properties": {
-        "room_id": { "$ref": "#/$defs/RoomId" },
-        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
-        "status": { "type": "string", "enum": ["open", "playing", "suspended", "closed"] },
-        "max_seats": { "type": "integer", "minimum": 2, "maximum": 9 },
-        "small_blind": { "type": "integer", "minimum": 1 },
-        "big_blind": { "type": "integer", "minimum": 1 },
-        "think_time_seconds": { "type": "integer", "minimum": 1 },
-        "seven_deuce_bonus": { "$ref": "#/$defs/Chips" }
+        "room_id": {
+          "$ref": "#/$defs/RoomId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "playing",
+            "suspended",
+            "closed"
+          ]
+        },
+        "max_seats": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9
+        },
+        "small_blind": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "big_blind": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "think_time_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seven_deuce_bonus": {
+          "$ref": "#/$defs/Chips"
+        }
       },
       "required": [
         "room_id",
@@ -219,12 +362,26 @@
       "description": "Whose turn it is and when the server acts for them (check if free, otherwise fold).",
       "type": "object",
       "properties": {
-        "player_id": { "$ref": "#/$defs/PlayerId" },
-        "seat": { "$ref": "#/$defs/SeatNumber" },
-        "deadline": { "$ref": "#/$defs/ServerTime" },
-        "think_time_seconds": { "type": "integer", "minimum": 1 }
+        "player_id": {
+          "$ref": "#/$defs/PlayerId"
+        },
+        "seat": {
+          "$ref": "#/$defs/SeatNumber"
+        },
+        "deadline": {
+          "$ref": "#/$defs/ServerTime"
+        },
+        "think_time_seconds": {
+          "type": "integer",
+          "minimum": 1
+        }
       },
-      "required": ["player_id", "seat", "deadline", "think_time_seconds"],
+      "required": [
+        "player_id",
+        "seat",
+        "deadline",
+        "think_time_seconds"
+      ],
       "additionalProperties": false
     },
     "TableState": {
@@ -232,27 +389,69 @@
       "description": "Everything a client needs to draw the table from scratch, projected for one receiver.",
       "type": "object",
       "properties": {
-        "room": { "$ref": "#/$defs/RoomInfo" },
+        "room": {
+          "$ref": "#/$defs/RoomInfo"
+        },
         "you": {
           "description": "The receiver. seat is null for a spectator.",
           "type": "object",
           "properties": {
-            "player_id": { "$ref": "#/$defs/PlayerId" },
-            "seat": { "anyOf": [{ "$ref": "#/$defs/SeatNumber" }, { "type": "null" }] }
+            "player_id": {
+              "$ref": "#/$defs/PlayerId"
+            },
+            "seat": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SeatNumber"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
           },
-          "required": ["player_id", "seat"],
+          "required": [
+            "player_id",
+            "seat"
+          ],
           "additionalProperties": false
         },
         "seats": {
           "description": "Occupied seats only, ordered by seat.",
           "type": "array",
-          "items": { "$ref": "#/$defs/SeatOccupant" },
+          "items": {
+            "$ref": "#/$defs/SeatOccupant"
+          },
           "maxItems": 9
         },
-        "hand": { "anyOf": [{ "$ref": "#/$defs/HandView" }, { "type": "null" }] },
-        "turn": { "anyOf": [{ "$ref": "#/$defs/Turn" }, { "type": "null" }] }
+        "hand": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HandView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "turn": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Turn"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
       },
-      "required": ["room", "you", "seats", "hand", "turn"],
+      "required": [
+        "room",
+        "you",
+        "seats",
+        "hand",
+        "turn"
+      ],
       "additionalProperties": false
     },
     "AppliedAction": {
@@ -262,25 +461,63 @@
         {
           "type": "object",
           "properties": {
-            "player_id": { "$ref": "#/$defs/PlayerId" },
-            "seat": { "$ref": "#/$defs/SeatNumber" },
-            "kind": { "type": "string", "enum": ["fold", "check", "call"] },
-            "amount": { "type": "null" },
-            "timeout": { "type": "boolean" }
+            "player_id": {
+              "$ref": "#/$defs/PlayerId"
+            },
+            "seat": {
+              "$ref": "#/$defs/SeatNumber"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "fold",
+                "check",
+                "call"
+              ]
+            },
+            "amount": {
+              "type": "null"
+            },
+            "timeout": {
+              "type": "boolean"
+            }
           },
-          "required": ["player_id", "seat", "kind", "amount", "timeout"],
+          "required": [
+            "player_id",
+            "seat",
+            "kind",
+            "amount",
+            "timeout"
+          ],
           "additionalProperties": false
         },
         {
           "type": "object",
           "properties": {
-            "player_id": { "$ref": "#/$defs/PlayerId" },
-            "seat": { "$ref": "#/$defs/SeatNumber" },
-            "kind": { "const": "raise" },
-            "amount": { "type": "integer", "minimum": 1 },
-            "timeout": { "type": "boolean" }
+            "player_id": {
+              "$ref": "#/$defs/PlayerId"
+            },
+            "seat": {
+              "$ref": "#/$defs/SeatNumber"
+            },
+            "kind": {
+              "const": "raise"
+            },
+            "amount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "timeout": {
+              "type": "boolean"
+            }
           },
-          "required": ["player_id", "seat", "kind", "amount", "timeout"],
+          "required": [
+            "player_id",
+            "seat",
+            "kind",
+            "amount",
+            "timeout"
+          ],
           "additionalProperties": false
         }
       ]
@@ -290,31 +527,54 @@
       "description": "One player's outcome. stack is the room balance after the hand and the 7-2 bonus.",
       "type": "object",
       "properties": {
-        "player_id": { "$ref": "#/$defs/PlayerId" },
-        "seat": { "$ref": "#/$defs/SeatNumber" },
-        "hand_net": { "type": "integer", "description": "Chips won (+) or lost (-) in the pot." },
+        "player_id": {
+          "$ref": "#/$defs/PlayerId"
+        },
+        "seat": {
+          "$ref": "#/$defs/SeatNumber"
+        },
+        "hand_net": {
+          "type": "integer",
+          "description": "Chips won (+) or lost (-) in the pot."
+        },
         "seven_deuce_net": {
           "type": "integer",
           "description": "Seven-deuce bonus received (+) or paid (-); 0 when none."
         },
-        "stack": { "$ref": "#/$defs/Chips" }
+        "stack": {
+          "$ref": "#/$defs/Chips"
+        }
       },
-      "required": ["player_id", "seat", "hand_net", "seven_deuce_net", "stack"],
+      "required": [
+        "player_id",
+        "seat",
+        "hand_net",
+        "seven_deuce_net",
+        "stack"
+      ],
       "additionalProperties": false
     },
     "SevenDeucePayment": {
       "title": "SevenDeucePayment",
       "type": "object",
       "properties": {
-        "player_id": { "$ref": "#/$defs/PlayerId" },
-        "seat": { "$ref": "#/$defs/SeatNumber" },
+        "player_id": {
+          "$ref": "#/$defs/PlayerId"
+        },
+        "seat": {
+          "$ref": "#/$defs/SeatNumber"
+        },
         "amount": {
           "type": "integer",
           "minimum": 1,
           "description": "What this player actually paid: min(bonus, chips left after the pot)."
         }
       },
-      "required": ["player_id", "seat", "amount"],
+      "required": [
+        "player_id",
+        "seat",
+        "amount"
+      ],
       "additionalProperties": false
     },
     "SevenDeuceAward": {
@@ -322,11 +582,17 @@
       "description": "Rule #27: the pot was taken holding 7-2 after everyone else folded. The two cards are shown to the whole table. total is the sum of payments: exactly what the winner received.",
       "type": "object",
       "properties": {
-        "player_id": { "$ref": "#/$defs/PlayerId" },
-        "seat": { "$ref": "#/$defs/SeatNumber" },
+        "player_id": {
+          "$ref": "#/$defs/PlayerId"
+        },
+        "seat": {
+          "$ref": "#/$defs/SeatNumber"
+        },
         "cards": {
           "type": "array",
-          "items": { "$ref": "#/$defs/VisibleCard" },
+          "items": {
+            "$ref": "#/$defs/VisibleCard"
+          },
           "minItems": 2,
           "maxItems": 2
         },
@@ -338,11 +604,22 @@
         "payments": {
           "description": "One row per player who paid; players with 0 chips left are absent.",
           "type": "array",
-          "items": { "$ref": "#/$defs/SevenDeucePayment" }
+          "items": {
+            "$ref": "#/$defs/SevenDeucePayment"
+          }
         },
-        "total": { "$ref": "#/$defs/Chips" }
+        "total": {
+          "$ref": "#/$defs/Chips"
+        }
       },
-      "required": ["player_id", "seat", "cards", "bonus", "payments", "total"],
+      "required": [
+        "player_id",
+        "seat",
+        "cards",
+        "bonus",
+        "payments",
+        "total"
+      ],
       "additionalProperties": false
     },
     "RejectCode": {
@@ -372,7 +649,74 @@
       "title": "ProtocolErrorCode",
       "description": "Why a message without a usable command_id could not be handled.",
       "type": "string",
-      "enum": ["invalid_json", "invalid_message", "unknown_type", "unsupported_protocol_version"]
+      "enum": [
+        "invalid_json",
+        "invalid_message",
+        "unknown_type",
+        "unsupported_protocol_version",
+        "rate_limited"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "One chat line in a room (B8). Emoji are ordinary characters in text.",
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "player_id": {
+          "$ref": "#/$defs/PlayerId"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "text": {
+          "$ref": "#/$defs/ChatText"
+        },
+        "sent_at": {
+          "$ref": "#/$defs/ServerTime"
+        }
+      },
+      "required": [
+        "message_id",
+        "player_id",
+        "display_name",
+        "text",
+        "sent_at"
+      ],
+      "additionalProperties": false
+    },
+    "ChatText": {
+      "title": "ChatText",
+      "description": "1 to 300 characters; not blank.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "pattern": "\\S"
+    },
+    "Spectator": {
+      "title": "Spectator",
+      "description": "Someone connected to the room without a seat.",
+      "type": "object",
+      "properties": {
+        "player_id": {
+          "$ref": "#/$defs/PlayerId"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        }
+      },
+      "required": [
+        "player_id",
+        "display_name"
+      ],
+      "additionalProperties": false
     }
   }
 }

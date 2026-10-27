@@ -35,6 +35,12 @@
     },
     {
       "$ref": "messages/protocol.error.schema.json"
+    },
+    {
+      "$ref": "messages/chat.message.schema.json"
+    },
+    {
+      "$ref": "messages/audience.updated.schema.json"
     }
   ]
 }

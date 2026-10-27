@@ -15,7 +15,9 @@ export type ServerMessage =
   | RoomUpdatedMessage
   | CommandAckMessage
   | CommandRejectedMessage
-  | ProtocolErrorMessage;
+  | ProtocolErrorMessage
+  | ChatMessageMessage
+  | AudienceUpdatedMessage;
 /**
  * Version of this protocol. Bumped only on a breaking change.
  */
@@ -96,11 +98,17 @@ export type RejectCode =
 /**
  * Why a message without a usable command_id could not be handled.
  */
-export type ProtocolErrorCode = "invalid_json" | "invalid_message" | "unknown_type" | "unsupported_protocol_version";
+export type ProtocolErrorCode =
+  "invalid_json" | "invalid_message" | "unknown_type" | "unsupported_protocol_version" | "rate_limited";
+/**
+ * 1 to 300 characters; not blank.
+ */
+export type ChatText = string;
 /**
  * Any message the client sends. The type field tells which one.
  */
-export type ClientMessage = ActCommandMessage | SitOutCommandMessage | SitInCommandMessage | ResyncRequestMessage;
+export type ClientMessage =
+  ActCommandMessage | SitOutCommandMessage | SitInCommandMessage | ResyncRequestMessage | ChatSendMessage;
 
 /**
  * Every WebSocket message, by direction. See docs/api/ws-protocol.md.
@@ -448,6 +456,54 @@ export interface ProtocolErrorMessage {
   };
 }
 /**
+ * Notice (does not change version): someone in the room said something. Sent to everyone connected, the sender included. History: GET /api/rooms/{id}/chat/.
+ */
+export interface ChatMessageMessage {
+  protocol_version: ProtocolVersion;
+  type: "chat.message";
+  room_id: RoomId;
+  hand_id: HandIdOrNull;
+  version: Version;
+  server_time: ServerTime;
+  payload: {
+    message: ChatMessage;
+  };
+}
+/**
+ * One chat line in a room (B8). Emoji are ordinary characters in text.
+ */
+export interface ChatMessage {
+  message_id: number;
+  player_id: PlayerId;
+  display_name: string;
+  text: ChatText;
+  sent_at: ServerTime;
+}
+/**
+ * Notice (does not change version): who is watching without a seat. Sent to everyone when it changes, and to a new connection right after its table.snapshot.
+ */
+export interface AudienceUpdatedMessage {
+  protocol_version: ProtocolVersion;
+  type: "audience.updated";
+  room_id: RoomId;
+  hand_id: HandIdOrNull;
+  version: Version;
+  server_time: ServerTime;
+  payload: {
+    /**
+     * @maxItems 200
+     */
+    spectators: Spectator[];
+  };
+}
+/**
+ * Someone connected to the room without a seat.
+ */
+export interface Spectator {
+  player_id: PlayerId;
+  display_name: string;
+}
+/**
  * Command: the sender acts in the current hand. hand_id must be the running hand.
  */
 export interface ActCommandMessage {
@@ -495,5 +551,16 @@ export interface ResyncRequestMessage {
   room_id: RoomId;
   payload: {
     last_version: Version;
+  };
+}
+/**
+ * Say something in the room's chat. Not a command: no command_id, no ack; the sender sees their line come back as chat.message. Too fast: protocol.error rate_limited.
+ */
+export interface ChatSendMessage {
+  protocol_version: ProtocolVersion;
+  type: "chat.send";
+  room_id: RoomId;
+  payload: {
+    text: ChatText;
   };
 }
