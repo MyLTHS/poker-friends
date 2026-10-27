@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { errorText, googleResult } from "./messages";
+import { errorText, googleResult, type GoogleError } from "./messages";
 
 describe("errorText", () => {
   it("has a Vietnamese sentence for every account error", () => {
@@ -33,5 +33,21 @@ describe("googleResult", () => {
     expect(googleResult(new URLSearchParams("error=social_account_taken"))?.text).toContain("Google");
     expect(googleResult(new URLSearchParams("error=something_new"))?.kind).toBe("error");
     expect(googleResult(new URLSearchParams(""))).toBeNull();
+  });
+
+  it("explains every Google error code in Google's terms", () => {
+    const codes: GoogleError[] = [
+      "google_disabled",
+      "google_failed",
+      "email_taken",
+      "email_not_verified",
+      "social_account_taken",
+      "not_guest",
+      "account_inactive",
+    ];
+    const texts = codes.map((code) => googleResult(new URLSearchParams({ error: code }))?.text ?? "");
+    expect(new Set(texts).size).toBe(codes.length);
+    // Not the email/password wording ("open the email and click the link").
+    expect(googleResult(new URLSearchParams("error=email_not_verified"))?.text).toContain("Google");
   });
 });
