@@ -1,0 +1,172 @@
+/* D1 "Nỉ & Đồng thau" design tokens, from design/c1/src/directions/d1/style.css (the .d1 block).
+   Names match the design file so its rules can be ported as they are. Tokens live on :root so
+   Tailwind utilities (globals.css @theme) and dialogs see them; component rules stay under .d1
+   (d1.css). Keep in step with the design by hand: web/ never imports from design/.
+
+   Two sizes, chosen by media query instead of the design's .d1-mobile class:
+   - desktop (design frame 1440×900): the default;
+   - phone, landscape only (design frame 844×390): @media (orientation: landscape) and (max-height: 500px).
+     Port a design rule ".d1.d1-mobile .x { … }" as "@media (orientation: landscape) and (max-height: 500px) { .d1 .x { … } }".
+   A phone held upright gets the rotate prompt (RotatePrompt.tsx, spec #28). */
+
+:root {
+  /* colour */
+  --bg: #0d0a07;
+  --ink: #070504;
+  --panel-a: #2a1f16;
+  --panel-b: #17110c;
+  --line: rgba(214, 180, 110, 0.24);
+  --line-2: rgba(232, 207, 146, 0.46);
+  --hair: rgba(243, 234, 215, 0.09);
+  --ivory: #f5ecd9;
+  --ivory-2: #d2c4a9;
+  --ivory-3: #b09f84;
+  --brass: #d6b268;
+  --brass-2: #ecd294;
+  --brass-3: #9c7838;
+  --felt: #17633f;
+  --wood: #3a2417;
+  --claret: #9e2b31;
+  --claret-text: #f4b1a7;
+  --gain: #8fd6a8;
+  --loss: #f0968a;
+  --error-text: #f08a80;
+  --dark-text: #22170a;
+  --card-red: #b01b2a;
+  --card-black: #16130f;
+
+  /* type: Josefin Sans 700 for titles and single big numbers, Be Vietnam Pro for the rest
+     (fonts.ts defines the two --font-* variables on <html>); no text weight under 500 */
+  --display: var(--font-josefin), "Josefin Sans", var(--font-be-vietnam), system-ui, sans-serif;
+  --text: var(--font-be-vietnam), "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --w-body: 500;
+  --w-label: 600;
+  --w-strong: 700;
+  --w-heavy: 800;
+  --w-display: 700;
+  --fs-xs: 12px; /* uppercase labels, tags, badges */
+  --fs-sm: 13px; /* captions, hints, timestamps */
+  --fs-md: 14px; /* secondary lines */
+  --fs-base: 15px; /* body and list text, inputs */
+  --fs-lg: 16px; /* emphasised values */
+  --fs-xl: 17px; /* small titles */
+  --fs-2xl: 19px; /* list and card titles */
+  --fs-3xl: 23px; /* panel titles, numbers in a hero row */
+  --fs-4xl: 28px; /* section titles, big numbers */
+  --fs-5xl: 38px; /* page titles */
+  --fs-6xl: 52px; /* landing hero */
+  --fs-name: 15px; /* seat names */
+  --fs-stack: 16px; /* chip stacks on the table */
+  --fs-btn-sm: 15px;
+  --fs-btn: 16px;
+  --fs-btn-lg: 17px;
+  --fs-act: 18px; /* fold / call / raise labels */
+
+  /* spacing scale of the design: 4 · 8 · 12 · 16 · 24 · 32 · 48 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* radii, elevation */
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --sh-1: inset 0 1px 0 rgba(255, 228, 170, 0.07), 0 2px 0 rgba(0, 0, 0, 0.4), 0 6px 14px rgba(0, 0, 0, 0.3);
+  --sh-2: inset 0 1px 0 rgba(255, 228, 170, 0.08), inset 0 0 0 1px rgba(0, 0, 0, 0.25), 0 18px 40px rgba(0, 0, 0, 0.45), 0 3px 8px rgba(0, 0, 0, 0.3);
+  --sh-3: inset 0 1px 0 rgba(255, 228, 170, 0.1), 0 34px 80px rgba(0, 0, 0, 0.65), 0 8px 18px rgba(0, 0, 0, 0.4);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--brass-2);
+
+  /* materials: grain over every dark surface, felt weave, wood grain, card paper, card back */
+  --tx-grain: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' seed='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 .9  0 0 0 0 .74  0 0 0 .2 -.07'/></filter><rect width='220' height='220' filter='url(%23f)'/></svg>");
+  --tx-felt: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='1.3' numOctaves='2' seed='5' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 .06  0 0 0 0 .03  0 0 0 1.1 -.42'/></filter><rect width='160' height='160' filter='url(%23f)'/></svg>"), url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='.95' numOctaves='2' seed='9' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .8  0 0 0 0 1  0 0 0 0 .8  0 0 0 .5 -.24'/></filter><rect width='160' height='160' filter='url(%23f)'/></svg>");
+  --tx-wood: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='420' height='260'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='.0035 .12' numOctaves='4' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .09  0 0 0 0 .035  0 0 0 0 .01  2 0 0 0 -.68'/></filter><rect width='420' height='260' filter='url(%23f)'/></svg>");
+  --tx-paper: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5  0 0 0 0 .4  0 0 0 0 .25  0 0 0 .36 -.13'/></filter><rect width='140' height='140' filter='url(%23f)'/></svg>");
+  --tx-back: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><path d='M5 .7 9.3 5 5 9.3.7 5Z' fill='none' stroke='%23e9c983' stroke-opacity='.5' stroke-width='.7'/><circle cx='5' cy='5' r='.95' fill='%23f3dca0' fill-opacity='.55'/><circle cx='0' cy='0' r='.75' fill='%23f3dca0' fill-opacity='.35'/><circle cx='10' cy='0' r='.75' fill='%23f3dca0' fill-opacity='.35'/><circle cx='0' cy='10' r='.75' fill='%23f3dca0' fill-opacity='.35'/><circle cx='10' cy='10' r='.75' fill='%23f3dca0' fill-opacity='.35'/></svg>");
+  --tx-spade: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2.5C9.2 6.6 3.5 9.7 3.5 14.2c0 2.6 2 4.5 4.4 4.5 1.5 0 2.7-.6 3.4-1.6-.3 1.9-1.1 3.3-2.5 4.4h7.4c-1.4-1.1-2.2-2.5-2.5-4.4.7 1 1.9 1.6 3.4 1.6 2.4 0 4.4-1.9 4.4-4.5 0-4.5-5.7-7.6-8.5-11.7z' fill='%23ecd08f'/></svg>");
+  --tx-brushed: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 1px, rgba(0, 0, 0, 0.035) 1px 2px, transparent 2px 4px);
+  --brass-metal: linear-gradient(180deg, #f8e5ad 0%, #e6c57e 34%, #c39549 54%, #d7b067 78%, #f0d896 100%);
+  --brass-hairline: linear-gradient(90deg, transparent, rgba(240, 214, 150, 0.75), transparent);
+  --leather: var(--tx-grain), linear-gradient(180deg, #2b2017 0%, #1d1510 55%, #150f0b 100%);
+
+  /* motion: the values behind src/ui/motion.ts (docs/c2-chuyen-dong.md); keep the two in step.
+     Easings carry "d1" so they do not replace Tailwind's --ease-in / --ease-out. */
+  --dur-press: 90ms;
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 320ms;
+  --dur-deal: 280ms;
+  --dur-chip: 380ms;
+  --dur-collect: 560ms;
+  --dur-flip: 420ms;
+  --dur-confetti: 900ms;
+  --dur-turn-pulse: 1600ms;
+  --dur-seven-deuce: 2600ms;
+  --ease-d1-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-d1-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-d1-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-d1-settle: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* layers */
+  --z-nav: 20;
+  --z-sheet: 40;
+  --z-toast: 60;
+  --z-rotate: 100;
+
+  /* app chrome: desktop top bar; phone rail (wood, left) and sub-page bar */
+  --nav-h: 64px;
+  --appbar-h: 48px;
+  /* the phone keeps its left/right 44px (notch, rounded corners) and bottom 20px (home indicator)
+     free of controls and text; on desktop they are 0 */
+  --safe-l: 0px;
+  --safe-r: 0px;
+  --safe-b: 0px;
+  --rail-w: 68px;
+  /* the smallest thing a finger must hit on the phone */
+  --tap: 44px;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --fs-xs: 11.5px;
+    --fs-sm: 12px;
+    --fs-md: 13px;
+    --fs-base: 14px;
+    --fs-lg: 15px;
+    --fs-xl: 16px;
+    --fs-2xl: 18px;
+    --fs-3xl: 21px;
+    --fs-4xl: 24px;
+    --fs-5xl: 26px;
+    --fs-6xl: 36px;
+    --fs-name: 13px;
+    --fs-stack: 15px;
+    --fs-btn-sm: 14px;
+    --fs-btn: 15px;
+    --fs-btn-lg: 16px;
+    --fs-act: 18px;
+    --safe-l: max(44px, env(safe-area-inset-left));
+    --safe-r: max(44px, env(safe-area-inset-right));
+    --safe-b: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Reduced motion: CSS transitions and animations driven by these tokens become near-instant.
+   Motion that carries information (who won, which card turned) gets a fade instead, chosen in
+   motion.ts; see docs/c2-chuyen-dong.md. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-press: 1ms;
+    --dur-fast: 1ms;
+    --dur-base: 120ms;
+    --dur-slow: 120ms;
+    --dur-deal: 1ms;
+    --dur-chip: 1ms;
+    --dur-collect: 1ms;
+    --dur-flip: 120ms;
+  }
+}
