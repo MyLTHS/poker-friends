@@ -5,8 +5,8 @@ import { RotatePrompt } from "@/ui/RotatePrompt";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Poker Friends — trang thử",
-  description: "Trang thử bàn chơi nối với mock server.",
+  title: "Poker Friends",
+  description: "Câu lạc bộ poker của bạn bè, chơi bằng chip ảo.",
 };
 
 // D1 pages opt into viewport-fit=cover themselves (ui/viewport.ts); the direction A screens
