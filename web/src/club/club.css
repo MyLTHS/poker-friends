@@ -43,7 +43,7 @@
   cursor: not-allowed;
 }
 
-.btn {
+.club-theme .btn {
   border: 1px solid transparent;
   padding: 11px 16px;
   border-radius: calc(var(--radius) * 0.65);
@@ -55,28 +55,28 @@
   gap: 7px;
   transition: 0.2s;
 }
-.btn:hover {
+.club-theme .btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.06);
 }
-.btn svg {
+.club-theme .btn svg {
   width: 16px;
 }
-.btn-primary {
+.club-theme .btn-primary {
   background: var(--accent);
   color: var(--canvas);
   box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.btn-secondary {
+.club-theme .btn-secondary {
   background: var(--panel-2);
   color: var(--ink);
   border-color: var(--line);
 }
-.btn-ghost {
+.club-theme .btn-ghost {
   background: transparent;
   color: var(--ink);
 }
-.btn-danger {
+.club-theme .btn-danger {
   background: color-mix(in srgb, var(--danger) 16%, var(--panel));
   color: #ff8c91;
   border-color: color-mix(in srgb, var(--danger) 30%, transparent);
@@ -531,7 +531,7 @@
   padding: 10px 5px;
   font-size: 9px;
 }
-.toast {
+.club-theme .toast {
   position: absolute;
   right: 10px;
   top: -38px;
