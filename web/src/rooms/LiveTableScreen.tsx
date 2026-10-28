@@ -48,7 +48,8 @@ export function LiveTableScreen({ roomId }: { roomId: number }) {
     (slot: OwnerSlot) => detail && <TableOwnerSheet {...slot} detail={detail} reload={reloadDetail} rooms={rooms} />,
     [detail, reloadDetail, rooms],
   );
-  const invite = useCallback((slot: InviteSlot) => detail && <TableInviteSheet {...slot} detail={detail} reload={reloadDetail} roomId={roomId} />, [detail, reloadDetail, roomId]);
+  // always offered: when the first read of the room failed, opening the sheet reads it again
+  const invite = useCallback((slot: InviteSlot) => <TableInviteSheet {...slot} detail={detail} reload={reloadDetail} roomId={roomId} />, [detail, reloadDetail, roomId]);
 
   const loadChat = useCallback(async () => {
     const result = await rooms.chat(roomId);
@@ -77,7 +78,7 @@ export function LiveTableScreen({ roomId }: { roomId: number }) {
         onTakeSeat={onTakeSeat}
         onLeaveSeat={onLeaveSeat}
         owner={detail?.is_owner ? owner : undefined}
-        invite={detail ? invite : undefined}
+        invite={invite}
         replayHref={(handId) => `/hands/${handId}`}
       />
     );
@@ -110,7 +111,7 @@ function TableOwnerSheet({ open, onClose, seats, inHand, detail, reload, rooms }
  * else may pass on a public room's page. Only the owner has a private room's invite link (the
  * server keeps it from the others), so there the sheet says to ask the owner.
  */
-function TableInviteSheet({ open, onClose, detail, reload, roomId }: InviteSlot & { detail: RoomDetail; reload: () => Promise<void>; roomId: number }) {
+function TableInviteSheet({ open, onClose, detail, reload, roomId }: InviteSlot & { detail: RoomDetail | null; reload: () => Promise<void>; roomId: number }) {
   const toast = useToast();
   // the owner may have changed the link in the owner's sheet since the table opened
   useEffect(() => {
@@ -120,7 +121,9 @@ function TableInviteSheet({ open, onClose, detail, reload, roomId }: InviteSlot 
     toast(ok ? { kind: "success", title: "Đã chép link" } : { kind: "danger", title: "Không chép được", text: "Trình duyệt chặn bộ nhớ tạm. Bấm giữ vào link để chép." });
   return (
     <Sheet open={open} onClose={onClose} title="Mời bạn vào bàn">
-      {detail.invite_token ? (
+      {!detail ? (
+        <Spinner size={40} />
+      ) : detail.invite_token ? (
         <ShareCard detail={detail} onCopied={onCopied} />
       ) : !detail.is_private ? (
         <ShareCard detail={detail} onCopied={onCopied} path={`/rooms/${roomId}`} eyebrow="Link phòng công khai" rotateHint={false} />

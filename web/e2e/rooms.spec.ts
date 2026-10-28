@@ -85,6 +85,18 @@ test("lobby → create a room → invite link → a new visitor joins and sits; 
   await expect(guestInvite.getByTestId("invite-link")).toHaveCount(0);
 });
 
+test("at the table of a public room anyone may pass on the room's page", async ({ browser }) => {
+  const owner = await newGuest(browser, "Chi");
+  const room = await api(owner, "POST", "/api/rooms/", { name: "Bàn E2E công khai", small_blind: 10, big_blind: 20, is_private: false });
+  const roomId = room.room.room_id;
+  const dung = await newGuest(browser, "Dũng");
+  await dung.goto(`/rooms/${roomId}/table`);
+  await dung.getByRole("button", { name: "Mời bạn" }).click();
+  const sheet = dung.getByRole("dialog", { name: "Mời bạn vào bàn" });
+  await expect(sheet.getByTestId("invite-link")).toHaveAttribute("title", new RegExp(`/rooms/${roomId}$`));
+  await expect(sheet).toContainText("Link phòng công khai");
+});
+
 test("a wrong invite link says so and leads back to the lobby", async ({ browser }) => {
   const page = await (await browser.newContext()).newPage();
   await page.goto("/rooms/join?token=khong-co-ma-nay-123");

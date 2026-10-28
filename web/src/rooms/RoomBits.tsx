@@ -173,7 +173,7 @@ export function ShareCard({
   const shown = link.replace(/^https?:\/\//, "");
   const room = detail.room;
   return (
-    <section className="share" aria-label="Link mời">
+    <section className="share" aria-label={path ? "Link phòng" : "Link mời"}>
       <div className="share-head">
         <span>
           <span className="eyebrow">{eyebrow}</span>
@@ -218,7 +218,7 @@ export function ShareCard({
           )}
         </div>
         <span className="qr-wrap">
-          <QR modules={modules} size={phone ? 112 : 168} label={`Mã QR của link mời vào ${room.name}`} />
+          <QR modules={modules} size={phone ? 112 : 168} label={`Mã QR của ${path ? "link phòng" : "link mời vào"} ${room.name}`} />
           <small>
             <QrCode size={12} aria-hidden /> Quét để vào
           </small>
