@@ -103,6 +103,8 @@ export type ViewExtras = {
   results?: PlayerResult[] | null;
   /** hand.completed showdown of the hand on the table: the names of the shown hands. */
   showdown?: readonly ShownHand[] | null;
+  /** Who won, when `results` are not given (the replay): only their hands light the board. */
+  winners?: string[];
   /** Recent chat lines, shown as bubbles over the speakers' seats. */
   bubbles?: ChatMessage[];
   /** My hole cards of the hand on the table: the completed hand drops a showdown loser's cards,
@@ -119,6 +121,7 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
   const results = hand?.complete ? (extras.results ?? null) : null;
   const showdown = hand?.complete ? (extras.showdown ?? null) : null;
   const handNames = showdownBySeat(showdown);
+  const winners = results ? results.filter((r) => r.hand_net > 0).map((r) => r.player_id) : extras.winners;
 
   const views: SeatView[] = [];
   for (let seat = 1; seat <= room.max_seats; seat++) {
@@ -183,7 +186,8 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
     seats: views,
     mySeat: you.seat,
     board: hand?.board ?? [],
-    boardHi: boardHighlights(showdown, hand?.board ?? []),
+    // Only the winners' hands light the board (a shown loser's hand would mislead).
+    boardHi: boardHighlights(showdown?.filter((h) => !winners || winners.includes(h.player_id)), hand?.board ?? []),
     pot,
     potTotal: pot + bets,
     bets,

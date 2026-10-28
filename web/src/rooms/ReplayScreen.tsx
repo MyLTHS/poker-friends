@@ -185,7 +185,11 @@ export function ReplayScreen({ handId }: { handId: number }) {
 
   const table = replay ? tableAt(replay, stepsOf(replay)[step].hand, me, roomName, maxSeats) : null;
   const view = useMemo(
-    () => (table && replay ? tableView(table, { lastActions: actionsAt(stepsOf(replay), step), showdown: replay.showdown }) : null),
+    () => (table && replay ? tableView(table, {
+            lastActions: actionsAt(stepsOf(replay), step),
+            showdown: replay.showdown,
+            winners: replay.results.filter((r) => r.hand_net > 0).map((r) => r.player_id),
+          }) : null),
     [table, replay, step],
   );
   const placeOf = useCallback(
