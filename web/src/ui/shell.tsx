@@ -1,9 +1,12 @@
 // Page frames of D1. Desktop: a 64px top bar (wordmark, Sảnh / Lịch sử / Hồ sơ, bell, me) over a
 // scrolling page. Landscape phone: tab pages get the wood rail on the left, pages under a tab get
 // a 48px bar with back and title instead. Both bars are always rendered; CSS shows the right one.
+// Every bar has the "Gửi phản hồi" button (src/feedback), for the beta.
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Bell, ChevronDown, ChevronLeft, History, LayoutGrid, UserRound } from "lucide-react";
+
+import { FeedbackButton } from "@/feedback/FeedbackButton";
 
 import { Avatar, Crest, Wordmark } from "./people";
 
@@ -56,6 +59,7 @@ function DesktopNav({ active, me, actions }: { active?: NavKey; me?: Me; actions
       </nav>
       <span className="nav-right">
         {actions}
+        <FeedbackButton size={18} />
         {me && <BellLink me={me} size={18} />}
         {me && (
           <Link href={me.href ?? "/account"} className="nav-me" aria-label={`Hồ sơ của ${me.name}`}>
@@ -84,6 +88,7 @@ function PhoneRail({ active, me, actions }: { active?: NavKey; me?: Me; actions?
         ))}
       </span>
       {actions}
+      <FeedbackButton />
       {me && <BellLink me={me} size={19} />}
       {me && (
         <Link href={me.href ?? "/account"} className="navrail-me" aria-label={`Hồ sơ của ${me.name}`}>
@@ -107,7 +112,10 @@ function PhoneAppBar({ title, sub, back, right }: { title: ReactNode; sub?: Reac
         <b>{title}</b>
         {sub && <small>{sub}</small>}
       </span>
-      {right && <span className="appbar-right">{right}</span>}
+      <span className="appbar-right">
+        {right}
+        <FeedbackButton />
+      </span>
     </header>
   );
 }
