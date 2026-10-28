@@ -8,6 +8,7 @@ import hashlib
 import time
 from dataclasses import dataclass
 
+from django.conf import settings
 from django.core.cache import cache
 
 
@@ -63,4 +64,4 @@ PASSWORD_RESET_PER_IP = RateLimit("reset-ip", limit=5, window=60 * 60)
 PASSWORD_RESET_PER_EMAIL = RateLimit("reset-email", limit=3, window=60 * 60)
 # Sign-up, guest upgrade and "send the link again" all send an email.
 EMAIL_SENDS_PER_IP = RateLimit("email-ip", limit=10, window=60 * 60)
-GUESTS_PER_IP = RateLimit("guest-ip", limit=20, window=60 * 60)
+GUESTS_PER_IP = RateLimit("guest-ip", limit=settings.ACCOUNTS_GUESTS_PER_IP_HOUR, window=60 * 60)

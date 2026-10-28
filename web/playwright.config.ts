@@ -24,6 +24,8 @@ const djangoEnv = {
   FRONTEND_URL: WEB,
   DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1",
   DJANGO_DEBUG: "true",
+  // Every spec makes its guests from this one address; the real limit (20 an hour) is unit-tested.
+  GUESTS_PER_IP_HOUR: "200",
 };
 
 export default defineConfig({
