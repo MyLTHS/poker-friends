@@ -39,6 +39,7 @@ ERROR_STATUS = {
     "forbidden": 403,
     "email_not_verified": 403,
     "guests_disabled": 403,
+    "not_approved": 403,
     "email_taken": 409,
     "username_taken": 409,
     "not_guest": 409,

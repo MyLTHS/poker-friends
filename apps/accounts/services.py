@@ -194,6 +194,8 @@ def login_with_password(request, email: str, password: str, ip: str) -> User:
         raise AccountError("invalid_credentials", "Wrong email or password.")
     if not is_email_verified(user):
         raise AccountError("email_not_verified", "Verify the email address first.")
+    if not settings.GUESTS_ALLOWED and not (user.approved or user.is_staff):
+        raise AccountError("not_approved", "The owner has not let this account in yet.")
 
     ratelimit.LOGIN_FAILURES_PER_EMAIL_AND_IP.reset(_email_and_ip(email, ip))
     login(request, user, backend=MODEL_BACKEND)

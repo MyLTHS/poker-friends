@@ -760,9 +760,11 @@ export interface components {
             /** @description `false` khi server chưa có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: ẩn nút Google. */
             google_enabled: boolean;
             /**
-             * @description `false` (chơi từ máy nhà, production): chỉ thành viên đã xác minh email mới vào được.
-             *     Ẩn nút khách; mọi API ngoài `/api/auth/` trả 401 `login_required` cho người chưa phải
-             *     thành viên (kể cả phiên khách cũ); WebSocket đóng với mã 4401.
+             * @description `false` (chơi từ máy nhà, production): chỉ thành viên mới vào được: tài khoản thật đã
+             *     xác minh email **và được chủ phòng duyệt** (`User.approved`), hoặc staff.
+             *     Ẩn nút khách. Mọi API ngoài `/api/auth/`: 401 `login_required` cho người chưa đăng
+             *     nhập hay phiên khách cũ, 403 `not_approved` cho tài khoản chưa được duyệt. Đăng nhập
+             *     tài khoản chưa được duyệt cũng trả `not_approved`. WebSocket đóng với mã 4401.
              */
             guests_allowed: boolean;
         };
@@ -781,6 +783,12 @@ export interface components {
             /** @description `false` với khách và người chỉ đăng nhập bằng Google. */
             has_password: boolean;
             google_connected: boolean;
+            /**
+             * @description Vào được các phòng. Luôn `true` khi server cho khách; khi chỉ cho thành viên
+             *     (`guests_allowed: false`): `true` với tài khoản đã được chủ phòng duyệt (hoặc staff),
+             *     `false` thì hiện "đợi chủ phòng duyệt".
+             */
+            member: boolean;
         };
         /** @description Chữ (kể cả tiếng Việt), số và `@ . + - _`, không có dấu cách. Không phân biệt hoa thường khi so trùng. */
         Username: string;
@@ -920,7 +928,7 @@ export interface components {
              * @description Mã ổn định, client được phép `switch` theo mã.
              * @enum {string}
              */
-            code: "validation_error" | "not_authenticated" | "login_required" | "guests_disabled" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked" | "hand_not_found" | "hand_voided" | "room_suspended";
+            code: "validation_error" | "not_authenticated" | "login_required" | "guests_disabled" | "not_approved" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked" | "hand_not_found" | "hand_voided" | "room_suspended";
             /** @description Để đọc log, không hiện cho người chơi. */
             message: string;
             /** @description Chỉ có khi `validation_error`, lỗi theo từng trường của body. */
@@ -1132,7 +1140,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`), server tắt chế độ khách (`guests_disabled`) */
+        /** @description Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`), server tắt chế độ khách (`guests_disabled`), tài khoản chưa được chủ phòng duyệt (`not_approved`, cả khi đăng nhập lẫn khi gọi API phòng) */
         Forbidden: {
             headers: {
                 [name: string]: unknown;

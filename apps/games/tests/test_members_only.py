@@ -59,8 +59,8 @@ class TestRest:
         for who, expected in (
             (None, 401),
             (guest(), 401),
-            (unverified(), 401),
-            (self_verified(), 401),
+            (unverified(), 403),
+            (self_verified(), 403),
             (member(), 200),
             (staff, 200),
         ):
@@ -69,8 +69,9 @@ class TestRest:
                 client.force_login(who)
             response = client.get("/api/rooms/")
             assert response.status_code == expected, who
-            if expected == 401:
-                assert response.json()["code"] == "login_required"
+            if expected != 200:
+                code = "login_required" if expected == 401 else "not_approved"
+                assert response.json()["code"] == code
 
     def test_an_invite_link_no_longer_makes_a_guest(self):
         room = make_room(is_private=True, invite_token="the-token")
@@ -100,6 +101,18 @@ class TestRest:
             content_type="application/json",
         )
         assert login.json()["code"] == "email_not_verified"  # the owner has not vouched yet
+
+    def test_a_self_verified_account_cannot_log_in_until_approved(self):
+        self_verified("la")
+        client = Client()
+        body = {"email": "la@example.com", "password": "x" * 12}
+        login = client.post("/api/auth/login/", body, content_type="application/json")
+        assert login.status_code == 403
+        assert login.json()["code"] == "not_approved"
+        User.objects.filter(username="la").update(approved=True)
+        login = client.post("/api/auth/login/", body, content_type="application/json")
+        assert login.status_code == 200
+        assert login.json()["member"] is True
 
 
 class TestWebSocket:

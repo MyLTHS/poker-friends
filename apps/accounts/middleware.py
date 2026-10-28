@@ -68,10 +68,15 @@ def _needs_member(request) -> bool:
     )
 
 
-def _login_required():
+def _refusal(user):
+    """401 login_required for strangers and guests (go and log in); 403 not_approved for a real
+    account the owner has not let in yet (logging in again would not help)."""
     from django.http import JsonResponse
 
-    body = {"code": "login_required", "message": "Log in with a verified account first."}
+    if user.is_authenticated and not user.is_guest:
+        body = {"code": "not_approved", "message": "The owner has not let this account in yet."}
+        return JsonResponse(body, status=403)
+    body = {"code": "login_required", "message": "Log in with an account the owner approved."}
     return JsonResponse(body, status=401)
 
 
@@ -85,15 +90,17 @@ def members_only(get_response):
     if iscoroutinefunction(get_response):
 
         async def middleware(request):
-            if _needs_member(request) and not await sync_to_async(is_member)(await request.auser()):
-                return _login_required()
+            if _needs_member(request):
+                user = await request.auser()
+                if not await sync_to_async(is_member)(user):
+                    return _refusal(user)
             return await get_response(request)
 
     else:
 
         def middleware(request):
             if _needs_member(request) and not is_member(request.user):
-                return _login_required()
+                return _refusal(request.user)
             return get_response(request)
 
     return middleware
