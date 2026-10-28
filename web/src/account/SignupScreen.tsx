@@ -66,7 +66,7 @@ export function SignupScreen({
         ),
       }}
     >
-      <div className="auth-card">
+      <div className="auth-card is-signup">
         <h2 className="auth-title">Tạo tài khoản</h2>
         <p className="auth-sub">Chỉ mất một phút, xong là vào chơi.</p>
         <SignupForm api={api} ready={ready} onSignedUp={goOn} />

@@ -242,6 +242,11 @@
     width: 100%;
     padding: 26px 28px;
   }
+  /* the signup is one card since 28/10/2026 (no step 2): wider than the login's, so the email and
+     the name still sit side by side */
+  .d1 .auth-card.is-signup {
+    width: min(560px, 100%);
+  }
   .d1 .auth-title {
     font: var(--w-display) var(--fs-5xl)/1.15 var(--display);
     margin-bottom: -8px;
@@ -987,6 +992,10 @@
     }
     .d1.auth-phone-bar .auth-main.is-forgot {
       gap: 6px;
+    }
+    .d1.auth-phone-bar .auth-card.is-signup {
+      width: 100%;
+      padding: 16px 20px;
     }
     .d1.auth-phone-bar .auth-main.is-split .auth-col,
     .d1.auth-phone-bar .auth-main.is-forgot .auth-col {
