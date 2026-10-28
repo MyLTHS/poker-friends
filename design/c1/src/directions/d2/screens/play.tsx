@@ -800,7 +800,7 @@ function ChatPane({ d }: { d: Device }) {
         <div className="k-viewers">
           <span className="k-sec-h">
             <Eyebrow tone="mute">Người đang xem</Eyebrow>
-            <small className="k-col-note">không ngồi, không thấy bài úp</small>
+            <small className="k-col-note">không thấy bài úp</small>
           </span>
           <div className="k-viewers-l">
             {SD.spectators.map((n, i) => (

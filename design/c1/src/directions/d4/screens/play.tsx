@@ -218,7 +218,11 @@ function TurnSide() {
         </span>
         <span>
           <b>Lượt của bạn</b>
-          <small>còn 14 giây · hết giờ tự bỏ</small>
+          <small>
+            còn 14 giây
+            <br />
+            hết giờ tự bỏ bài
+          </small>
         </span>
       </div>
       <Presets m />

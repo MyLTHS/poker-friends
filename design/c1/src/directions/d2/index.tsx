@@ -13,7 +13,7 @@ const direction: Direction = {
   description:
     "Nền than chì chuyển xanh mòng két đêm, các tấm kính mờ có viền sáng 1px, điểm nhấn kim loại vàng sâm panh và một màu xanh điện cho “tới lượt bạn”, đỏ ấm cho lỗ và nguy hiểm. " +
     "Hợp hội bạn thích cảm giác một ứng dụng poker cao cấp kiểu Apple: bàn xanh dầu có viền phản chiếu, chip kim loại – gốm có viền khảm, lá bài sứ trắng, vòng đếm giờ phát sáng. " +
-    "Điểm mạnh là sang, gọn và số đọc rất nhanh (chữ Mona Sans bản rộng + Geist, số cùng bề rộng); đánh đổi là nền tối nhiều lớp kính tốn công dựng lại và cần giữ kỷ luật chỉ hai màu nhấn.",
+    "Điểm mạnh là sang, gọn và số đọc rất nhanh (một họ chữ Be Vietnam Pro: tiêu đề đậm 800, chữ thường 500–600, số căn phải cho thẳng cột); đánh đổi là nền tối nhiều lớp kính tốn công dựng lại và cần giữ kỷ luật chỉ hai màu nhấn.",
   swatches: [
     { name: "Than chì", value: "#0A0F14" },
     { name: "Mòng két đêm", value: "#0B2C33" },
@@ -24,7 +24,7 @@ const direction: Direction = {
     { name: "Nỉ xanh dầu", value: "#11605A" },
     { name: "Sứ trắng", value: "#F5F7F8" },
   ],
-  fonts: ["Mona Sans", "Geist"],
+  fonts: ["Be Vietnam Pro"],
   render: (screen, device) =>
     renderPlay(screen, device) ?? renderAccount(screen, device) ?? renderRooms(screen, device) ?? renderRecords(screen, device),
 };

@@ -678,7 +678,7 @@ export function TurnPanel({ toCall, raise, presets, active = 0, min, max, left, 
         </span>
         <span className="tp-label">
           <span className="abar-eyebrow">Tới lượt bạn</span>
-          <small>Hết giờ sẽ tự bỏ bài</small>
+          <small>Hết giờ tự bỏ bài</small>
         </span>
         <span className="abar-timebar">
           <i style={{ width: `${(left / total) * 100}%` }} />
