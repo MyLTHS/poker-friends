@@ -248,6 +248,39 @@ class TestClientErrors:
         assert row.window_start == WINDOW_START + timedelta(minutes=20)
         assert row.fingerprint == views._fingerprint(ERROR)
 
+    def test_new_errors_stop_at_the_daily_cap_but_repeats_still_count(self, monkeypatch):
+        # Not logged in, a new message each time and a fresh IPv6 address dodge the other
+        # limits: the table still cannot grow past the cap of new rows a day.
+        monkeypatch.setattr(views, "CLIENT_ERRORS_MAX_NEW_PER_DAY", 3)
+        client = Client()
+        for i in range(3):
+            assert (
+                post(client, "/api/client-errors/", {**ERROR, "message": f"e{i}"}).status_code
+                == 204
+            )
+        refused = post(client, "/api/client-errors/", {**ERROR, "message": "e3"})
+        assert refused.status_code == 429 and refused.json()["code"] == "rate_limited"
+        assert ClientError.objects.count() == 3
+        # a repeat adds no row, so it is still counted
+        assert post(client, "/api/client-errors/", {**ERROR, "message": "e0"}).status_code == 204
+        assert ClientError.objects.get(message="e0").count == 2
+
+    def test_the_daily_cap_frees_up_as_the_oldest_row_turns_24_hours_old(self, monkeypatch):
+        monkeypatch.setattr(views, "CLIENT_ERRORS_MAX_NEW_PER_DAY", 1)
+        monkeypatch.setattr(views.timezone, "now", lambda: WINDOW_START)
+        client = Client()
+        assert post(client, "/api/client-errors/", {**ERROR, "message": "e0"}).status_code == 204
+
+        an_hour_later = WINDOW_START + timedelta(hours=1)
+        monkeypatch.setattr(views.timezone, "now", lambda: an_hour_later)
+        refused = post(client, "/api/client-errors/", {**ERROR, "message": "e1"})
+        assert refused.status_code == 429
+        assert int(refused["Retry-After"]) == 23 * 3600
+
+        a_day_later = WINDOW_START + timedelta(hours=24, seconds=1)
+        monkeypatch.setattr(views.timezone, "now", lambda: a_day_later)
+        assert post(client, "/api/client-errors/", {**ERROR, "message": "e1"}).status_code == 204
+
     def test_rate_limited_per_player(self, guest):
         client = logged_in(guest)
         for i in range(views.CLIENT_ERRORS_PER_USER.limit):

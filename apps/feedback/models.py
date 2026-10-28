@@ -51,7 +51,7 @@ class ClientError(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
     )
     count = models.PositiveIntegerField(default=1)
-    first_seen = models.DateTimeField(auto_now_add=True)
+    first_seen = models.DateTimeField(auto_now_add=True, db_index=True)  # the daily cap counts it
     last_seen = models.DateTimeField(db_index=True)
     # start of the 10-minute window this row counts (apps/feedback/views.py DUPLICATE_WINDOW)
     window_start = models.DateTimeField()

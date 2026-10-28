@@ -39,6 +39,11 @@ CLIENT_ERROR_LIMITS = {
     "release": 64,
 }
 DUPLICATE_WINDOW = timedelta(minutes=10)
+# Not logged in, a new message each time and a new IPv6 address get round every limit above: the
+# table still takes at most this many new rows a day (repeats only count, they add no row).
+# Counted from the database, so a restart does not reset it. ~10 kB a row at most.
+CLIENT_ERRORS_MAX_NEW_PER_DAY = 1000
+NEW_ROWS_PERIOD = timedelta(hours=24)
 
 
 def _user_agent(request: HttpRequest) -> str:
@@ -110,7 +115,10 @@ async def client_errors(request: HttpRequest) -> HttpResponse:
         report = _clean_client_error(read_json(request), request)
     except BadRequest as exc:
         return error("validation_error", "Invalid body.", exc.fields)
-    await _record(report, user if user.is_authenticated else None)
+    try:
+        await _record(report, user if user.is_authenticated else None)
+    except RateLimited as exc:
+        return rate_limited(exc)
     return HttpResponse(status=204)
 
 
@@ -153,6 +161,16 @@ def _count_again(fingerprint: str, window: datetime, now: datetime) -> int:
     return same.update(count=F("count") + 1, last_seen=now)
 
 
+def _check_room_for_a_new_row(now: datetime) -> None:
+    """Raise ``RateLimited`` when the last 24 hours already made the most new rows; a slot
+    frees up when the oldest of them turns 24 hours old."""
+    recent = ClientError.objects.filter(first_seen__gt=now - NEW_ROWS_PERIOD)
+    if recent.count() < CLIENT_ERRORS_MAX_NEW_PER_DAY:
+        return
+    oldest = recent.order_by("first_seen").values_list("first_seen", flat=True).first()
+    raise RateLimited(max(60, int((oldest + NEW_ROWS_PERIOD - now).total_seconds())))
+
+
 @sync_to_async
 def _record(report: dict[str, str], user) -> None:
     now = timezone.now()
@@ -160,6 +178,7 @@ def _record(report: dict[str, str], user) -> None:
     fingerprint = _fingerprint(report)
     if _count_again(fingerprint, window, now):
         return
+    _check_room_for_a_new_row(now)
     try:
         # A savepoint: another report of the same error may create the row first, and then
         # the unique (fingerprint, window_start) constraint sends this one to count on it.
