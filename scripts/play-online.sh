@@ -10,7 +10,8 @@
 #   scripts/play-online.sh links    # verification / password reset links emailed this session
 #   scripts/play-online.sh verify <email>   # vouch for a friend: mark their email verified
 #   scripts/play-online.sh admin    # create the owner's admin login (feedback, errors, users)
-#   scripts/play-online.sh down     # back up, stop the tunnel and the stack (data is kept)
+#   scripts/play-online.sh down     # back up, stop the tunnel and the stack (data and the Docker
+#                                     # Desktop group are kept: ▶ starts it again)
 #
 # Secrets live in .env.home (created on the first `up`, never committed). Messages are in
 # Vietnamese: the owner runs this before and after each game night.
@@ -163,7 +164,7 @@ abort_up() {
   say "Chưa bật xong: đang đóng đường hầm và tắt server (dữ liệu vẫn giữ)..." >&2
   stop_pid caffeinate
   stop_pid sh
-  dc down >/dev/null 2>&1 || true
+  dc stop >/dev/null 2>&1 || true
 }
 
 check_public() { # HTTP status of the page through the tunnel, or 000
@@ -255,7 +256,8 @@ cmd_down() {
   stop_pid sh
   if [ -f "$ENV_FILE" ]; then
     say "Tắt server và đường hầm (dữ liệu vẫn giữ)..."
-    dc down
+    # stop, not down: the containers stay, so "poker-home" stays in Docker Desktop with its ▶.
+    dc stop
   fi
   say "Đã tắt."
 }
