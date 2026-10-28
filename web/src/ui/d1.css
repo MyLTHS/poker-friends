@@ -304,6 +304,21 @@
     border-radius: 2px;
     background: var(--brass);
   }
+  /* The shortest landscape phones (iPhone SE, 375px): crest, three tabs, the feedback button and
+     the avatar fit only a little tighter; every one of them keeps its 44px. */
+  @media (orientation: landscape) and (max-height: 400px) {
+    .d1 .navrail {
+      padding-top: 10px;
+      padding-bottom: max(14px, var(--safe-b));
+      gap: 6px;
+    }
+    .d1 .navrail-tabs {
+      margin-top: 6px;
+    }
+    .d1 .navrail-tab {
+      height: 50px;
+    }
+  }
   .d1 .appbar {
     position: sticky;
     top: 0;
