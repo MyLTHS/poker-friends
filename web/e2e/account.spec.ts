@@ -1,11 +1,28 @@
-// C4: the D1 account screens on the real server (login, guest, upgrade, profile, signup, forgot,
-// email links), desktop and landscape phone. Emails are printed by Django (no EMAIL_URL), so the
-// tests check what the screens say, not the mailbox.
+// C4 + C5: the D1 account screens on the real server, desktop and landscape phone. The flows go
+// through the links in the emails like a player would: Django prints each email, mailbox.ts reads
+// the link. Phone sizes, overflow, 44px targets and the accessibility checks are in checks.ts.
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { PHONES, a11yProblems, layoutProblems, smallTargets } from "./checks";
+import { linkFromEmail } from "./mailbox";
+
+const WEB = "http://localhost:3100";
 const PASSWORD = "ban-ni-xanh-2026";
 const unique = () => `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
+
+/** The Django API from the page's own cookies (session, csrftoken), like the web app calls it. */
+async function api(page: Page, method: string, path: string, data?: unknown) {
+  const cookies = await page.context().cookies(WEB);
+  const csrf = cookies.find((c) => c.name === "csrftoken")?.value ?? "";
+  const response = await page.request.fetch(WEB + path, {
+    method,
+    data,
+    headers: { "X-CSRFToken": csrf, Referer: `${WEB}/`, Origin: WEB },
+  });
+  expect(response.ok(), `${method} ${path}: ${response.status()} ${await response.text()}`).toBeTruthy();
+  return response.status() === 204 ? null : response.json();
+}
 
 async function playAsGuest(page: Page) {
   await page.goto("/account");
@@ -14,29 +31,103 @@ async function playAsGuest(page: Page) {
   await expect(page.getByText("Thẻ khách")).toBeVisible();
 }
 
-test("a guest upgrades with email, lands on the profile, then logs out", async ({ page }) => {
-  await playAsGuest(page);
-  await expect(page.getByRole("heading", { name: "Trở thành thành viên" })).toBeVisible();
-
-  const email = `e2e-${unique()}@example.com`;
+/** On the login form already: fill it in and press "Đăng nhập". */
+async function logIn(page: Page, email: string, password: string) {
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Nâng cấp & giữ chip" }).click();
-
-  await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
-  await expect(page.getByText(email).first()).toBeVisible();
-  await expect(page.getByText("Chưa xác minh")).toBeVisible();
-  await expect(page.getByText(/Đã nâng cấp\. Mở email/)).toBeVisible();
-
-  await page.getByRole("button", { name: "Đăng xuất" }).click();
-  await expect(page.getByRole("heading", { name: "Chào mừng trở lại" }).first()).toBeVisible();
-
-  // The account exists but its email is not verified yet: the login says so and offers the link.
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
+  await page.getByLabel("Mật khẩu", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page.getByText("Email này chưa được xác minh", { exact: false })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Gửi lại link xác minh" })).toBeVisible();
+}
+
+test.describe("flows through the email links", () => {
+  test("a guest upgrades, cannot log in before verifying, opens the link, then logs in", async ({ page }) => {
+    await playAsGuest(page);
+    await expect(page.getByRole("heading", { name: "Trở thành thành viên" })).toBeVisible();
+
+    const email = `e2e-${unique()}@example.com`;
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
+    await page.getByRole("button", { name: "Nâng cấp & giữ chip" }).click();
+
+    await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
+    await expect(page.getByText(email).first()).toBeVisible();
+    await expect(page.getByText("Chưa xác minh")).toBeVisible();
+    await expect(page.getByText(/Đã nâng cấp\. Mở email/)).toBeVisible();
+
+    await page.getByRole("button", { name: "Đăng xuất" }).click();
+    await expect(page.getByRole("heading", { name: "Chào mừng trở lại" }).first()).toBeVisible();
+
+    // The email is not verified yet: the login says so and offers the link again.
+    await logIn(page, email, PASSWORD);
+    await expect(page.getByText("Email này chưa được xác minh", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Gửi lại link xác minh" })).toBeVisible();
+
+    await page.goto((await linkFromEmail(email, "/account/verify")).href);
+    await expect(page.getByRole("heading", { name: "Email đã xác minh" })).toBeVisible();
+    await page.getByRole("link", { name: "Đăng nhập" }).click();
+    await logIn(page, email, PASSWORD);
+    await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
+    await expect(page.getByText("Đã xác minh")).toBeVisible();
+  });
+
+  test("signing up: step 2, an email already taken, then the link and the first login", async ({ page }) => {
+    const id = unique();
+    const email = `signup-${id}@example.com`;
+    await page.goto("/account/signup");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Tên ở bàn").fill(`Ban${id}`);
+    await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
+    await expect(page.getByText("Độ mạnh:", { exact: false })).toBeAttached();
+    await page.getByRole("button", { name: "Tạo tài khoản" }).click();
+
+    await expect(page.getByText(`Đã gửi link tới ${email}`, { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Gửi lại link xác minh" })).toBeVisible();
+
+    // The same email again: the answer sits under the email box, which takes the focus.
+    await page.getByRole("button", { name: "Sửa email" }).click();
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Tên ở bàn").fill(`Khac${id}`);
+    await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
+    await page.getByRole("button", { name: "Tạo tài khoản" }).click();
+    const box = page.getByLabel("Email");
+    await expect(box).toHaveAttribute("aria-invalid", "true");
+    await expect(box).toHaveAccessibleDescription(/Email này đã thuộc một tài khoản khác/);
+    await expect(box).toBeFocused();
+
+    await page.goto((await linkFromEmail(email, "/account/verify")).href);
+    await expect(page.getByRole("heading", { name: "Email đã xác minh" })).toBeVisible();
+    await expect(page.getByText(email)).toBeVisible();
+    await page.getByRole("link", { name: "Đăng nhập" }).click();
+    await logIn(page, email, PASSWORD);
+    await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
+    await expect(page.getByText("Đã xác minh")).toBeVisible();
+  });
+
+  test("forgot password: the link sets a new one, the old one stops working", async ({ page }) => {
+    const id = unique();
+    const email = `quen-${id}@example.com`;
+    const fresh = "go-mat-khau-moi-77";
+    await page.goto("/account/forgot");
+    // An account with a password; the reset link proves the address, so it needs no verifying.
+    await api(page, "GET", "/api/auth/config/"); // csrftoken cookie
+    await api(page, "POST", "/api/auth/signup/", { email, username: `Quen${id}`, password: PASSWORD });
+
+    await page.getByLabel("Email").fill(email);
+    await page.getByRole("button", { name: "Gửi link đặt lại" }).click();
+    await expect(page.getByText(`Đã gửi tới q•••@example.com`)).toBeVisible();
+
+    await page.goto((await linkFromEmail(email, "/account/reset")).href);
+    await page.getByLabel("Mật khẩu mới").fill(fresh);
+    await page.getByLabel("Nhập lại").fill(fresh);
+    await page.getByRole("button", { name: "Lưu mật khẩu mới" }).click();
+    await expect(page.getByText("Đã đổi mật khẩu")).toBeVisible();
+
+    await page.getByRole("link", { name: "Đăng nhập" }).click();
+    await logIn(page, email, PASSWORD);
+    await expect(page.getByRole("alert").filter({ hasText: "Sai email hoặc mật khẩu." })).toBeVisible();
+    await logIn(page, email, fresh);
+    await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
+    await expect(page.getByText("Đã xác minh")).toBeVisible();
+  });
 });
 
 test("a guest who logs out is asked first, and staying keeps the guest", async ({ page }) => {
@@ -48,35 +139,12 @@ test("a guest who logs out is asked first, and staying keeps the guest", async (
   await expect(page.getByText("Thẻ khách")).toBeVisible();
 });
 
-test("a wrong password shows the error on the form", async ({ page }) => {
+test("a wrong password shows the error on the form and moves the focus to it", async ({ page }) => {
   await page.goto("/account");
-  await page.getByLabel("Email").fill(`nobody-${unique()}@example.com`);
-  await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong-password-1");
-  await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
+  await logIn(page, `nobody-${unique()}@example.com`, "wrong-password-1");
   await expect(page.getByRole("alert").filter({ hasText: "Sai email hoặc mật khẩu." })).toBeVisible();
+  await expect(page.locator(":focus")).toContainText("Sai email hoặc mật khẩu.");
   await expect(page.getByRole("heading", { name: "Chào mừng trở lại" }).first()).toBeVisible();
-});
-
-test("signing up moves to step 2 with the email the link went to", async ({ page }) => {
-  const id = unique();
-  const email = `signup-${id}@example.com`;
-  await page.goto("/account/signup");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Tên ở bàn").fill(`Ban${id}`);
-  await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
-  await expect(page.getByText("Độ mạnh:", { exact: false })).toBeAttached();
-  await page.getByRole("button", { name: "Tạo tài khoản" }).click();
-
-  await expect(page.getByText(`Đã gửi link tới ${email}`, { exact: false })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Gửi lại link xác minh" })).toBeVisible();
-
-  // The same email again: the server's answer shows on the form.
-  await page.getByRole("button", { name: "Sửa email" }).click();
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Tên ở bàn").fill(`Khac${id}`);
-  await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Tạo tài khoản" }).click();
-  await expect(page.getByText("Email này đã thuộc một tài khoản khác", { exact: false }).first()).toBeVisible();
 });
 
 test("forgot password confirms without saying whether the email has an account", async ({ page }) => {
@@ -99,8 +167,101 @@ test("a broken reset link and a broken verify link say so", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Link không dùng được" })).toBeVisible();
 });
 
+// ---------- accessibility ----------
+
+/** The pages a visitor who is not logged in can open, and the heading that says it is ready. */
+const PAGES = [
+  { path: "/account", ready: "Chào mừng trở lại" },
+  { path: "/account/signup", ready: "Tạo tài khoản" },
+  { path: "/account/forgot", ready: "Quên mật khẩu?" },
+  { path: "/account/reset?uid=1&token=not-a-token", ready: "Đặt mật khẩu mới" },
+  { path: "/account/verify?token=not-a-token", ready: "Link không dùng được" },
+];
+
+/** React has taken the page over: the server's HTML shows earlier, before any handler runs. */
+async function hydrated(page: Page) {
+  await page.waitForFunction(() => Object.keys(document.querySelector("main") ?? {}).some((key) => key.startsWith("__reactFiber")));
+}
+
+async function open(page: Page, path: string, ready: string) {
+  await page.goto(path);
+  await expect(page.getByText(ready, { exact: true }).locator("visible=true").first()).toBeVisible();
+  await hydrated(page);
+}
+
+test.describe("accessibility", () => {
+  test("every page: labels, names, the ids aria-* points at, one h1", async ({ page }) => {
+    for (const { path, ready } of PAGES) {
+      await open(page, path, ready);
+      expect(await a11yProblems(page), path).toEqual([]);
+    }
+  });
+
+  test("autocomplete tells the password manager which password is which", async ({ page }) => {
+    const expected: [string, [string, string][]][] = [
+      ["/account", [["Email", "email"], ["Mật khẩu", "current-password"]]],
+      ["/account/signup", [["Email", "email"], ["Tên ở bàn", "nickname"], ["Mật khẩu", "new-password"]]],
+      ["/account/forgot", [["Email", "email"]]],
+      ["/account/reset?uid=1&token=x", [["Mật khẩu mới", "new-password"], ["Nhập lại", "new-password"]]],
+    ];
+    for (const [path, fields] of expected) {
+      await page.goto(path);
+      for (const [label, value] of fields) {
+        await expect(page.getByLabel(label, { exact: true }).locator("visible=true").first(), `${path} ${label}`).toHaveAttribute("autocomplete", value);
+      }
+    }
+    await playAsGuest(page);
+    await expect(page.getByLabel("Email")).toHaveAttribute("autocomplete", "email");
+    await expect(page.getByLabel("Mật khẩu", { exact: true })).toHaveAttribute("autocomplete", "new-password");
+  });
+
+  test("an empty form: each error sits under its box, said by it, and the first takes the focus", async ({ page }) => {
+    await page.goto("/account/signup");
+    await page.getByRole("button", { name: "Tạo tài khoản" }).click();
+    const email = page.getByLabel("Email");
+    await expect(email).toBeFocused();
+    for (const label of ["Email", "Tên ở bàn"]) {
+      const box = page.getByLabel(label, { exact: true });
+      await expect(box).toHaveAttribute("aria-invalid", "true");
+      await expect(box).toHaveAccessibleDescription("Chưa điền ô này.");
+    }
+    await expect(page.getByLabel("Mật khẩu", { exact: true })).toHaveAttribute("aria-invalid", "true");
+    expect(await a11yProblems(page)).toEqual([]);
+
+    // A wrong email: its own message; typing clears the error of that box only.
+    await email.fill("lym-o-dau");
+    await expect(email).not.toHaveAttribute("aria-invalid");
+    await expect(page.getByLabel("Tên ở bàn")).toHaveAttribute("aria-invalid", "true");
+    await page.getByRole("button", { name: "Tạo tài khoản" }).click();
+    await expect(email).toHaveAccessibleDescription(/Email chưa đúng/);
+    await expect(email).toBeFocused();
+  });
+
+  test("Tab goes through the login form in reading order", async ({ page }) => {
+    await page.goto("/account");
+    await hydrated(page);
+    await page.getByLabel("Email").focus();
+    const google = (await page.getByRole("button", { name: "Tiếp tục với Google" }).count()) > 0;
+    const order = [
+      page.getByLabel("Mật khẩu", { exact: true }),
+      page.getByRole("button", { name: "Hiện mật khẩu" }),
+      page.getByRole("link", { name: "Quên mật khẩu?" }),
+      page.getByRole("button", { name: "Đăng nhập", exact: true }),
+      ...(google ? [page.getByRole("button", { name: "Tiếp tục với Google" })] : []),
+      page.getByRole("button", { name: "Chơi ngay bằng khách" }),
+      page.getByRole("link", { name: "Đăng ký" }),
+    ];
+    for (const next of order) {
+      await page.keyboard.press("Tab");
+      await expect(next).toBeFocused();
+    }
+  });
+});
+
+// ---------- landscape phone ----------
+
 test.describe("landscape phone", () => {
-  test.use({ viewport: { width: 844, height: 390 } });
+  test.use({ viewport: PHONES[0], hasTouch: true, isMobile: true });
 
   test("the login keeps its small hero; other pages get the bar", async ({ page }) => {
     await page.goto("/account");
@@ -111,6 +272,88 @@ test.describe("landscape phone", () => {
     await page.goto("/account/signup");
     await expect(page.locator(".appbar").getByText("Tạo tài khoản")).toBeVisible();
     await expect(page.getByRole("button", { name: "Tạo tài khoản" })).toBeVisible();
+  });
+
+  /** Overflow, finger-size targets and the accessibility audit of the page as it is now. */
+  async function measure(page: Page, where: string) {
+    const problems = [...(await layoutProblems(page)), ...(await smallTargets(page)), ...(await a11yProblems(page))];
+    return problems.map((p) => `${where}: ${p}`);
+  }
+
+  test("every page fits 844×390, 932×430 and 667×375, with 44px targets", async ({ page }) => {
+    const problems: string[] = [];
+    for (const size of PHONES) {
+      await page.setViewportSize(size);
+      for (const { path, ready } of PAGES) {
+        await open(page, path, ready);
+        problems.push(...(await measure(page, `${size.width}×${size.height} ${path}`)));
+      }
+      // the longest the forms get: every box with its error under it
+      await open(page, "/account/signup", "Tạo tài khoản");
+      await page.getByRole("button", { name: "Tạo tài khoản" }).click();
+      await expect(page.getByLabel("Email")).toHaveAttribute("aria-invalid", "true");
+      problems.push(...(await measure(page, `${size.width}×${size.height} signup with errors`)));
+    }
+    expect(problems).toEqual([]);
+  });
+
+  test("the guest upgrade and the profile fit all three phones", async ({ page }) => {
+    await page.goto("/account");
+    await api(page, "GET", "/api/auth/config/"); // csrftoken cookie
+    await api(page, "POST", "/api/auth/guest/", {});
+    const problems: string[] = [];
+    for (const size of PHONES) {
+      await page.setViewportSize(size);
+      await open(page, "/account", "Thẻ khách");
+      problems.push(...(await measure(page, `${size.width}×${size.height} upgrade`)));
+    }
+    await api(page, "POST", "/api/auth/upgrade/", { email: `dt-${unique()}@example.com`, password: PASSWORD });
+    for (const size of PHONES) {
+      await page.setViewportSize(size);
+      await open(page, "/account", "Phòng đang có chip");
+      problems.push(...(await measure(page, `${size.width}×${size.height} profile`)));
+    }
+    expect(problems).toEqual([]);
+  });
+
+  test("the overflow check sees a box wider than the screen", async ({ page }) => {
+    await page.goto("/account/forgot");
+    await hydrated(page); // hydration would drop a node React did not render
+    await page.evaluate(() => {
+      const wide = document.createElement("p");
+      wide.textContent = "rộng quá";
+      wide.style.minWidth = "2000px"; // a flex item would shrink below its width
+      document.querySelector("main")!.append(wide);
+    });
+    expect((await layoutProblems(page)).join("\n")).toMatch(/scrolls sideways[\s\S]*"rộng quá" sticks out/);
+  });
+
+  test("the keyboard does not cover the box being typed in", async ({ page }) => {
+    // Android with interactive-widget=resizes-content (app/account/layout.tsx) shrinks the page to
+    // what the keyboard leaves; here the window shrinks the same way, to about 45% of its height.
+    await page.goto("/account");
+    await expect(page.locator("meta[name=viewport]")).toHaveAttribute("content", /interactive-widget=resizes-content/);
+    for (const size of PHONES) {
+      for (const { path, label } of [
+        { path: "/account", label: "Mật khẩu" },
+        { path: "/account/signup", label: "Mật khẩu" },
+        { path: "/account/forgot", label: "Email" },
+      ]) {
+        await page.setViewportSize(size);
+        await page.goto(path);
+        await hydrated(page);
+        const box = page.getByLabel(label, { exact: true }).locator("visible=true").first();
+        await box.focus();
+        await page.setViewportSize({ width: size.width, height: Math.round(size.height * 0.45) });
+        await expect(box, `${size.width}×${size.height} ${path}`).toBeInViewport({ ratio: 1 });
+        const covered = await box.evaluate((el) => {
+          const bar = document.querySelector(".appbar");
+          if (!bar || !bar.checkVisibility()) return false;
+          return el.getBoundingClientRect().top < bar.getBoundingClientRect().bottom;
+        });
+        expect(covered, `${size.width}×${size.height} ${path}: under the top bar`).toBe(false);
+      }
+    }
   });
 });
 
