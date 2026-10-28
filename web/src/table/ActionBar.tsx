@@ -4,7 +4,7 @@
 // table.tsx TurnBar / IdleBar / TurnPanel). Every button and every bet size comes from the
 // server's legal_actions: the bar never decides what is legal, it only clamps a typed amount into
 // [min_raise_to, max_raise_to]. Animations never block it: a click is sent at once.
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Minus, Plus } from "lucide-react";
 
 import type { LegalActions } from "@/api/protocol";
@@ -13,6 +13,7 @@ import { fmt } from "@/ui";
 import { Countdown, LiveBar, type TurnClock } from "./clock";
 import type { Device } from "./geometry";
 import type { Preset } from "./seatView";
+import { isTyping, turnCommand } from "./shortcuts";
 
 export type ActKind = "fold" | "check" | "call" | "raise";
 
@@ -37,7 +38,8 @@ function useRaise(legal: LegalActions) {
   const min = legal.min_raise_to ?? 0;
   const max = Math.max(min, legal.max_raise_to ?? 0);
   const [amount, setAmount] = useState(min);
-  return { min, max, amount: clamp(amount, min, max), set: (v: number) => setAmount(clamp(v, min, max)) };
+  const set = useCallback((v: number) => setAmount(clamp(v, min, max)), [min, max]);
+  return { min, max, amount: clamp(amount, min, max), set };
 }
 
 function Slider({ raise, step, device }: { raise: ReturnType<typeof useRaise>; step: number; device: Device }) {
@@ -45,7 +47,7 @@ function Slider({ raise, step, device }: { raise: ReturnType<typeof useRaise>; s
   const ic = device === "desktop" ? 14 : 16;
   return (
     <>
-      <button type="button" className="step-btn" aria-label="Bớt" onClick={() => raise.set(raise.amount - step)} disabled={raise.amount <= raise.min}>
+      <button type="button" className="step-btn" aria-label="Giảm mức tố" aria-keyshortcuts="ArrowDown" onClick={() => raise.set(raise.amount - step)} disabled={raise.amount <= raise.min}>
         <Minus size={ic} strokeWidth={2.2} />
       </button>
       <span className="slider">
@@ -65,7 +67,7 @@ function Slider({ raise, step, device }: { raise: ReturnType<typeof useRaise>; s
           aria-valuetext={`${fmt(raise.amount)} chip`}
         />
       </span>
-      <button type="button" className="step-btn" aria-label="Thêm" onClick={() => raise.set(raise.amount + step)} disabled={raise.amount >= raise.max}>
+      <button type="button" className="step-btn" aria-label="Tăng mức tố" aria-keyshortcuts="ArrowUp" onClick={() => raise.set(raise.amount + step)} disabled={raise.amount >= raise.max}>
         <Plus size={ic} strokeWidth={2.2} />
       </button>
     </>
@@ -98,8 +100,8 @@ function AmountBox({ raise }: { raise: ReturnType<typeof useRaise> }) {
 function Presets({ presets, raise, className }: { presets: Preset[]; raise: ReturnType<typeof useRaise>; className: string }) {
   return (
     <div className={className} role="group" aria-label="Mức tố nhanh">
-      {presets.map((p) => (
-        <button key={p.label} type="button" className={`preset${p.amount === raise.amount ? " is-active" : ""}`} onClick={() => raise.set(p.amount)} aria-pressed={p.amount === raise.amount}>
+      {presets.map((p, i) => (
+        <button key={p.label} type="button" className={`preset${p.amount === raise.amount ? " is-active" : ""}`} onClick={() => raise.set(p.amount)} aria-pressed={p.amount === raise.amount} aria-keyshortcuts={String(i + 1)}>
           <span>{p.label}</span>
           <b>{fmt(p.amount)}</b>
         </button>
@@ -140,23 +142,28 @@ function Acts({ legal, raise, facingBet, enabled, onAct }: { legal: LegalActions
   );
 }
 
-/** Keyboard on the desktop: F fold, C check/call, R raise (not while typing). */
-function useShortcuts(enabled: boolean, legal: LegalActions, amount: number, onAct: TurnProps["onAct"]) {
+/** Keyboard on the desktop (shortcuts.ts): F fold, C check/call, R raise, 1–4 quick sizes, arrows
+ *  move the amount. Off while typing, while a dialog or the help is open, and for held-down keys. */
+function useShortcuts(enabled: boolean, legal: LegalActions, presets: Preset[], step: number, raise: ReturnType<typeof useRaise>, onAct: TurnProps["onAct"]) {
+  const { amount, set } = raise;
   useEffect(() => {
     if (!enabled) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (e.metaKey || e.ctrlKey || e.altKey || (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable))) return;
-      const k = e.key.toLowerCase();
-      if (k === "f" && legal.can_fold) onAct("fold");
-      else if (k === "c") onAct(legal.can_check ? "check" : "call");
-      else if (k === "r" && legal.min_raise_to !== null) onAct("raise", amount);
-      else return;
+      if (e.defaultPrevented || isTyping(e.target) || document.querySelector("dialog[open]")) return;
+      // the slider moves with its own arrow keys
+      if (e.key.startsWith("Arrow") && (e.target as HTMLInputElement | null)?.type === "range") return;
+      const cmd = turnCommand(e, legal, presets.length);
+      if (!cmd) return;
       e.preventDefault();
+      if (cmd.kind === "nudge") return set(amount + cmd.steps * step);
+      if (cmd.kind === "preset") return set(presets[cmd.index].amount);
+      if (e.repeat) return;
+      if (cmd.kind === "raise") onAct("raise", amount);
+      else if (cmd.kind === "fold" || cmd.kind === "check" || cmd.kind === "call") onAct(cmd.kind);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabled, legal, amount, onAct]);
+  }, [enabled, legal, presets, step, amount, set, onAct]);
 }
 
 const timeoutNote = (legal: LegalActions, short: boolean) =>
@@ -166,7 +173,7 @@ const timeoutNote = (legal: LegalActions, short: boolean) =>
 export function TurnBar(props: TurnProps) {
   const { legal, presets, step, facingBet, clock, enabled, onAct } = props;
   const raise = useRaise(legal);
-  useShortcuts(enabled, legal, raise.amount, onAct);
+  useShortcuts(enabled, legal, presets, step, raise, onAct);
   const canRaise = legal.min_raise_to !== null;
   return (
     <div className="abar" role="region" aria-label="Tới lượt bạn">
