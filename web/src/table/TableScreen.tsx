@@ -322,7 +322,15 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
     </p>
   );
 
-  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration });
+  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, isOwner: !!owner });
+  // The owner seated with no chips grants them to themselves: the owner's sheet, one tap away.
+  const grantMine = owner && me && (me.stack ?? 0) === 0 && !hand?.complete ? () => setDialog("owner") : undefined;
+  const grantButton = (block: boolean) =>
+    grantMine && (
+      <Button kind="primary" block={block} icon={<Crown size={16} strokeWidth={2} aria-hidden />} onClick={grantMine}>
+        Cấp chip cho mình
+      </Button>
+    );
 
   if (device === "mobile") {
     let panel: ReactNode;
@@ -362,6 +370,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
           {seatError && <span className="ip-error" role="alert">{seatError}</span>}
           <Spectators device="mobile" spectators={model.spectators} />
           <div className="ip-actions">
+            {grantButton(true)}
             {isSeated && (
               <Button kind="quiet" block icon={<Coffee size={16} />} onClick={toggleSit} aria-pressed={sittingOut} disabled={!online}>
                 {sittingOut ? "Quay lại chơi" : "Nghỉ ván sau"}
@@ -448,6 +457,8 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
             </span>
           ) : pre && !seatError ? (
             pre
+          ) : grantMine && !seatError ? (
+            grantButton(false)
           ) : (
             <span className="idle-msg is-quiet">{seatError ?? idle.center}</span>
           )
@@ -599,6 +610,7 @@ function idleContent({
   sittingOut,
   clock,
   celebration,
+  isOwner,
 }: {
   table: TableState;
   me: SeatView | undefined;
@@ -609,6 +621,7 @@ function idleContent({
   sittingOut: boolean;
   clock: TurnClock | undefined;
   celebration: boolean;
+  isOwner: boolean;
 }): Idle {
   const { hand, room } = table;
   const seated = table.seats.length;
@@ -634,7 +647,9 @@ function idleContent({
   // Seated but not dealt in: say why (no chips, sitting out, or simply next hand).
   const noChips = !!me && (me.stack ?? 0) === 0;
   const seatedWait = noChips
-    ? "Chưa có chip — nhờ chủ phòng cấp chip"
+    ? isOwner
+      ? "Chưa có chip" // the button "Cấp chip cho mình" sits right next to it
+      : "Chưa có chip — nhờ chủ phòng cấp chip"
     : sittingOut
       ? "Đang nghỉ — bấm “Nghỉ ván sau” để quay lại"
       : "Bạn đã ngồi — vào từ ván sau";

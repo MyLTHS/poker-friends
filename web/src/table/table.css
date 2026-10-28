@@ -1750,16 +1750,19 @@
     justify-content: space-between;
     gap: 14px;
   }
+  /* a narrow window (a laptop at 1000 px) shrinks the words, never pushes the right side off */
   .d1 .idle-left {
-    flex: none;
-    min-width: 190px;
+    flex: 0 1 auto;
+    min-width: min(190px, 30%);
   }
   .d1 .idle-center {
     flex: 1;
+    min-width: 0;
     display: flex;
     justify-content: center;
   }
   .d1 .idle-right {
+    flex: none;
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -1769,6 +1772,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
   }
   .d1 .idle-hand small {
     font: var(--w-strong) var(--fs-xs)/1.2 var(--text);
@@ -1780,6 +1784,8 @@
     font-size: var(--fs-base);
     font-weight: var(--w-label);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .d1 .idle-msg {
     display: inline-flex;
@@ -1795,6 +1801,13 @@
   }
   .d1 .idle-msg > svg {
     color: var(--brass-2);
+  }
+  /* the plain message cuts short with … in a narrow window instead of running over its neighbours */
+  .d1 .idle-msg.is-quiet {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .d1 .idle-msg b {
     font-weight: var(--w-strong);

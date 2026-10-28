@@ -104,3 +104,18 @@ test("a wrong invite link says so and leads back to the lobby", async ({ browser
   await page.getByRole("link", { name: "Về sảnh" }).click();
   await expect(page).toHaveURL(/\/rooms$/);
 });
+
+test("the owner seated with no chips grants them to themselves from the bar", async ({ browser }) => {
+  const owner = await newGuest(browser, "Minh");
+  const room = await api(owner, "POST", "/api/rooms/", { name: "Bàn E2E tự cấp", small_blind: 10, big_blind: 20 });
+  const roomId = room.room.room_id;
+  await api(owner, "POST", `/api/rooms/${roomId}/seats/`, { seat: 1 });
+  await owner.goto(`/rooms/${roomId}/table`);
+  await owner.getByRole("button", { name: "Cấp chip cho mình" }).click();
+  const row = owner.getByRole("dialog", { name: /Bảng chủ phòng/ }).getByRole("listitem").filter({ hasText: /Ghế 1/ });
+  await row.getByRole("button", { name: "Cấp/trừ" }).click();
+  await row.getByRole("button", { name: "Cấp 500" }).click();
+  await expect(row.locator(".op-stack")).toHaveText("500");
+  await owner.keyboard.press("Escape");
+  await expect(owner.getByRole("button", { name: "Cấp chip cho mình" })).toHaveCount(0);
+});

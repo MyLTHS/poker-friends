@@ -92,9 +92,10 @@ export function TableTools({
         </button>
       )}
       {owner && (
-        <IconButton label="Bảng chủ phòng" active={owner.open} aria-haspopup="dialog" onClick={owner.onOpen}>
-          <Crown size={17} strokeWidth={1.9} aria-hidden />
-        </IconButton>
+        <button type="button" className={`tbar-btn${owner.open ? " is-on" : ""}`} aria-haspopup="dialog" aria-label="Bảng chủ phòng" title="Cấp chip, ghế, luật bàn" onClick={owner.onOpen}>
+          <Crown size={15} strokeWidth={1.9} aria-hidden />
+          Chủ phòng
+        </button>
       )}
       <IconButton label="Cài đặt bàn" aria-haspopup="dialog" onClick={onSettings}>
         <Settings size={17} strokeWidth={1.9} aria-hidden />
