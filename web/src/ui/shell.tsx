@@ -72,7 +72,7 @@ function DesktopNav({ active, me, actions }: { active?: NavKey; me?: Me; actions
 function PhoneRail({ active, me, actions }: { active?: NavKey; me?: Me; actions?: ReactNode }) {
   return (
     <nav className="navrail" aria-label="Chính">
-      <Link href="/" aria-label="Poker Friends: trang đầu">
+      <Link href="/" className="navrail-home" aria-label="Poker Friends: trang đầu">
         <Crest size={36} />
       </Link>
       <span className="navrail-tabs">

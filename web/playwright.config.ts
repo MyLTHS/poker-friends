@@ -10,7 +10,13 @@ import { MAIL_LOG } from "./e2e/mailbox";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url)); // web/ (package.json is "type": "module")
 const ROOT = path.resolve(HERE, "..");
-const WEB = "http://localhost:3100";
+// Ports: 3100 / 8000 as in CI; E2E_WEB_PORT / E2E_API_PORT run a second copy beside another
+// checkout's run. The specs read the web address from E2E_WEB.
+const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 3100);
+const API_PORT = Number(process.env.E2E_API_PORT ?? 8000);
+const WEB = `http://localhost:${WEB_PORT}`;
+const API = `localhost:${API_PORT}`;
+process.env.E2E_WEB = WEB;
 // A throwaway SQLite database, recreated on every run, so tests never touch db.sqlite3.
 const E2E_DB = path.join(ROOT, "e2e.sqlite3");
 const djangoEnv = {
@@ -31,17 +37,17 @@ export default defineConfig({
   webServer: [
     {
       // stdout holds only the emails (request logs go to stderr): the tests read links from it.
-      command: `rm -f "${E2E_DB}" "${MAIL_LOG}" && uv run python manage.py migrate --noinput -v0 && uv run python manage.py runserver 127.0.0.1:8000 --noreload > "${MAIL_LOG}"`,
+      command: `rm -f "${E2E_DB}" "${MAIL_LOG}" && uv run python manage.py migrate --noinput -v0 && uv run python manage.py runserver 127.0.0.1:${API_PORT} --noreload > "${MAIL_LOG}"`,
       cwd: ROOT,
       env: djangoEnv,
-      url: "http://127.0.0.1:8000/api/auth/config/",
+      url: `http://127.0.0.1:${API_PORT}/api/auth/config/`,
       reuseExistingServer: false,
       timeout: 120_000,
     },
     {
-      command: "npm run dev -- -p 3100",
+      command: `npm run dev -- -p ${WEB_PORT}`,
       cwd: HERE,
-      env: { DJANGO_URL: "http://localhost:8000", NEXT_PUBLIC_DJANGO_WS: "ws://localhost:8000" },
+      env: { DJANGO_URL: `http://${API}`, NEXT_PUBLIC_DJANGO_WS: `ws://${API}` },
       url: WEB,
       reuseExistingServer: false,
       timeout: 180_000,

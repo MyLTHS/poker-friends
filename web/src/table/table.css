@@ -2701,7 +2701,10 @@
     align-items: center;
     gap: 4px;
   }
-  .d1 .drawer-tabs > :is(span, button):not(.iconbtn) {
+  .d1 .drawer-tablist {
+    display: contents;
+  }
+  .d1 .drawer-tablist > button {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -2712,7 +2715,7 @@
     color: var(--ivory-3);
     white-space: nowrap;
   }
-  .d1 .drawer-tabs > .is-active:not(.iconbtn) {
+  .d1 .drawer-tablist > .is-active {
     background: rgba(243, 234, 215, 0.09);
     color: var(--ivory);
   }
@@ -3034,6 +3037,8 @@
     color: var(--ivory-3);
   }
   .d1 .rp-panel .speed {
+    justify-content: center;
+    min-width: 44px;
     height: 44px;
     padding: 0 12px;
   }
@@ -3080,6 +3085,10 @@
   .d1 .rp-panel .transport {
     justify-content: space-between;
     gap: 4px;
+  }
+  .d1 .rp-panel .tp-btn,
+  .d1 .rp-panel .speed {
+    flex: none;
   }
   .d1 .rp-panel .tp-btn {
     width: 44px;
@@ -3195,6 +3204,10 @@
   }
   .d1.tbl-mobile .rp-panel {
     overflow: hidden;
+  }
+  /* the replay column holds five 44 px transport buttons in a row (design: 304 px wide) */
+  .d1.tbl-mobile:has(.rp-panel) {
+    --pw: calc(260px + var(--safe-r));
   }
   .d1 .rp-panel-head b,
   .d1 .rp-panel-head small {
@@ -3314,9 +3327,10 @@
   .d1 .slider-input {
     position: absolute;
     left: 0;
-    top: -14px;
+    /* 44 px to grab (the drawn track is 6 px) */
+    top: -19px;
     width: 100%;
-    height: calc(100% + 28px);
+    height: calc(100% + 38px);
     margin: 0;
     opacity: 0;
     cursor: pointer;
@@ -3376,6 +3390,8 @@
   .d1 .composer-field {
     flex: 1;
     min-width: 0;
+    /* the whole 44 px box (border included) takes the tap, not just the line of text */
+    height: 44px;
     border: 0;
     background: none;
     color: var(--ivory);
@@ -3407,6 +3423,11 @@
       content: "";
       position: absolute;
       inset: -8px;
+    }
+    .d1 .drawer-tabs button:not(.iconbtn)::before {
+      content: "";
+      position: absolute;
+      inset: -5px -2px;
     }
     .d1 .composer-field {
       font-size: 16px;
@@ -3673,5 +3694,108 @@
   from {
     opacity: 0;
     transform: translateY(12px) scale(0.98);
+  }
+}
+
+/* C5: table settings (sound) and the keyboard help, both in the ui Modal. */
+@layer components {
+  .d1 .tset {
+    display: grid;
+    gap: 4px;
+    min-width: min(420px, 100%);
+    text-align: left;
+  }
+  .d1 .tset-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--hair);
+  }
+  .d1 .tset-row:last-child {
+    border-bottom: 0;
+  }
+  .d1 .tset-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border-radius: 50%;
+    color: var(--brass-2);
+    background: rgba(214, 178, 104, 0.1);
+    border: 1px solid var(--line);
+  }
+  .d1 .tset-text {
+    display: grid;
+    gap: 3px;
+    margin-right: auto;
+  }
+  .d1 .tset-text b {
+    font: var(--w-label) var(--fs-base) / 1.2 var(--text);
+    color: var(--ivory);
+  }
+  .d1 .tset-text small {
+    font: var(--w-body) var(--fs-sm) / 1.35 var(--text);
+    color: var(--ivory-3);
+  }
+  .d1 .tset-volume {
+    padding-left: 46px;
+  }
+  .d1 .tset-volume.is-off .seg {
+    opacity: 0.5;
+  }
+  .d1 .kbd {
+    display: inline-grid;
+    place-items: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 7px;
+    border-radius: 7px;
+    font: var(--w-strong) var(--fs-sm) / 1 var(--text);
+    color: var(--ivory);
+    background: linear-gradient(180deg, #3a2c21, #221911);
+    border: 1px solid var(--line);
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.45);
+  }
+  .d1 .keys-note {
+    margin: 0 0 12px;
+    font: var(--w-body) var(--fs-sm) / 1.45 var(--text);
+    color: var(--ivory-3);
+    text-align: left;
+  }
+  .d1 .keys {
+    display: grid;
+    margin: 0;
+    min-width: min(440px, 100%);
+    text-align: left;
+  }
+  .d1 .keys > div {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--hair);
+  }
+  .d1 .keys > div:last-child {
+    border-bottom: 0;
+  }
+  .d1 .keys dt {
+    display: flex;
+    gap: 5px;
+  }
+  .d1 .keys dd {
+    margin: 0;
+    font: var(--w-body) var(--fs-md) / 1.35 var(--text);
+    color: var(--ivory-2);
+  }
+  @media (orientation: landscape) and (max-height: 500px) {
+    .d1 .tset-row {
+      padding: 6px 0;
+    }
+    .d1 .tset-volume {
+      padding-left: 0;
+    }
   }
 }

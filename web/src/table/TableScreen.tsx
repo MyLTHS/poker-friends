@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { Coffee, Crown, Hourglass } from "lucide-react";
 
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
-import { Button, ButtonLink, CardText, D1Root, Spinner, fmt, signed } from "@/ui";
+import { Button, ButtonLink, CardText, D1Root, Spinner, ToastProvider, fmt, signed } from "@/ui";
 
 import { IdleBar, PreAction, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
 import { Countdown, secondsLeft, useRecent, type TurnClock } from "./clock";
@@ -38,6 +38,8 @@ import {
 } from "./Side";
 import { FitStage, Stage } from "./Stage";
 import { useTableFx, type SeatPlace } from "./TableFx";
+import { SettingsModal, ShortcutHelp, SoundCues, useKeysPref, useTableSound } from "./TableSettings";
+import { globalCommand, isTyping } from "./shortcuts";
 import { useTableSocket } from "./useTableSocket";
 
 const newCommandId = () => crypto.randomUUID();
@@ -62,20 +64,45 @@ export type TableScreenProps = {
   onTakeSeat?: (seat: number) => Promise<string | null>;
   /** Leave my seat (keep watching). */
   onLeaveSeat?: () => Promise<string | null>;
-  /** Room owner: link to the owner panel. */
-  ownerHref?: string;
+  /** Room owner: renders the owner's sheet (rooms/OwnerPanel) over the table. */
+  owner?: (slot: OwnerSlot) => ReactNode;
   /** Replay of a finished hand. */
   replayHref?: (handId: number) => string;
 };
 
-export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = MOCK_HELP, loadChat, onTakeSeat, onLeaveSeat, ownerHref, replayHref }: TableScreenProps) {
+/** What the owner's sheet gets from the table. */
+export type OwnerSlot = { open: boolean; onClose: () => void; seats: SeatOccupant[]; inHand: (playerId: string) => boolean };
+
+export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = MOCK_HELP, loadChat, onTakeSeat, onLeaveSeat, owner, replayHref }: TableScreenProps) {
   const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
   const device = useDevice();
   const [tab, setTab] = useState<SideTab>("chat");
   const [drawer, setDrawer] = useState(false);
   const [seen, setSeen] = useState(0);
   const [seatError, setSeatError] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<"owner" | "settings" | "help" | null>(null);
+  const sound = useTableSound();
+  const [keysOn, setKeysOn] = useKeysPref();
   const { table } = model;
+  const closeDialog = useCallback(() => setDialog(null), []);
+
+  // Keys that work any time on the desktop table: ? help, M sound (my turn's keys: ActionBar).
+  // Off with the settings' shortcut switch; a held key does not toggle again and again.
+  const { prefs: soundPrefs, setPrefs: setSoundPrefs } = sound;
+  useEffect(() => {
+    if (device !== "desktop" || !keysOn) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || isTyping(e.target) || document.querySelector("dialog[open]")) return;
+      const cmd = globalCommand(e);
+      if (!cmd) return;
+      e.preventDefault();
+      if (e.repeat) return;
+      if (cmd.kind === "help") setDialog("help");
+      else if (cmd.kind === "sound") setSoundPrefs({ ...soundPrefs, on: !soundPrefs.on });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [device, keysOn, soundPrefs, setSoundPrefs]);
 
   // Chat said while we were away: the socket only brings new lines.
   useEffect(() => {
@@ -199,6 +226,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
         facingBet: hand.players.some((p) => p.bet > 0),
         clock: myClock,
         enabled: online && !pending,
+        keys: device === "desktop" && keysOn,
         onAct,
       }
     : null;
@@ -241,6 +269,17 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
     </Stage>
   );
 
+  // The owner's sheet, the settings and the key help sit over the table on both devices.
+  const inHand = (playerId: string) => !!hand && !hand.complete && hand.players.some((p) => p.player_id === playerId && p.in_hand);
+  const dialogs = (
+    <>
+      {owner?.({ open: dialog === "owner", onClose: closeDialog, seats: table.seats, inHand })}
+      <SettingsModal open={dialog === "settings"} onClose={closeDialog} sound={sound} keys={device === "desktop" ? { on: keysOn, set: setKeysOn } : undefined} onHelp={() => setDialog("help")} />
+      {device === "desktop" && <ShortcutHelp open={dialog === "help"} onClose={closeDialog} />}
+      <SoundCues sound={sound} cues={model.fx} mySeat={occupant?.seat ?? null} myTurn={myTurn} turnKey={myTurn && turn ? `${hand?.hand_id}:${turn.deadline}` : null} deadline={myClock?.deadline ?? 0} frozen={myClock?.frozenAt !== undefined} />
+    </>
+  );
+
   const overlay = !online && (
     <>
       <div className={`scrim scrim-${device === "desktop" ? "d" : "m"}`} />
@@ -254,7 +293,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   // Screen readers hear when it becomes my turn (once: the text only changes with the turn).
   const announce = (
     <p className="sr-only" role="status" aria-live="polite">
-      {myTurn && legal ? `Tới lượt bạn. ${legal.can_check ? "Có thể check." : `Theo ${fmt(legal.call_amount)}.`} ${device === "desktop" ? `Phím tắt: F bỏ, C ${legal.can_check ? "check" : "theo"}, R tố.` : ""}` : ""}
+      {myTurn && legal ? `Tới lượt bạn. ${legal.can_check ? "Có thể check." : `Theo ${fmt(legal.call_amount)}.`} ${device === "desktop" && keysOn ? `Phím tắt: F bỏ, C ${legal.can_check ? "check" : "theo"}, R tố, dấu hỏi để xem thêm.` : ""}` : ""}
     </p>
   );
 
@@ -318,6 +357,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
     }
     return (
       <D1Root bg="table" className="tbl tbl-mobile">
+        <ToastProvider>
         <div className={`table-area-m${!online && myTurn ? " is-spot-me" : ""}`} {...probe}>
           <FitStage device="mobile" className={!online || suspended ? "is-dimmed" : ""}>
             {stage}
@@ -333,7 +373,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
                   Mất kết nối · đang thử lại
                 </span>
               ) : (
-                <MobileTools watchers={model.spectators.length} unread={unread} onChat={() => openDrawer(true)} />
+                <MobileTools watchers={model.spectators.length} unread={unread} onChat={() => openDrawer(true)} owner={owner ? () => setDialog("owner") : undefined} onMore={() => setDialog("settings")} />
               )
             }
           />
@@ -343,6 +383,8 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
         <ChatDrawer open={drawer} onClose={() => openDrawer(false)} messages={model.chat} me={you.player_id} spectators={model.spectators} onSend={say} offline={!online} />
         <Notice model={model} onDismiss={dismissNotice} />
         {announce}
+        {dialogs}
+        </ToastProvider>
       </D1Root>
     );
   }
@@ -397,6 +439,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
 
   return (
     <D1Root bg="table" className="tbl tbl-desktop">
+      <ToastProvider>
       <TableTopBar
         backHref={backHref}
         back={backLabel}
@@ -425,7 +468,8 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
             canSit={isSeated}
             online={online}
             onSitToggle={toggleSit}
-            ownerHref={ownerHref}
+            owner={owner ? { open: dialog === "owner", onOpen: () => setDialog("owner") } : undefined}
+            onSettings={() => setDialog("settings")}
             leave={isSeated ? leave : undefined}
           />
         }
@@ -463,6 +507,8 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       {overlay}
       <Notice model={model} onDismiss={dismissNotice} />
       {announce}
+      {dialogs}
+      </ToastProvider>
     </D1Root>
   );
 }

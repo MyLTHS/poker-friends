@@ -33,6 +33,34 @@ alias dc='docker compose -f docker-compose.prod.yml'
 dở" là **bình thường** (có bàn đang chơi, hoặc server tắt giữa ván; server sẽ chơi tiếp). Lệnh
 kết thúc bằng `OK: ...` là không lệch, `LỆCH: ...` thì xem mục [Lệch chip](#lệch-chip).
 
+## Sau buổi chơi: phản hồi và lỗi
+
+Phản hồi người chơi gửi và lỗi JavaScript trình duyệt tự báo **chỉ xem được trong Django Admin**
+(không có trang hay API nào đọc lại). Vào `https://<tên miền>/admin/` bằng tài khoản staff; chưa
+có thì tạo một lần: `dc exec backend python manage.py createsuperuser`. Trong nhóm "Phản hồi và lỗi
+trình duyệt":
+
+- **Phản hồi**: mới nhất ở trên, lọc theo loại (Lỗi / Ý tưởng / Khác) và theo phòng ở cột bên
+  phải, theo ngày ở thanh trên. Mỗi dòng có người gửi, trang đang mở và trình duyệt.
+- **Lỗi trình duyệt**: cùng lỗi trên cùng trang của cùng bản (`release`), trong cùng khung 10 phút
+  (10:00–10:10, 10:10–10:20…), chỉ là một dòng, cột `Count` đếm số lần. Lọc theo `release` để biết
+  lỗi thuộc bản nào, mở dòng để xem `stack`.
+
+Cookie, token trong link và bài đã bị xoá trước khi lưu (chỗ đó ghi `[đã xoá]`). Hai bảng chỉ xem
+và xoá được, không sửa. Lỗi phía server (bàn tạm dừng, lệch chip) vẫn nằm trong log, xem các mục
+dưới.
+
+**Dọn lỗi cũ** sau buổi beta, rồi mỗi tháng một lần: lệnh dưới xoá lỗi trình duyệt không gặp lại
+trong 30 ngày (`--days 7` nếu muốn ngắn hơn). Phản hồi của người chơi không bao giờ bị xoá.
+
+```bash
+dc exec backend python manage.py prune_client_errors
+```
+
+Bảng lỗi nhận tối đa 1000 lỗi **mới** mỗi 24 giờ (lỗi lặp lại chỉ cộng `Count`). Quá mức đó trình
+duyệt bị từ chối, log server ghi `Too Many Requests: /api/client-errors/`: thường là một trang lỗi
+lặp vòng, hoặc có người cố tình gửi rác. Xem các dòng mới nhất trong admin để biết là cái nào.
+
 ## Server sập
 
 Dấu hiệu: trang web không vào được, hoặc vào được nhưng bàn báo mất kết nối mãi.
