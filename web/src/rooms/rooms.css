@@ -1246,7 +1246,7 @@
   /* ---------- real pages (the design frames are fixed 1440×900 / 844×390) ---------- */
 
   .d1 .rooms-page {
-    animation: rooms-enter var(--dur-base) var(--ease-d1-out) both;
+    animation: rooms-enter var(--dur-base) var(--ease-d1-out) backwards;
   }
   .d1 .net-banner {
     display: flex;
@@ -1340,7 +1340,7 @@
   }
   .d1 .room-card,
   .d1 .room-row {
-    animation: rooms-enter var(--dur-base) var(--ease-d1-out) both;
+    animation: rooms-enter var(--dur-base) var(--ease-d1-out) backwards;
     animation-delay: calc(var(--i, 0) * 40ms);
   }
   .d1 .room-card .rc-body h3 {
@@ -1454,7 +1454,7 @@
     gap: 8px 14px;
   }
   .d1 .invite-stage .invitation {
-    animation: inv-land var(--dur-slow) var(--ease-d1-settle) both;
+    animation: inv-land var(--dur-slow) var(--ease-d1-settle) backwards;
   }
   .d1 .invite-stage.is-full {
     min-height: min(640px, calc(100dvh - var(--nav-h) - 200px));
@@ -1683,7 +1683,7 @@
     padding: 10px 12px;
     border-radius: 12px;
     background: rgba(232, 207, 146, 0.07);
-    animation: rooms-enter var(--dur-base) var(--ease-d1-out) both;
+    animation: rooms-enter var(--dur-base) var(--ease-d1-out) backwards;
   }
   .d1 .owner-save .owner-hint {
     flex: 1;
@@ -1702,7 +1702,7 @@
     color: var(--ivory-3);
   }
   .d1 .op-adjust {
-    animation: rooms-drop var(--dur-base) var(--ease-d1-out) both;
+    animation: rooms-drop var(--dur-base) var(--ease-d1-out) backwards;
   }
   .d1 .op-caret-btn {
     display: grid;
