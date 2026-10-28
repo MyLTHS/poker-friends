@@ -10,8 +10,11 @@ import json
 import uuid
 
 from autobahn.exception import Disconnected
+from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.conf import settings
 
+from apps.accounts.middleware import is_member
 from apps.accounts.ratelimit import RateLimited
 
 from . import actor as actor_module
@@ -19,6 +22,7 @@ from . import contract, rooms
 from .accounts import player_for_scope
 from .models import Room, User
 
+LOGIN_REQUIRED_CLOSE_CODE = 4401
 NO_ACCESS_CLOSE_CODE = 4404
 GUEST_LIMIT_CLOSE_CODE = 4429
 
@@ -28,6 +32,12 @@ class RoomConsumer(AsyncWebsocketConsumer):
         self.room_id = int(self.scope["url_route"]["kwargs"]["room_id"])
         room = await Room.objects.filter(pk=self.room_id).afirst()
         user = self.scope.get("user")
+        if not settings.GUESTS_ALLOWED and not (
+            user is not None and await database_sync_to_async(is_member)(user)
+        ):
+            # Members only (apps/accounts/middleware.py): no guest made on the fly, no old guest.
+            await self._refuse(LOGIN_REQUIRED_CLOSE_CODE)
+            return
         if room is None or (room.is_private and not (user and user.is_authenticated)):
             await self._refuse(NO_ACCESS_CLOSE_CODE)
             return

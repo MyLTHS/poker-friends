@@ -5,11 +5,12 @@ for each, so a WebSocket client can connect as that player. Granting chips throu
 server is B7, so run this **before** the server touches the room. Development only.
 """
 
+from django.conf import settings
 from django.contrib.auth import BACKEND_SESSION_KEY, HASH_SESSION_KEY, SESSION_KEY
 from django.contrib.sessions.backends.db import SessionStore
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.accounts.services import MODEL_BACKEND
+from apps.accounts.services import MODEL_BACKEND, mark_email_verified
 from apps.games.models import LedgerEntry, LedgerKind, Room, RoomSeat, User
 
 
@@ -50,13 +51,20 @@ class Command(BaseCommand):
 
 
 def seat_guest_players(room: Room, players: int, chips: int) -> list[tuple[User, str]]:
-    """Seat ``players`` new guests in seats 1..players with ``chips`` each, logged in.
+    """Seat ``players`` new players in seats 1..players with ``chips`` each, logged in.
 
-    Returns each guest with a ``sessionid`` cookie value a WebSocket client can connect with.
+    Guests where guests may play; otherwise accounts with a verified made-up email, so they pass
+    the members-only check too. Returns each with a ``sessionid`` cookie value a WebSocket
+    client can connect with.
     """
     seated = []
     for seat in range(1, players + 1):
-        user = User.objects.create_user(username=f"demo-{room.pk}-{seat}", is_guest=True)
+        name = f"demo-{room.pk}-{seat}"
+        if settings.GUESTS_ALLOWED:
+            user = User.objects.create_user(username=name, is_guest=True)
+        else:
+            user = User.objects.create_user(username=name, email=f"{name}@bots.invalid")
+            mark_email_verified(user)
         RoomSeat.objects.create(room=room, user=user, seat=seat)
         LedgerEntry.objects.create(room=room, user=user, kind=LedgerKind.GRANT, amount=chips)
         session = SessionStore()

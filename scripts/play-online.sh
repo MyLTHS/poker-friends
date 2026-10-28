@@ -79,6 +79,9 @@ TRUSTED_PROXIES=1
 DJANGO_ALLOWED_HOSTS=.trycloudflare.com,localhost,127.0.0.1
 FRONTEND_URL=http://localhost
 FRONTEND_URL_FROM_REQUEST=true
+# Members only: only verified accounts reach the rooms (no guests). Friends sign up, then the owner
+# vouches for each: scripts/play-online.sh verify <email>, or the "verified" box in /admin/.
+GUESTS_ALLOWED=false
 POSTGRES_DB=poker
 POSTGRES_USER=poker
 POSTGRES_PASSWORD=$password

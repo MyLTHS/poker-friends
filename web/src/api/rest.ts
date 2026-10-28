@@ -759,6 +759,12 @@ export interface components {
         AuthConfig: {
             /** @description `false` khi server chưa có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: ẩn nút Google. */
             google_enabled: boolean;
+            /**
+             * @description `false` (chơi từ máy nhà, production): chỉ thành viên đã xác minh email mới vào được.
+             *     Ẩn nút khách; mọi API ngoài `/api/auth/` trả 401 `login_required` cho người chưa phải
+             *     thành viên (kể cả phiên khách cũ); WebSocket đóng với mã 4401.
+             */
+            guests_allowed: boolean;
         };
         Me: {
             /** @description Không đổi khi khách nâng cấp. */
@@ -914,7 +920,7 @@ export interface components {
              * @description Mã ổn định, client được phép `switch` theo mã.
              * @enum {string}
              */
-            code: "validation_error" | "not_authenticated" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked" | "hand_not_found" | "hand_voided" | "room_suspended";
+            code: "validation_error" | "not_authenticated" | "login_required" | "guests_disabled" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked" | "hand_not_found" | "hand_voided" | "room_suspended";
             /** @description Để đọc log, không hiện cho người chơi. */
             message: string;
             /** @description Chỉ có khi `validation_error`, lỗi theo từng trường của body. */
@@ -1117,7 +1123,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Chưa đăng nhập (`not_authenticated`) */
+        /** @description Chưa đăng nhập (`not_authenticated`), hoặc server chỉ cho thành viên mà người gửi chưa phải thành viên đã xác minh (`login_required`) */
         Unauthenticated: {
             headers: {
                 [name: string]: unknown;
@@ -1126,7 +1132,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`) */
+        /** @description Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`), server tắt chế độ khách (`guests_disabled`) */
         Forbidden: {
             headers: {
                 [name: string]: unknown;

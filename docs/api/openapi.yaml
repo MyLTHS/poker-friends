@@ -1113,7 +1113,13 @@ components:
         google_enabled:
           type: boolean
           description: "`false` khi server chưa có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: ẩn nút Google."
-      required: [google_enabled]
+        guests_allowed:
+          type: boolean
+          description: |
+            `false` (chơi từ máy nhà, production): chỉ thành viên đã xác minh email mới vào được.
+            Ẩn nút khách; mọi API ngoài `/api/auth/` trả 401 `login_required` cho người chưa phải
+            thành viên (kể cả phiên khách cũ); WebSocket đóng với mã 4401.
+      required: [google_enabled, guests_allowed]
       additionalProperties: false
     Me:
       type: object
@@ -1432,6 +1438,8 @@ components:
           enum:
             - validation_error
             - not_authenticated
+            - login_required
+            - guests_disabled
             - forbidden
             - room_not_found
             - room_closed
@@ -1475,13 +1483,13 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
     Unauthenticated:
-      description: Chưa đăng nhập (`not_authenticated`)
+      description: Chưa đăng nhập (`not_authenticated`), hoặc server chỉ cho thành viên mà người gửi chưa phải thành viên đã xác minh (`login_required`)
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ApiError"
     Forbidden:
-      description: Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`)
+      description: Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`), server tắt chế độ khách (`guests_disabled`)
       content:
         application/json:
           schema:

@@ -38,6 +38,7 @@ ERROR_STATUS = {
     "not_authenticated": 401,
     "forbidden": 403,
     "email_not_verified": 403,
+    "guests_disabled": 403,
     "email_taken": 409,
     "username_taken": 409,
     "not_guest": 409,
@@ -134,7 +135,7 @@ class ConfigView(AccountView):
 
     def get(self, request):
         google = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
-        return Response({"google_enabled": google})
+        return Response({"google_enabled": google, "guests_allowed": settings.GUESTS_ALLOWED})
 
 
 class MeView(AccountView):
@@ -199,6 +200,8 @@ class ResetPasswordView(AccountView):
 
 class GuestView(AccountView):
     def post(self, request):
+        if not settings.GUESTS_ALLOWED:
+            return error_response("guests_disabled", "Only members can play here: sign up.")
         username = self.valid(GuestSerializer).get("username")
         user, created = services.create_guest(request, username, client_ip(request))
         return me(user, status.HTTP_201_CREATED if created else status.HTTP_200_OK)
