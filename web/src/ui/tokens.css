@@ -93,7 +93,8 @@
   --brass-hairline: linear-gradient(90deg, transparent, rgba(240, 214, 150, 0.75), transparent);
   --leather: var(--tx-grain), linear-gradient(180deg, #2b2017 0%, #1d1510 55%, #150f0b 100%);
 
-  /* motion: the values behind src/ui/motion.ts (docs/c2-chuyen-dong.md); keep the two in step */
+  /* motion: the values behind src/ui/motion.ts (docs/c2-chuyen-dong.md); keep the two in step.
+     Easings carry "d1" so they do not replace Tailwind's --ease-in / --ease-out. */
   --dur-press: 90ms;
   --dur-fast: 140ms;
   --dur-base: 220ms;
@@ -102,10 +103,13 @@
   --dur-chip: 380ms;
   --dur-collect: 560ms;
   --dur-flip: 420ms;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.4, 0, 1, 1);
-  --ease-settle: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-confetti: 900ms;
+  --dur-turn-pulse: 1600ms;
+  --dur-seven-deuce: 2600ms;
+  --ease-d1-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-d1-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-d1-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-d1-settle: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   /* layers */
   --z-nav: 20;

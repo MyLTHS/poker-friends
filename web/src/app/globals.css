@@ -1,11 +1,13 @@
 @import "tailwindcss";
 @import "../ui/tokens.css";
 @import "../ui/d1.css";
-/* Direction A styles of the screens not yet redone in D1 (C3/C4 remove this). */
+/* Direction A styles of the screens not yet redone in D1 (C3/C4 remove this). Every rule is
+   scoped to .club-theme, so it never reaches a D1 class (.seat, .btn …) under .d1. */
 @import "../club/club.css";
 
 /* D1 tokens as Tailwind utilities: bg-panel-a, text-ivory-2, border-line, font-display,
-   rounded-d1-lg, shadow-d1-2 ... ("inline" so they resolve to the live token, phone sizes too). */
+   rounded-d1-lg, shadow-d1-2 ... ("inline" so they resolve to the live token, phone sizes too).
+   Easings stay CSS-only (var(--ease-d1-out)): Tailwind's own ease-in/ease-out keep their values. */
 @theme inline {
   --color-bg: var(--bg);
   --color-ink: var(--ink);
@@ -47,9 +49,6 @@
   --shadow-d1-1: var(--sh-1);
   --shadow-d1-2: var(--sh-2);
   --shadow-d1-3: var(--sh-3);
-  --ease-d1-standard: var(--ease-standard);
-  --ease-d1-out: var(--ease-out);
-  --ease-d1-in: var(--ease-in);
 }
 
 /* phone:… = landscape phone (844×390 design frame); same query as tokens.css */

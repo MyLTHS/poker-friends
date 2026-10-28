@@ -1,6 +1,9 @@
 /* Direction A "Câu lạc bộ nỉ" table styles, copied from design/mockups/src/styles.css
    (only the rules for the table, seats, cards, chips, action bar and the 7-2 moment).
    Keep in step with the mockup by hand: web/ never imports from design/. */
+/* Every selector below is scoped with :where(.club-theme): these rules reach only the screens
+   not yet redone in D1 (all wrapped in .club-theme) and never D1 classes such as .seat or .btn;
+   :where() adds no specificity, so the cascade inside those screens is what it was. */
 
 .club-theme {
   --ink: #fff7e7;
@@ -43,7 +46,7 @@
   cursor: not-allowed;
 }
 
-.club-theme .btn {
+:where(.club-theme) .btn {
   border: 1px solid transparent;
   padding: 11px 16px;
   border-radius: calc(var(--radius) * 0.65);
@@ -55,33 +58,33 @@
   gap: 7px;
   transition: 0.2s;
 }
-.club-theme .btn:hover {
+:where(.club-theme) .btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.06);
 }
-.club-theme .btn svg {
+:where(.club-theme) .btn svg {
   width: 16px;
 }
-.club-theme .btn-primary {
+:where(.club-theme) .btn-primary {
   background: var(--accent);
   color: var(--canvas);
   box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.club-theme .btn-secondary {
+:where(.club-theme) .btn-secondary {
   background: var(--panel-2);
   color: var(--ink);
   border-color: var(--line);
 }
-.club-theme .btn-ghost {
+:where(.club-theme) .btn-ghost {
   background: transparent;
   color: var(--ink);
 }
-.club-theme .btn-danger {
+:where(.club-theme) .btn-danger {
   background: color-mix(in srgb, var(--danger) 16%, var(--panel));
   color: #ff8c91;
   border-color: color-mix(in srgb, var(--danger) 30%, transparent);
 }
-.pill {
+:where(.club-theme) .pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -94,23 +97,23 @@
   color: var(--muted);
   white-space: nowrap;
 }
-.pill-green {
+:where(.club-theme) .pill-green {
   color: #6fdfa4;
   background: #113d2d;
 }
-.pill-gold {
+:where(.club-theme) .pill-gold {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 13%, var(--panel));
 }
-.pill-red {
+:where(.club-theme) .pill-red {
   color: #ff8787;
   background: #461f25;
 }
-.pill-blue {
+:where(.club-theme) .pill-blue {
   color: var(--accent-2);
   background: color-mix(in srgb, var(--accent-2) 13%, var(--panel));
 }
-.avatar {
+:where(.club-theme) .avatar {
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -121,22 +124,22 @@
   position: relative;
   flex: none;
 }
-.avatar-sm {
+:where(.club-theme) .avatar-sm {
   width: 27px;
   height: 27px;
   font-size: 8px;
 }
-.avatar-md {
+:where(.club-theme) .avatar-md {
   width: 36px;
   height: 36px;
   font-size: 10px;
 }
-.avatar-lg {
+:where(.club-theme) .avatar-lg {
   width: 54px;
   height: 54px;
   font-size: 14px;
 }
-.avatar i {
+:where(.club-theme) .avatar i {
   position: absolute;
   width: 7px;
   height: 7px;
@@ -146,7 +149,7 @@
   right: -1px;
   bottom: 1px;
 }
-.icon-btn {
+:where(.club-theme) .icon-btn {
   width: 36px;
   height: 36px;
   border-radius: 11px;
@@ -156,10 +159,10 @@
   display: grid;
   place-items: center;
 }
-.icon-btn svg {
+:where(.club-theme) .icon-btn svg {
   width: 17px;
 }
-.game-shell {
+:where(.club-theme) .game-shell {
   height: calc(100vh - 58px);
   min-height: 680px;
   background: radial-gradient(
@@ -169,7 +172,7 @@
   );
   overflow: hidden;
 }
-.game-head {
+:where(.club-theme) .game-head {
   height: 62px;
   border-bottom: 1px solid var(--line);
   display: flex;
@@ -178,24 +181,24 @@
   padding: 0 20px;
   background: #0002;
 }
-.game-head > div {
+:where(.club-theme) .game-head > div {
   display: flex;
   align-items: center;
   gap: 12px;
 }
-.game-head > div > div {
+:where(.club-theme) .game-head > div > div {
   display: flex;
   flex-direction: column;
 }
-.game-head b {
+:where(.club-theme) .game-head b {
   font: 600 14px var(--font-display);
 }
-.game-head span {
+:where(.club-theme) .game-head span {
   font-size: 9px;
   color: var(--muted);
   margin-top: 4px;
 }
-.live-dot {
+:where(.club-theme) .live-dot {
   display: inline-block;
   width: 6px;
   height: 6px;
@@ -203,21 +206,21 @@
   border-radius: 50%;
   margin-right: 3px;
 }
-.game-tools {
+:where(.club-theme) .game-tools {
   display: flex;
   align-items: center;
 }
-.game-grid {
+:where(.club-theme) .game-grid {
   display: grid;
   grid-template-columns: minmax(650px, 1fr) 260px;
   height: calc(100% - 62px);
 }
-.game-main {
+:where(.club-theme) .game-main {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.table-stage {
+:where(.club-theme) .table-stage {
   position: relative;
   flex: 1;
   min-height: 490px;
@@ -225,7 +228,7 @@
   width: 100%;
   margin: auto;
 }
-.poker-table {
+:where(.club-theme) .poker-table {
   position: absolute;
   width: 68%;
   height: 54%;
@@ -243,13 +246,13 @@
     0 18px 55px #0009,
     inset 0 0 50px #0005;
 }
-.table-rail {
+:where(.club-theme) .table-rail {
   position: absolute;
   inset: 14px;
   border: 1px solid #fff2;
   border-radius: inherit;
 }
-.pot-label {
+:where(.club-theme) .pot-label {
   position: absolute;
   top: 23%;
   left: 50%;
@@ -258,17 +261,17 @@
   display: flex;
   flex-direction: column;
 }
-.pot-label span {
+:where(.club-theme) .pot-label span {
   font-size: 7px;
   letter-spacing: 0.12em;
   color: #d3ddda;
 }
-.pot-label strong {
+:where(.club-theme) .pot-label strong {
   color: white;
   font-size: 16px;
   margin-top: 3px;
 }
-.community-cards {
+:where(.club-theme) .community-cards {
   position: absolute;
   top: 44%;
   left: 50%;
@@ -276,7 +279,7 @@
   display: flex;
   gap: 5px;
 }
-.playing-card {
+:where(.club-theme) .playing-card {
   width: 31px;
   height: 43px;
   background: #f7f2e8;
@@ -290,23 +293,23 @@
   font: 700 12px/1 Georgia;
   flex: none;
 }
-.playing-card span {
+:where(.club-theme) .playing-card span {
   font-size: 13px;
   margin-top: auto;
 }
-.playing-card.red {
+:where(.club-theme) .playing-card.red {
   color: #c84646;
 }
-.playing-card.card-large {
+:where(.club-theme) .playing-card.card-large {
   width: 43px;
   height: 60px;
   font-size: 15px;
   padding: 5px;
 }
-.playing-card.card-large span {
+:where(.club-theme) .playing-card.card-large span {
   font-size: 17px;
 }
-.playing-card.card-back {
+:where(.club-theme) .playing-card.card-back {
   background: repeating-linear-gradient(
     45deg,
     #1e3757,
@@ -318,13 +321,13 @@
   justify-content: center;
   align-items: center;
 }
-.card-slot {
+:where(.club-theme) .card-slot {
   width: 43px;
   height: 60px;
   border: 1px dashed #fff4;
   border-radius: 5px;
 }
-.last-action {
+:where(.club-theme) .last-action {
   position: absolute;
   bottom: 17%;
   left: 50%;
@@ -335,7 +338,7 @@
   padding: 5px 8px;
   border-radius: 99px;
 }
-.seat {
+:where(.club-theme) .seat {
   position: absolute;
   width: 108px;
   min-height: 56px;
@@ -346,32 +349,32 @@
   box-shadow: 0 8px 16px #0005;
   z-index: 3;
 }
-.seat-avatar {
+:where(.club-theme) .seat-avatar {
   position: absolute;
   left: -11px;
   top: 8px;
 }
-.seat-info {
+:where(.club-theme) .seat-info {
   display: flex;
   flex-direction: column;
 }
-.seat-info strong {
+:where(.club-theme) .seat-info strong {
   font-size: 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.seat-info span {
+:where(.club-theme) .seat-info span {
   font-size: 9px;
   color: var(--accent);
   font-weight: 800;
   margin-top: 3px;
 }
-.seat .avatar {
+:where(.club-theme) .seat .avatar {
   width: 38px;
   height: 38px;
 }
-.dealer {
+:where(.club-theme) .dealer {
   position: absolute;
   right: -4px;
   bottom: -3px;
@@ -385,18 +388,18 @@
   display: grid;
   place-items: center;
 }
-.seat-cards {
+:where(.club-theme) .seat-cards {
   position: absolute;
   display: flex;
   right: -12px;
   top: -15px;
   transform: rotate(5deg);
 }
-.seat-cards > * + * {
+:where(.club-theme) .seat-cards > * + * {
   margin-left: -13px;
   transform: rotate(8deg);
 }
-.state-badge {
+:where(.club-theme) .state-badge {
   font-size: 7px;
   background: #403d32;
   color: #d7c991;
@@ -409,17 +412,17 @@
   align-items: center;
   gap: 3px;
 }
-.state-badge.offline {
+:where(.club-theme) .state-badge.offline {
   background: #48252a;
   color: #ff9898;
 }
-.seat-turn {
+:where(.club-theme) .seat-turn {
   border-color: var(--accent);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent),
     0 8px 18px #0006;
 }
-.seat-turn:after {
+:where(.club-theme) .seat-turn:after {
   content: "TỚI LƯỢT";
   position: absolute;
   bottom: -16px;
@@ -428,13 +431,13 @@
   font-size: 6px;
   letter-spacing: 0.12em;
 }
-.seat-empty {
+:where(.club-theme) .seat-empty {
   border-style: dashed;
   background: #0002;
   color: var(--muted);
   padding-left: 37px;
 }
-.seat-empty .seat-avatar {
+:where(.club-theme) .seat-empty .seat-avatar {
   width: 34px;
   height: 34px;
   border: 1px dashed var(--muted);
@@ -442,10 +445,10 @@
   display: grid;
   place-items: center;
 }
-.seat-empty svg {
+:where(.club-theme) .seat-empty svg {
   width: 14px;
 }
-.timer {
+:where(.club-theme) .timer {
   width: 46px;
   height: 46px;
   border-radius: 50%;
@@ -454,26 +457,26 @@
   background: conic-gradient(var(--accent) var(--progress), #ffffff18 0);
   position: relative;
 }
-.timer:before {
+:where(.club-theme) .timer:before {
   content: "";
   position: absolute;
   inset: 4px;
   border-radius: 50%;
   background: var(--panel);
 }
-.timer span {
+:where(.club-theme) .timer span {
   position: relative;
   font-weight: 850;
   font-size: 13px;
 }
-.timer-small {
+:where(.club-theme) .timer-small {
   width: 46px;
   height: 46px;
 }
-.timer-small span {
+:where(.club-theme) .timer-small span {
   font-size: 10px;
 }
-.actionbar {
+:where(.club-theme) .actionbar {
   margin: 0 18px 14px;
   border: 1px solid var(--line);
   border-radius: 15px;
@@ -486,17 +489,17 @@
   position: relative;
   box-shadow: 0 12px 30px #0004;
 }
-.quick-bets {
+:where(.club-theme) .quick-bets {
   display: flex;
   align-items: center;
   gap: 4px;
 }
-.quick-bets span {
+:where(.club-theme) .quick-bets span {
   font-size: 7px;
   color: var(--muted);
   margin-right: 2px;
 }
-.quick-bets button {
+:where(.club-theme) .quick-bets button {
   font-size: 7px;
   color: var(--muted);
   background: var(--canvas);
@@ -504,34 +507,34 @@
   border-radius: 5px;
   padding: 5px;
 }
-.range-row {
+:where(.club-theme) .range-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.range-row input {
+:where(.club-theme) .range-row input {
   margin: 0;
   padding: 0;
   accent-color: var(--accent);
   height: 4px;
 }
-.raise-value {
+:where(.club-theme) .raise-value {
   font-size: 9px;
   font-weight: 800;
   display: flex;
   align-items: center;
   white-space: nowrap;
 }
-.action-buttons {
+:where(.club-theme) .action-buttons {
   display: grid;
   grid-template-columns: 0.8fr 1fr 1.2fr;
   gap: 5px;
 }
-.action-buttons .btn {
+:where(.club-theme) .action-buttons .btn {
   padding: 10px 5px;
   font-size: 9px;
 }
-.club-theme .toast {
+:where(.club-theme) .toast {
   position: absolute;
   right: 10px;
   top: -38px;
@@ -545,21 +548,21 @@
   gap: 8px;
   box-shadow: 0 8px 25px #0006;
 }
-.chip-stack {
+:where(.club-theme) .chip-stack {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: var(--accent);
   font-size: 10px;
 }
-.chip-stack i {
+:where(.club-theme) .chip-stack i {
   width: 13px;
   height: 13px;
   border: 3px dotted var(--accent);
   border-radius: 50%;
   background: #684216;
 }
-.celebration {
+:where(.club-theme) .celebration {
   position: absolute;
   inset: 5% 18%;
   z-index: 20;
@@ -578,7 +581,7 @@
   box-shadow: 0 25px 90px #000b;
   overflow: hidden;
 }
-.celebration:before {
+:where(.club-theme) .celebration:before {
   content: "";
   position: absolute;
   inset: 0;
@@ -589,33 +592,33 @@
   );
   pointer-events: none;
 }
-.win-avatar {
+:where(.club-theme) .win-avatar {
   border: 3px solid var(--accent);
   border-radius: 50%;
   padding: 3px;
   margin-bottom: 8px;
   box-shadow: 0 0 35px color-mix(in srgb, var(--accent) 40%, transparent);
 }
-.celebration h2 {
+:where(.club-theme) .celebration h2 {
   font: 500 24px var(--font-display);
   margin: 9px 0;
 }
-.celebration > p {
+:where(.club-theme) .celebration > p {
   font-size: 9px;
   color: var(--muted);
 }
-.reveal-cards {
+:where(.club-theme) .reveal-cards {
   display: flex;
   gap: 8px;
   margin: 5px;
 }
-.reveal-cards > *:first-child {
+:where(.club-theme) .reveal-cards > *:first-child {
   transform: rotate(-6deg);
 }
-.reveal-cards > *:last-child {
+:where(.club-theme) .reveal-cards > *:last-child {
   transform: rotate(6deg);
 }
-.bonus-line {
+:where(.club-theme) .bonus-line {
   width: 70%;
   display: flex;
   justify-content: space-between;
@@ -625,65 +628,65 @@
   margin: 7px 0 12px;
   font-size: 10px;
 }
-.bonus-line span {
+:where(.club-theme) .bonus-line span {
   color: var(--muted);
 }
-.bonus-line strong {
+:where(.club-theme) .bonus-line strong {
   color: var(--accent);
   font-size: 14px;
 }
-.spark {
+:where(.club-theme) .spark {
   position: absolute;
   color: var(--accent);
   font-size: 25px;
   animation: float 2s ease-in-out infinite;
 }
-.s1 {
+:where(.club-theme) .s1 {
   left: 14%;
   top: 18%;
 }
-.s2 {
+:where(.club-theme) .s2 {
   right: 12%;
   top: 34%;
   animation-delay: 0.5s;
 }
-.s3 {
+:where(.club-theme) .s3 {
   left: 20%;
   bottom: 15%;
   animation-delay: 1s;
 }
 @media (max-width: 1050px) {
-  .game-grid {
+  :where(.club-theme) .game-grid {
     grid-template-columns: minmax(620px, 1fr) 230px;
   }
 }
 @media (max-width: 800px) {
-  .game-shell {
+  :where(.club-theme) .game-shell {
     overflow: auto;
   }
-  .game-grid {
+  :where(.club-theme) .game-grid {
     grid-template-columns: 1fr;
     min-width: 680px;
   }
 }
-.chip-amount {
+:where(.club-theme) .chip-amount {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.chip-amount > b {
+:where(.club-theme) .chip-amount > b {
   font: inherit;
   font-weight: 800;
 }
-.chip-stack > .poker-chip-icon i {
+:where(.club-theme) .chip-stack > .poker-chip-icon i {
   width: auto;
   height: auto;
   border: 0;
   background: transparent;
 }
-.poker-chip-icon {
+:where(.club-theme) .poker-chip-icon {
   width: 15px;
   height: 15px;
   flex: 0 0 15px;
@@ -694,10 +697,10 @@
   background: color-mix(in srgb, var(--accent) 18%, var(--panel));
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--canvas) 70%, transparent);
 }
-.poker-chip-icon:before,
-.poker-chip-icon:after,
-.poker-chip-icon i:before,
-.poker-chip-icon i:after {
+:where(.club-theme) .poker-chip-icon:before,
+:where(.club-theme) .poker-chip-icon:after,
+:where(.club-theme) .poker-chip-icon i:before,
+:where(.club-theme) .poker-chip-icon i:after {
   content: "";
   position: absolute;
   width: 2px;
@@ -705,48 +708,48 @@
   border-radius: 2px;
   background: currentColor;
 }
-.poker-chip-icon {
+:where(.club-theme) .poker-chip-icon {
   position: relative;
 }
-.poker-chip-icon:before {
+:where(.club-theme) .poker-chip-icon:before {
   top: -1px;
   left: 5px;
 }
-.poker-chip-icon:after {
+:where(.club-theme) .poker-chip-icon:after {
   bottom: -1px;
   left: 5px;
 }
-.poker-chip-icon i:before {
+:where(.club-theme) .poker-chip-icon i:before {
   left: -1px;
   top: 4px;
   transform: rotate(90deg);
 }
-.poker-chip-icon i:after {
+:where(.club-theme) .poker-chip-icon i:after {
   right: -1px;
   top: 4px;
   transform: rotate(90deg);
 }
-.seat-info .chip-amount {
+:where(.club-theme) .seat-info .chip-amount {
   color: var(--accent);
   font-size: 9px;
   margin-top: 3px;
 }
-.pot-label .chip-amount {
+:where(.club-theme) .pot-label .chip-amount {
   color: #fff;
   font-size: 16px;
   margin-top: 3px;
 }
-.celebration:before {
+:where(.club-theme) .celebration:before {
   display: none;
 }
-.celebration-rays {
+:where(.club-theme) .celebration-rays {
   position: absolute;
   inset: 0;
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
 }
-.celebration-rays:before {
+:where(.club-theme) .celebration-rays:before {
   content: "";
   position: absolute;
   inset: -40%;
@@ -757,7 +760,7 @@
   );
   animation: rays-spin 18s linear infinite;
 }
-.celebration-content {
+:where(.club-theme) .celebration-content {
   position: relative;
   z-index: 2;
   width: min(420px, 94%);
@@ -771,50 +774,50 @@
   color: #fff7e7;
   box-shadow: 0 18px 55px #000b;
 }
-.celebration-content > p {
+:where(.club-theme) .celebration-content > p {
   color: #d8d0c2;
   font-size: 11px;
 }
-.celebration-content .bonus-line {
+:where(.club-theme) .celebration-content .bonus-line {
   color: #fff7e7;
 }
-.celebration-content .bonus-line span {
+:where(.club-theme) .celebration-content .bonus-line span {
   color: #d8d0c2;
 }
-.celebration-content .btn {
+:where(.club-theme) .celebration-content .btn {
   background: #e9b85f;
   color: #081511;
 }
 @media (prefers-reduced-motion: reduce) {
-  .celebration-rays:before,
-  .spark {
+  :where(.club-theme) .celebration-rays:before,
+  :where(.club-theme) .spark {
     animation: none !important;
   }
 }
-.game-shell {
+:where(.club-theme) .game-shell {
   min-height: 0;
   background: radial-gradient(ellipse at 50% 34%, #17392e 0, #07110e 58%, #040807 100%);
 }
-.game-head {
+:where(.club-theme) .game-head {
   height: 54px;
   padding-inline: 18px;
   background: rgba(4, 10, 8, .84);
 }
-.game-grid {
+:where(.club-theme) .game-grid {
   position: relative;
   display: block;
   height: calc(100% - 54px);
 }
-.game-main {
+:where(.club-theme) .game-main {
   height: 100%;
   padding: 6px 16px 10px;
 }
-.table-stage {
+:where(.club-theme) .table-stage {
   max-width: none;
   min-height: 0;
   margin: 0 auto;
 }
-.poker-table {
+:where(.club-theme) .poker-table {
   width: 74%;
   height: 64%;
   left: 13%;
@@ -825,7 +828,7 @@
     radial-gradient(ellipse, #176447 0, #0d4e38 62%, #083526 100%);
   box-shadow: 0 0 0 3px #a57a43, 0 0 0 8px #15100c, 0 30px 65px #000c, inset 0 0 80px #001b12cc, inset 0 2px 0 #ffffff2b;
 }
-.poker-table:before {
+:where(.club-theme) .poker-table:before {
   content: "POKER FRIENDS";
   position: absolute;
   inset: 20px;
@@ -837,17 +840,17 @@
   font: 700 clamp(18px, 2.5vw, 34px)/1 var(--font-display);
   letter-spacing: .28em;
 }
-.table-rail {
+:where(.club-theme) .table-rail {
   inset: 8px;
   border-color: #f4d69342;
   box-shadow: inset 0 0 0 2px #0006;
 }
-.pot-label {
+:where(.club-theme) .pot-label {
   top: 20%;
   gap: 3px;
   z-index: 2;
 }
-.pot-label:before {
+:where(.club-theme) .pot-label:before {
   content: "";
   width: 38px;
   height: 17px;
@@ -855,15 +858,15 @@
   background: radial-gradient(circle at 50% 25%, #f1ce70 0 3px, #b82531 4px 7px, #f0d06d 8px 9px, transparent 10px), radial-gradient(ellipse, #c62e3a 0 45%, #711823 48% 60%, transparent 62%);
   filter: drop-shadow(0 4px 3px #0008);
 }
-.pot-label .chip-amount {
+:where(.club-theme) .pot-label .chip-amount {
   font-size: 18px;
   text-shadow: 0 2px 4px #000;
 }
-.community-cards {
+:where(.club-theme) .community-cards {
   top: 49%;
   gap: 8px;
 }
-.playing-card {
+:where(.club-theme) .playing-card {
   position: relative;
   width: 42px;
   height: 58px;
@@ -873,7 +876,7 @@
   box-shadow: 0 5px 12px #001d1480, inset 0 0 0 1px #c9c4b7;
   font-size: 15px;
 }
-.playing-card:after {
+:where(.club-theme) .playing-card:after {
   content: attr(aria-label);
   position: absolute;
   inset: auto 5px 5px auto;
@@ -881,32 +884,32 @@
   opacity: .28;
   transform: rotate(180deg);
 }
-.playing-card.card-large {
+:where(.club-theme) .playing-card.card-large {
   width: 58px;
   height: 80px;
   padding: 7px;
   font-size: 20px;
 }
-.playing-card.card-large span {
+:where(.club-theme) .playing-card.card-large span {
   font-size: 24px;
 }
-.playing-card.card-back {
+:where(.club-theme) .playing-card.card-back {
   background: repeating-conic-gradient(#26486b 0 8deg, #193650 8deg 16deg);
   border: 4px solid #f3eee2;
   box-shadow: inset 0 0 0 2px #557899, 0 4px 10px #0007;
 }
-.card-slot {
+:where(.club-theme) .card-slot {
   width: 58px;
   height: 80px;
   border-radius: 7px;
 }
-.last-action {
+:where(.club-theme) .last-action {
   bottom: 14%;
   padding: 7px 12px;
   background: #031c14a6;
   font-size: 10px;
 }
-.seat {
+:where(.club-theme) .seat {
   width: 112px;
   min-height: 76px;
   padding: 0;
@@ -918,19 +921,19 @@
   align-items: center;
   text-align: center;
 }
-.seat-avatar {
+:where(.club-theme) .seat-avatar {
   position: relative;
   left: auto;
   top: auto;
   z-index: 3;
 }
-.seat .avatar {
+:where(.club-theme) .seat .avatar {
   width: 52px;
   height: 52px;
   border: 3px solid #d3c6ac;
   box-shadow: 0 7px 16px #000a;
 }
-.seat-info {
+:where(.club-theme) .seat-info {
   margin-top: 4px;
   align-items: center;
   gap: 2px;
@@ -939,20 +942,20 @@
   background: #06110ddb;
   box-shadow: 0 4px 12px #0007;
 }
-.seat-info strong {
+:where(.club-theme) .seat-info strong {
   font-size: 12px;
   line-height: 1;
 }
-.seat-info .chip-amount {
+:where(.club-theme) .seat-info .chip-amount {
   margin: 0;
   font-size: 11px;
   color: #f0ca78;
 }
-.seat-turn .avatar {
+:where(.club-theme) .seat-turn .avatar {
   border-color: #f1c86c;
   box-shadow: 0 0 0 5px #12231d, 0 0 0 8px #f1c86c, 0 0 28px #f1c86c8c;
 }
-.seat-countdown {
+:where(.club-theme) .seat-countdown {
   position: absolute;
   top: 16px;
   left: 46px;
@@ -967,12 +970,12 @@
   font-size: 9px;
   font-weight: 900;
 }
-.seat-turn:after {
+:where(.club-theme) .seat-turn:after {
   bottom: -12px;
   left: auto;
   font-size: 8px;
 }
-.seat-empty .seat-avatar {
+:where(.club-theme) .seat-empty .seat-avatar {
   position: relative;
   width: 50px;
   height: 50px;
@@ -981,23 +984,23 @@
   border-color: #c9b9908c;
   background: #06150f99;
 }
-.seat-empty .seat-info {
+:where(.club-theme) .seat-empty .seat-info {
   background: transparent;
 }
-.state-badge {
+:where(.club-theme) .state-badge {
   left: 50%;
   bottom: -7px;
   transform: translateX(-50%);
   white-space: nowrap;
   z-index: 7;
 }
-.seat-cards {
+:where(.club-theme) .seat-cards {
   right: 22px;
   top: -24px;
   z-index: 5;
 }
-.dealer,
-.blind-marker {
+:where(.club-theme) .dealer,
+:where(.club-theme) .blind-marker {
   width: 19px;
   height: 19px;
   right: -5px;
@@ -1006,7 +1009,7 @@
   border: 2px solid #0b1511;
   box-shadow: 0 2px 5px #0007;
 }
-.blind-marker {
+:where(.club-theme) .blind-marker {
   position: absolute;
   right: 11px;
   top: 29px;
@@ -1019,10 +1022,10 @@
   font-weight: 900;
   z-index: 8;
 }
-.blind-marker.big {
+:where(.club-theme) .blind-marker.big {
   background: #dbe7df;
 }
-.actionbar {
+:where(.club-theme) .actionbar {
   width: min(910px, calc(100% - 160px));
   min-height: 76px;
   margin: 0 auto;
@@ -1031,58 +1034,58 @@
   background: #091511ed;
   box-shadow: 0 16px 40px #0008;
 }
-.quick-bets {
+:where(.club-theme) .quick-bets {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 5px;
 }
-.quick-bets > span {
+:where(.club-theme) .quick-bets > span {
   grid-column: 1/-1;
 }
-.quick-bets button {
+:where(.club-theme) .quick-bets button {
   min-height: 28px;
   color: #ded6c6;
 }
-.action-buttons .btn {
+:where(.club-theme) .action-buttons .btn {
   min-height: 49px;
   font-size: 11px;
 }
 @media (max-height: 780px) and (min-width: 900px) {
-  .game-shell {
+  :where(.club-theme) .game-shell {
     min-height: 662px;
   }
-  .poker-table {
+  :where(.club-theme) .poker-table {
     height: 61%;
     top: 16%;
   }
-  .table-stage {
+  :where(.club-theme) .table-stage {
     min-height: 500px;
   }
 }
-.seat {
+:where(.club-theme) .seat {
   transform: translate(-50%, -50%);
 }
-.seat-hero::before,
-.seat-hero::after {
+:where(.club-theme) .seat-hero::before,
+:where(.club-theme) .seat-hero::after {
   display: none !important;
 }
-.seat-hero .seat-cards {
+:where(.club-theme) .seat-hero .seat-cards {
   top: 3px;
   left: 82px;
   right: auto;
   gap: 3px;
   transform: none;
 }
-.seat-hero .seat-cards > * + * {
+:where(.club-theme) .seat-hero .seat-cards > * + * {
   margin-left: 0;
   transform: rotate(4deg);
 }
-.seat-hero .seat-cards .playing-card {
+:where(.club-theme) .seat-hero .seat-cards .playing-card {
   width: 36px;
   height: 50px;
   font-size: 13px;
 }
-.table-wager {
+:where(.club-theme) .table-wager {
   position: absolute;
   z-index: 5;
   transform: translate(-50%, -50%);
@@ -1091,7 +1094,7 @@
   text-align: center;
   pointer-events: none;
 }
-.table-wager::before {
+:where(.club-theme) .table-wager::before {
   content: "";
   display: block;
   width: 23px;
@@ -1101,21 +1104,21 @@
   background: repeating-linear-gradient(to bottom, #e5c55f 0 2px, #9f2030 2px 4px);
   box-shadow: 0 3px 5px #0007;
 }
-.table-wager .poker-chip-icon {
+:where(.club-theme) .table-wager .poker-chip-icon {
   display: none;
 }
-.action-buttons .btn {
+:where(.club-theme) .action-buttons .btn {
   white-space: nowrap;
 }
-.quick-bets button {
+:where(.club-theme) .quick-bets button {
   white-space: nowrap;
 }
-.game-main .table-wager {
+:where(.club-theme) .game-main .table-wager {
   font-size: 13px;
   font-weight: 800;
   text-shadow: 0 1px 3px #000c;
 }
-.game-main .table-wager::before {
+:where(.club-theme) .game-main .table-wager::before {
   width: 30px;
   height: 15px;
   margin-bottom: 1px;
@@ -1123,56 +1126,56 @@
     radial-gradient(ellipse at 50% 30%, #f3d778 0 30%, transparent 32%),
     repeating-linear-gradient(to bottom, #e5c55f 0 3px, #9f2030 3px 5px);
 }
-.game-main .seat-hero .seat-cards {
+:where(.club-theme) .game-main .seat-hero .seat-cards {
   top: -14px;
   left: 80px;
   gap: 4px;
 }
-.game-main .seat-hero .seat-cards .playing-card {
+:where(.club-theme) .game-main .seat-hero .seat-cards .playing-card {
   width: 50px;
   height: 70px;
   padding: 5px;
   font-size: 18px;
 }
-.game-main .seat-hero .seat-cards .playing-card span {
+:where(.club-theme) .game-main .seat-hero .seat-cards .playing-card span {
   font-size: 20px;
 }
 @media (min-width: 1700px) and (min-height: 1000px) {
-  .game-main .table-wager {
+  :where(.club-theme) .game-main .table-wager {
     font-size: 15px;
   }
-  .game-main .table-wager::before {
+  :where(.club-theme) .game-main .table-wager::before {
     width: 36px;
     height: 17px;
   }
-  .game-main .seat-hero .seat-cards .playing-card {
+  :where(.club-theme) .game-main .seat-hero .seat-cards .playing-card {
     width: 58px;
     height: 80px;
     font-size: 20px;
   }
-  .game-main .seat-hero .seat-cards .playing-card span {
+  :where(.club-theme) .game-main .seat-hero .seat-cards .playing-card span {
     font-size: 23px;
   }
 }
 @media (max-height: 780px) and (min-width: 900px) {
-  .game-main .pot-label {
+  :where(.club-theme) .game-main .pot-label {
     top: 11%;
   }
-  .game-main .community-cards .playing-card.card-large,
-  .game-main .community-cards .card-slot {
+  :where(.club-theme) .game-main .community-cards .playing-card.card-large,
+  :where(.club-theme) .game-main .community-cards .card-slot {
     width: 50px;
     height: 70px;
   }
-  .game-main .community-cards .playing-card.card-large {
+  :where(.club-theme) .game-main .community-cards .playing-card.card-large {
     font-size: 18px;
   }
-  .game-main .community-cards .playing-card.card-large span {
+  :where(.club-theme) .game-main .community-cards .playing-card.card-large span {
     font-size: 21px;
   }
-  .game-main .seat-hero {
+  :where(.club-theme) .game-main .seat-hero {
     transform: translate(-50%, -64%);
   }
-  .game-main .table-wager-hero {
+  :where(.club-theme) .game-main .table-wager-hero {
     margin-top: -12px;
   }
 }
@@ -1191,8 +1194,8 @@
 /* web/ additions on top of the mockup */
 /* Two card backs in front of every player holding hidden cards (the mockup's
    `.seat:not(.seat-empty):not(.seat-7)` rule; the hero seat shows real cards instead). */
-.seat:not(.seat-empty):not(.seat-hero)::before,
-.seat:not(.seat-empty):not(.seat-hero)::after {
+:where(.club-theme) .seat:not(.seat-empty):not(.seat-hero)::before,
+:where(.club-theme) .seat:not(.seat-empty):not(.seat-hero)::after {
   content: "♠";
   position: absolute;
   width: 24px;
@@ -1209,22 +1212,22 @@
   transform: rotate(-12deg);
   box-shadow: 0 3px 8px #0008;
 }
-.seat:not(.seat-empty):not(.seat-hero)::after {
+:where(.club-theme) .seat:not(.seat-empty):not(.seat-hero)::after {
   left: 58px;
   transform: rotate(12deg);
 }
 /* Only seats holding hidden cards show the two card backs. */
-.seat.seat-no-cards::before,
-.seat.seat-no-cards::after {
+:where(.club-theme) .seat.seat-no-cards::before,
+:where(.club-theme) .seat.seat-no-cards::after {
   display: none !important;
 }
 /* Cards shown at showdown for other players. */
-.seat:not(.seat-hero) .seat-cards .playing-card {
+:where(.club-theme) .seat:not(.seat-hero) .seat-cards .playing-card {
   width: 36px;
   height: 50px;
   font-size: 13px;
 }
-.seat:not(.seat-hero) .seat-cards {
+:where(.club-theme) .seat:not(.seat-hero) .seat-cards {
   top: -30px;
   right: auto;
   left: 50%;
@@ -1232,11 +1235,11 @@
   gap: 3px;
   z-index: 6;
 }
-.seat:not(.seat-hero) .seat-cards > * + * {
+:where(.club-theme) .seat:not(.seat-hero) .seat-cards > * + * {
   margin-left: 0;
   transform: none;
 }
-.actionbar-status {
+:where(.club-theme) .actionbar-status {
   grid-column: 1 / -1;
   text-align: center;
   color: var(--muted);
