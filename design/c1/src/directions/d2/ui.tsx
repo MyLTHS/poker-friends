@@ -1,508 +1,598 @@
-// Giấy & Mực — shared primitives. Everything is static: no state, no effects.
-import type { CSSProperties, ReactNode } from "react";
-import { BatteryFull, CircleUserRound, ScrollText, Signal, Spade as SpadeIcon, Wifi } from "lucide-react";
+// Kính & Ánh Kim (d2) — the component kit: frosted glass, champagne metal, porcelain cards,
+// metal-and-ceramic chips. Every class is prefixed `k-` and lives under the `.d2` root.
+import type { ReactNode } from "react";
+import { Check } from "lucide-react";
 
-import { isRed, type Card, type Suit as SuitSym } from "../../shared/data";
+import { isRed, type Card } from "../../shared/data";
 import { FRAME, type Device } from "../../shared/screens";
+import { fmt, initial, jewel, qrMatrix, skylineWindows, tone, vars } from "./lib";
 
-export type Pt = readonly [number, number];
+/* ================================================================ frame */
 
-/** 1460 -> "1.460" (Vietnamese grouping); negatives get a real minus sign. */
-export function fmt(n: number): string {
-  const s = Math.abs(n)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return n < 0 ? `−${s}` : s;
-}
-export const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : fmt(n));
-export const toneOf = (n: number) => (n > 0 ? "pos" : n < 0 ? "neg" : "zero");
-
-/** The artboard: exact frame size, explicit paper background. */
-export function Root({ device, className = "", children }: { device: Device; className?: string; children: ReactNode }) {
-  const { width, height } = FRAME[device];
+/** Gradients shared by every SVG on the artboard (chips, logo, rings). */
+function Defs() {
   return (
-    <div
-      className={`d2 d2-${device} ${className}`}
-      style={{ width, height, overflow: "hidden", position: "relative", backgroundColor: "#F4EFE6" }}
-    >
-      {children}
-    </div>
-  );
-}
-
-/* ---------- suits & cards ---------- */
-
-export function Suit({ s, className = "" }: { s: SuitSym; className?: string }) {
-  return (
-    <svg className={`suit ${className}`} viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-      {s === "♥" && (
-        <path
-          fill="currentColor"
-          d="M12 21.2C9.2 19 2.5 14.3 2.5 8.6 2.5 5.5 4.9 3 7.8 3c1.8 0 3.3.9 4.2 2.4C12.9 3.9 14.4 3 16.2 3c2.9 0 5.3 2.5 5.3 5.6 0 5.7-6.7 10.4-9.5 12.6z"
-        />
-      )}
-      {s === "♦" && <path fill="currentColor" d="M12 1.8 20.2 12 12 22.2 3.8 12z" />}
-      {s === "♠" && (
-        <path
-          fill="currentColor"
-          d="M12 2.2C9.6 5.6 3.2 8.9 3.2 13.7c0 2.6 1.9 4.4 4.3 4.4 1.6 0 2.9-.8 3.6-1.9-.3 2-1.1 3.6-2.6 5.4h6.9c-1.5-1.8-2.3-3.4-2.6-5.4.7 1.1 2 1.9 3.6 1.9 2.4 0 4.3-1.8 4.3-4.4 0-4.8-6.4-8.1-8.8-11.5z"
-        />
-      )}
-      {s === "♣" && (
-        <g fill="currentColor">
-          <circle cx="12" cy="6.9" r="4.4" />
-          <circle cx="6.8" cy="13.4" r="4.4" />
-          <circle cx="17.2" cy="13.4" r="4.4" />
-          <rect x="9" y="9" width="6" height="6" />
-          <path d="M11.2 12h1.6c.2 4 1 6.6 3.3 9.5H7.9c2.3-2.9 3.1-5.5 3.3-9.5z" />
-        </g>
-      )}
+    <svg className="k-defs" width="0" height="0" aria-hidden>
+      <defs>
+        <linearGradient id="k-gold" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#FBF1D6" />
+          <stop offset="0.3" stopColor="#E3C68C" />
+          <stop offset="0.52" stopColor="#A9824B" />
+          <stop offset="0.74" stopColor="#F0DCAA" />
+          <stop offset="1" stopColor="#9E7944" />
+        </linearGradient>
+        <linearGradient id="k-steel" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#F4F8FA" />
+          <stop offset="0.45" stopColor="#9CAEB7" />
+          <stop offset="0.7" stopColor="#E3EBEE" />
+          <stop offset="1" stopColor="#6E808A" />
+        </linearGradient>
+        <linearGradient id="k-cyan" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#9BF6FF" />
+          <stop offset="1" stopColor="#1FB8D6" />
+        </linearGradient>
+        <radialGradient id="k-gloss" cx="0.32" cy="0.25" r="0.75">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.55" />
+          <stop offset="0.45" stopColor="#fff" stopOpacity="0.06" />
+          <stop offset="1" stopColor="#000" stopOpacity="0.18" />
+        </radialGradient>
+      </defs>
     </svg>
   );
 }
 
-export type CardSize = "xs" | "sm" | "md" | "lg" | "xl" | "mh";
-
-export function PCard({
-  c,
-  size = "md",
-  dim,
-  mark,
-  style,
-}: {
-  c: Card;
-  size?: CardSize;
-  dim?: boolean;
-  mark?: boolean;
-  style?: CSSProperties;
-}) {
-  if (c === "back")
-    return (
-      <div className={`pc pc-${size} pc-back`} style={style}>
-        <i />
-      </div>
-    );
-  return (
-    <div className={`pc pc-${size}${isRed(c) ? " red" : ""}${dim ? " dim" : ""}${mark ? " mark" : ""}`} style={style}>
-      <span className="pc-idx">
-        <b>{c.rank}</b>
-        <Suit s={c.suit} />
-      </span>
-      <Suit s={c.suit} className="pc-pip" />
-    </div>
-  );
-}
-
-export function SlotCard({ size = "md", label }: { size?: CardSize; label?: string }) {
-  return <div className={`pc pc-${size} pc-slot`}>{label && <span>{label}</span>}</div>;
-}
-
-/** Inline card text for logs: "A♥". */
-export function CardText({ c }: { c: Card }) {
-  if (c === "back") return <span className="ctext">?</span>;
-  return (
-    <span className={`ctext${isRed(c) ? " red" : ""}`}>
-      {c.rank}
-      <Suit s={c.suit} />
-    </span>
-  );
-}
-
-/* ---------- chips ---------- */
-
-export function Chip({ tone = "red", size = 16 }: { tone?: "red" | "ink" | "sage"; size?: number }) {
-  return <span className={`chip chip-${tone}`} style={{ width: size, height: size }} />;
-}
-
-export function ChipStack() {
-  return (
-    <span className="chipstack">
-      <Chip tone="sage" size={18} />
-      <Chip tone="ink" size={18} />
-      <Chip tone="red" size={18} />
-    </span>
-  );
-}
-
-/** A tag that sits on the table, centred on `at` (stage coordinates). */
-export function OnTable({ at, className = "", children }: { at: Pt; className?: string; children: ReactNode }) {
-  return (
-    <div className={`ontable ${className}`} style={{ left: at[0], top: at[1] }}>
-      {children}
-    </div>
-  );
-}
-
-export function Bet({ at, amount, small }: { at: Pt; amount: number; small?: boolean }) {
-  return (
-    <OnTable at={at} className={`bet${small ? " bet-sm" : ""}`}>
-      <Chip size={small ? 12 : 16} />
-      <span className="mono">{fmt(amount)}</span>
-    </OnTable>
-  );
-}
-
-export function Dealer({ at, size = 24 }: { at: Pt; size?: number }) {
-  return (
-    <OnTable at={at} className="dealer">
-      <span style={{ width: size, height: size, fontSize: size * 0.5 }}>D</span>
-    </OnTable>
-  );
-}
-
-/* ---------- people ---------- */
-
-const TINTS = ["sage", "slate", "ochre", "clay", "plum"] as const;
-export function tintOf(name: string) {
-  if (name === "Lym") return "me";
-  let h = 0;
-  for (const ch of name) h += ch.charCodeAt(0);
-  return TINTS[h % TINTS.length];
-}
-
-export function Avatar({ name, size = 36, className = "" }: { name: string; size?: number; className?: string }) {
-  return (
-    <span
-      className={`av av-${tintOf(name)} ${className}`}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}
-    >
-      {name.normalize("NFD")[0].toUpperCase()}
-    </span>
-  );
-}
-
-export function TimerRing({
-  size,
-  left,
-  total,
-  children,
-}: {
-  size: number;
-  left: number;
-  total: number;
-  children?: ReactNode;
-}) {
-  const r = size / 2 - 2;
-  const c = 2 * Math.PI * r;
-  const mid = size / 2;
-  return (
-    <span className="tring" style={{ width: size, height: size }}>
-      <svg width={size} height={size} aria-hidden="true">
-        <circle cx={mid} cy={mid} r={r} className="tr-bg" />
-        <circle
-          cx={mid}
-          cy={mid}
-          r={r}
-          className="tr-fg"
-          strokeDasharray={`${(c * left) / total} ${c}`}
-          transform={`rotate(-90 ${mid} ${mid})`}
-        />
-      </svg>
-      {children}
-    </span>
-  );
-}
-
-/* ---------- controls ---------- */
-
-export type BadgeKind = "line" | "muted" | "dash" | "warn" | "red" | "ink" | "sage" | "redline" | "paper";
-export function Badge({ kind = "line", icon, children }: { kind?: BadgeKind; icon?: ReactNode; children: ReactNode }) {
-  return (
-    <span className={`badge b-${kind}`}>
-      {icon}
-      {children}
-    </span>
-  );
-}
-
-export function Btn({
-  v = "line",
-  s = "md",
-  icon,
-  iconRight,
-  block,
-  disabled,
+/** One artboard: sized to the frame, lit background, glass grain, home indicator on the phone. */
+export function Root({
+  device,
   className = "",
-  style,
+  bg = "lounge",
   children,
 }: {
-  v?: "ink" | "red" | "line" | "ghost" | "paper" | "danger";
-  s?: "sm" | "md" | "lg" | "xl";
-  icon?: ReactNode;
-  iconRight?: ReactNode;
-  block?: boolean;
-  disabled?: boolean;
+  device: Device;
   className?: string;
-  style?: CSSProperties;
-  children?: ReactNode;
+  bg?: "lounge" | "table" | "auth";
+  children: ReactNode;
 }) {
+  const f = FRAME[device];
   return (
-    <button
-      type="button"
-      className={`btn btn-${v} btn-${s}${block ? " btn-block" : ""}${disabled ? " is-disabled" : ""} ${className}`}
-      style={style}
-    >
-      {icon}
-      {children !== undefined && <span className="btn-l">{children}</span>}
-      {iconRight}
-    </button>
-  );
-}
-
-export function IconBtn({ icon, label, className = "" }: { icon: ReactNode; label: string; className?: string }) {
-  return (
-    <button type="button" className={`ib ${className}`} aria-label={label} title={label}>
-      {icon}
-    </button>
-  );
-}
-
-export function Field({
-  label,
-  value,
-  placeholder,
-  hint,
-  state,
-  icon,
-  right,
-  mono,
-  aside,
-}: {
-  label?: string;
-  value?: ReactNode;
-  placeholder?: string;
-  hint?: ReactNode;
-  state?: "focus" | "error" | "ok" | "disabled";
-  icon?: ReactNode;
-  right?: ReactNode;
-  mono?: boolean;
-  aside?: ReactNode;
-}) {
-  return (
-    <div className={`field${state ? ` is-${state}` : ""}`}>
-      {(label || aside) && (
-        <div className="field-top">
-          {label && <label>{label}</label>}
-          {aside}
-        </div>
-      )}
-      <div className="input">
-        {icon && <span className="input-ic">{icon}</span>}
-        <span className={`input-v${value === undefined ? " ph" : ""}${mono ? " mono" : ""}`}>
-          {value ?? placeholder}
-        </span>
-        {state === "focus" && <span className="caret" />}
-        {right}
+    <div className={`d2 d2-${device} ${className}`} style={{ width: f.width, height: f.height }}>
+      <div className={`k-bg k-bg-${bg}`} aria-hidden>
+        {bg === "lounge" && <Skyline />}
       </div>
-      {hint && <div className="field-hint">{hint}</div>}
+      <Defs />
+      {children}
+      {device === "mobile" && <span className="k-homebar" aria-hidden />}
     </div>
   );
 }
 
-export function Toggle({ on }: { on?: boolean }) {
+/* ================================================================ brand */
+
+export function Mark({ size = 36 }: { size?: number }) {
   return (
-    <span className={`toggle${on ? " on" : ""}`}>
+    <svg className="k-mark" width={size} height={size} viewBox="0 0 40 40" aria-hidden>
+      <circle cx="20" cy="20" r="19" fill="#0B171C" stroke="url(#k-gold)" strokeWidth="1.6" />
+      <circle cx="20" cy="20" r="15.5" fill="none" stroke="url(#k-gold)" strokeWidth="0.6" strokeDasharray="1.2 2.2" opacity="0.8" />
+      <path
+        d="M20 9.5c3.6 4.2 8.6 7.3 8.6 11.3 0 2.7-2 4.5-4.4 4.5-1.4 0-2.6-.6-3.3-1.6.3 2.4 1.3 4.3 3 5.6h-7.8c1.7-1.3 2.7-3.2 3-5.6-.7 1-1.9 1.6-3.3 1.6-2.4 0-4.4-1.8-4.4-4.5 0-4 5-7.1 8.6-11.3z"
+        fill="url(#k-gold)"
+      />
+    </svg>
+  );
+}
+
+export function Logo({ size = 36, sub }: { size?: number; sub?: string }) {
+  return (
+    <span className="k-logo">
+      <Mark size={size} />
+      <span className="k-logo-t">
+        <b>Poker</b>
+        <em>bạn bè</em>
+        {sub && <small>{sub}</small>}
+      </span>
+    </span>
+  );
+}
+
+/* ============================================================== surfaces */
+
+export function Glass({
+  className = "",
+  strong,
+  children,
+}: {
+  className?: string;
+  strong?: boolean;
+  children?: ReactNode;
+}) {
+  return <div className={`k-glass ${strong ? "k-glass-strong" : ""} ${className}`}>{children}</div>;
+}
+
+export function Eyebrow({ children, tone: t = "gold", className = "" }: { children: ReactNode; tone?: "gold" | "cyan" | "red" | "mute"; className?: string }) {
+  return <span className={`k-eyebrow k-eyebrow-${t} ${className}`}>{children}</span>;
+}
+
+export function Divider({ children }: { children: ReactNode }) {
+  return (
+    <span className="k-divider">
+      <i />
+      {children}
       <i />
     </span>
   );
 }
 
-export function Check({ on, children }: { on?: boolean; children: ReactNode }) {
+/* =============================================================== buttons */
+
+export type BtnTone = "gold" | "cyan" | "glass" | "danger" | "light" | "ghost";
+
+export function Btn({
+  tone: t = "glass",
+  size = "md",
+  icon,
+  iconRight,
+  block,
+  className = "",
+  children,
+}: {
+  tone?: BtnTone;
+  size?: "sm" | "md" | "lg" | "xl";
+  icon?: ReactNode;
+  iconRight?: ReactNode;
+  block?: boolean;
+  className?: string;
+  children?: ReactNode;
+}) {
   return (
-    <span className={`check${on ? " on" : ""}`}>
-      <i>{on && <svg viewBox="0 0 12 12" width="10" height="10"><path d="M2.5 6.2 5 8.6l4.6-5.2" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg>}</i>
-      {children}
-    </span>
-  );
-}
-
-export function Seg({ items, on, mono, className = "" }: { items: ReactNode[]; on: number; mono?: boolean; className?: string }) {
-  return (
-    <div className={`seg ${className}`}>
-      {items.map((it, i) => (
-        <span key={i} className={`${i === on ? "on" : ""}${mono ? " mono" : ""}`}>
-          {it}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/** A drawn range slider. `value` 0..1. `ticks` draws N evenly spaced ticks. */
-export function Slider({ value, ticks }: { value: number; ticks?: number }) {
-  return (
-    <div className="slider">
-      <div className="slider-track">
-        <i style={{ width: `${value * 100}%` }} />
-      </div>
-      {ticks !== undefined &&
-        Array.from({ length: ticks }, (_, i) => (
-          <b
-            key={i}
-            className={`slider-tick${i / (ticks - 1) <= value + 0.001 ? " done" : ""}`}
-            style={{ left: `${(i / (ticks - 1)) * 100}%` }}
-          />
-        ))}
-      <span className="slider-thumb" style={{ left: `${value * 100}%` }} />
-    </div>
-  );
-}
-
-export function Progress({ value, tone = "red" }: { value: number; tone?: "red" | "ink" | "sage" | "ochre" }) {
-  return (
-    <div className={`progress p-${tone}`}>
-      <i style={{ width: `${value * 100}%` }} />
-    </div>
-  );
-}
-
-/* ---------- layout bits ---------- */
-
-export function SecHead({ title, meta, children }: { title: ReactNode; meta?: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="sec-h">
-      <h3 className="serif">{title}</h3>
-      <span className="sec-rule" />
-      {meta && <span className="eyebrow">{meta}</span>}
-      {children}
-    </div>
-  );
-}
-
-export function Brand({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  return (
-    <span className={`brand brand-${size}`}>
-      <span className="brand-mark">
-        <Suit s="♥" />
-      </span>
-      <span className="brand-name serif">Poker Friends</span>
-    </span>
-  );
-}
-
-export function Ornament() {
-  return (
-    <span className="orn" aria-hidden="true">
-      <Suit s="♠" />
-      <Suit s="♥" />
-      <Suit s="♦" />
-      <Suit s="♣" />
-    </span>
-  );
-}
-
-/** Desktop top navigation for the non-table pages. */
-export function TopNav({ active, guest }: { active?: "rooms" | "history" | "profile"; guest?: string }) {
-  const link = (id: string, text: string) => <span className={`nav-l${active === id ? " on" : ""}`}>{text}</span>;
-  return (
-    <header className="nav">
-      <Brand />
-      <nav className="nav-links">
-        {link("rooms", "Sảnh")}
-        {link("history", "Lịch sử")}
-        {link("profile", "Hồ sơ")}
-      </nav>
-      <div className="nav-right">
-        <span className="nav-hint">Chip ảo · không tiền thật</span>
-        {guest ? (
-          <span className="nav-user">
-            <span className="av av-guest" style={{ width: 30, height: 30, fontSize: 13 }}>
-              K
-            </span>
-            <span className="mono">{guest}</span>
-            <Badge kind="dash">Khách</Badge>
-          </span>
-        ) : (
-          <span className="nav-user">
-            <Avatar name="Lym" size={30} />
-            <span>Lym</span>
-          </span>
-        )}
-      </div>
-    </header>
-  );
-}
-
-/* ---------- mobile chrome ---------- */
-
-export function StatusBar({ onDark }: { onDark?: boolean }) {
-  return (
-    <div className={`sbar${onDark ? " on-dark" : ""}`}>
-      <span className="sbar-t">21:04</span>
-      <span className="sbar-i">
-        <Signal size={15} strokeWidth={2.2} />
-        <Wifi size={15} strokeWidth={2.2} />
-        <BatteryFull size={22} strokeWidth={1.6} />
-      </span>
-    </div>
-  );
-}
-
-export function HomeBar() {
-  return <div className="homebar" />;
-}
-
-export function TabBar({ active }: { active: "rooms" | "history" | "profile" }) {
-  const tab = (id: string, icon: ReactNode, text: string) => (
-    <span className={`tab${active === id ? " on" : ""}`}>
+    <span className={`k-btn k-btn-${t} k-btn-${size} ${block ? "k-btn-block" : ""} ${className}`}>
       {icon}
-      <span>{text}</span>
+      {children && <span className="k-btn-l">{children}</span>}
+      {iconRight}
     </span>
   );
+}
+
+export function IconBtn({
+  icon,
+  badge,
+  active,
+  className = "",
+  label,
+}: {
+  icon: ReactNode;
+  badge?: number | string;
+  active?: boolean;
+  className?: string;
+  label?: string;
+}) {
   return (
-    <nav className="tabbar">
-      {tab("rooms", <SpadeIcon size={20} strokeWidth={1.75} />, "Sảnh")}
-      {tab("history", <ScrollText size={20} strokeWidth={1.75} />, "Lịch sử")}
-      {tab("profile", <CircleUserRound size={20} strokeWidth={1.75} />, "Hồ sơ")}
-      <HomeBar />
-    </nav>
+    <span className={`k-ibtn ${active ? "on" : ""} ${className}`} title={label}>
+      {icon}
+      {badge !== undefined && <b className="k-ibtn-badge k-num">{badge}</b>}
+    </span>
   );
 }
 
-/** Caption for boards that show two variants of one screen side by side. */
-export function VariantCap({ letter, children }: { letter: string; children: ReactNode }) {
+export function GoogleG({ size = 18 }: { size?: number }) {
   return (
-    <div className="vcap">
-      <b>{letter}</b>
-      <span>{children}</span>
-    </div>
-  );
-}
-
-/* ---------- QR (deterministic, drawn) ---------- */
-
-export function Qr({ size = 168, seed }: { size?: number; seed: string }) {
-  const n = 25;
-  let h = 2166136261;
-  for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-  const rnd = () => {
-    h ^= h << 13;
-    h ^= h >>> 17;
-    h ^= h << 5;
-    return (h >>> 0) / 4294967296;
-  };
-  const finder = (x: number, y: number) => (x < 8 && y < 8) || (x >= n - 8 && y < 8) || (x < 8 && y >= n - 8);
-  let d = "";
-  for (let y = 0; y < n; y++)
-    for (let x = 0; x < n; x++) {
-      const v = rnd();
-      if (finder(x, y)) continue;
-      if (x === 6 || y === 6 ? (x + y) % 2 === 0 : v > 0.5) d += `M${x} ${y}h1v1h-1z`;
-    }
-  const eye = (x: number, y: number) => (
-    <g key={`${x}-${y}`}>
-      <rect x={x} y={y} width={7} height={7} fill="currentColor" />
-      <rect x={x + 1} y={y + 1} width={5} height={5} fill="#fff" />
-      <rect x={x + 2} y={y + 2} width={3} height={3} fill="currentColor" />
-    </g>
-  );
-  return (
-    <svg className="qr" viewBox={`-2 -2 ${n + 4} ${n + 4}`} width={size} height={size} shapeRendering="crispEdges">
-      <rect x={-2} y={-2} width={n + 4} height={n + 4} fill="#fff" />
-      <path d={d} fill="currentColor" />
-      {eye(0, 0)}
-      {eye(n - 7, 0)}
-      {eye(0, n - 7)}
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+      <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
     </svg>
   );
 }
+
+/* ================================================================ inputs */
+
+export function Field({
+  label,
+  value,
+  placeholder,
+  secret,
+  icon,
+  right,
+  state,
+  hint,
+  aside,
+  className = "",
+}: {
+  label: string;
+  value?: string;
+  placeholder?: string;
+  secret?: boolean;
+  icon?: ReactNode;
+  right?: ReactNode;
+  state?: "focus" | "ok" | "error";
+  hint?: ReactNode;
+  aside?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`k-field ${state ? `k-field-${state}` : ""} ${className}`}>
+      <span className="k-field-top">
+        <span className="k-field-l">{label}</span>
+        {aside && <span className="k-field-aside">{aside}</span>}
+      </span>
+      <span className="k-input">
+        {icon && <span className="k-input-ic">{icon}</span>}
+        <span className={`k-input-v ${value ? "" : "ph"} ${secret ? "secret" : ""}`}>
+          {value ?? placeholder}
+          {state === "focus" && <i className="k-caret" />}
+        </span>
+        {right && <span className="k-input-r">{right}</span>}
+      </span>
+      {hint && <span className="k-field-hint">{hint}</span>}
+    </label>
+  );
+}
+
+/** Segmented control. */
+export function Seg({ items, active, className = "", small }: { items: ReactNode[]; active: number; className?: string; small?: boolean }) {
+  return (
+    <span className={`k-seg ${small ? "k-seg-s" : ""} ${className}`}>
+      {items.map((it, i) => (
+        <span key={i} className={i === active ? "on" : ""}>
+          {it}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+export function Toggle({ on }: { on?: boolean }) {
+  return (
+    <span className={`k-toggle ${on ? "on" : ""}`}>
+      <i />
+    </span>
+  );
+}
+
+export function Strength({ level, label }: { level: 1 | 2 | 3 | 4; label: string }) {
+  return (
+    <span className={`k-strength k-strength-${level}`}>
+      <span className="k-strength-bars">
+        {[1, 2, 3, 4].map((i) => (
+          <i key={i} className={i <= level ? "on" : ""} />
+        ))}
+      </span>
+      <b>{label}</b>
+    </span>
+  );
+}
+
+/* ================================================================ people */
+
+export function Avatar({
+  name,
+  size = 40,
+  dim,
+  ring = "steel",
+  className = "",
+}: {
+  name: string;
+  size?: number;
+  dim?: boolean;
+  ring?: "steel" | "gold" | "cyan" | "none";
+  className?: string;
+}) {
+  const [a, b] = jewel(name);
+  return (
+    <span
+      className={`k-av k-av-${ring} ${dim ? "k-av-dim" : ""} ${className}`}
+      style={vars({ "--s": `${size}px`, "--j1": a, "--j2": b })}
+    >
+      <span className="k-av-in">{initial(name)}</span>
+    </span>
+  );
+}
+
+/** Countdown ring drawn around whatever it wraps (an avatar, a number). */
+export function Ring({
+  size,
+  left,
+  total,
+  stroke = 3,
+  tone: t = "cyan",
+  children,
+  className = "",
+}: {
+  size: number;
+  left: number;
+  total: number;
+  stroke?: number;
+  tone?: "cyan" | "gold" | "red";
+  children?: ReactNode;
+  className?: string;
+}) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className={`k-ring k-ring-${t} ${className}`} style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} className="k-ring-track" strokeWidth={stroke} fill="none" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          className="k-ring-bar"
+          strokeWidth={stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${(c * left) / total} ${c}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </svg>
+      <span className="k-ring-in">{children}</span>
+    </span>
+  );
+}
+
+export function Pill({
+  tone: t = "mute",
+  icon,
+  children,
+  className = "",
+}: {
+  tone?: "mute" | "gold" | "cyan" | "red" | "glass" | "solid";
+  icon?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <span className={`k-pill k-pill-${t} ${className}`}>
+      {icon}
+      {children}
+    </span>
+  );
+}
+
+/* ============================================================ money / chips */
+
+export type ChipTone = "onyx" | "ivory" | "petrol" | "ruby" | "gold";
+const CHIP: Record<ChipTone, { body: string; side: string; edge: string; face: string }> = {
+  onyx: { body: "#1D262C", side: "#0E1418", edge: "#E9D3A0", face: "#2A353C" },
+  ivory: { body: "#EEE7D9", side: "#B9AF9C", edge: "#11545C", face: "#F7F2E8" },
+  petrol: { body: "#11616A", side: "#073A40", edge: "#F2EBDD", face: "#167079" },
+  ruby: { body: "#A12A3A", side: "#5E1220", edge: "#F2EBDD", face: "#B33447" },
+  gold: { body: "#C9A465", side: "#7A5A2C", edge: "#1D262C", face: "#E2C68C" },
+};
+
+/** A single chip seen from above: ceramic body, eight edge inlays, metal centre. */
+export function Chip({ tone: t = "onyx", size = 18, className = "" }: { tone?: ChipTone; size?: number; className?: string }) {
+  const c = CHIP[t];
+  return (
+    <svg className={`k-chip ${className}`} width={size} height={size} viewBox="0 0 40 40" aria-hidden>
+      <circle cx="20" cy="20" r="19.4" fill={c.body} stroke="rgba(0,0,0,.35)" strokeWidth="0.6" />
+      <circle cx="20" cy="20" r="16.4" fill="none" stroke={c.edge} strokeWidth="5.2" strokeDasharray="6.44 6.44" />
+      <circle cx="20" cy="20" r="11.6" fill={c.face} stroke={c.edge} strokeWidth="0.9" strokeDasharray="1.4 1.4" />
+      <circle cx="20" cy="20" r="7.4" fill={t === "gold" ? "url(#k-steel)" : "url(#k-gold)"} stroke="rgba(0,0,0,.25)" strokeWidth="0.5" />
+      <circle cx="20" cy="20" r="19.4" fill="url(#k-gloss)" />
+    </svg>
+  );
+}
+
+/** A stack of chips in three-quarter view (bottom to top). */
+export function Stack({ tones, w = 26, className = "" }: { tones: ChipTone[]; w?: number; className?: string }) {
+  const T = 4.6; // chip thickness in viewBox units (chip is 40 wide)
+  const RY = 11;
+  const H = RY * 2 + T * tones.length + 2;
+  const sideX = [5, 12, 20, 28, 35];
+  return (
+    <svg className={`k-stack ${className}`} width={w} height={(w * H) / 40} viewBox={`0 0 40 ${H}`} aria-hidden>
+      <ellipse cx="20" cy={H - RY + 1.5} rx="19" ry={RY} fill="rgba(0,0,0,.45)" />
+      {tones.map((t, k) => {
+        const c = CHIP[t];
+        const cy = H - 1 - T - RY - k * T;
+        return (
+          <g key={k}>
+            <path d={`M1 ${cy}A19 ${RY} 0 0 0 39 ${cy}L39 ${cy + T}A19 ${RY} 0 0 1 1 ${cy + T}Z`} fill={c.side} />
+            {sideX.map((x) => {
+              const yTop = cy + RY * Math.sqrt(Math.max(0, 1 - ((x - 20) / 19) ** 2));
+              return <rect key={x} x={x - 1.4} y={yTop + 0.6} width="2.8" height={T - 1.2} rx="0.4" fill={c.edge} opacity="0.92" />;
+            })}
+            <ellipse cx="20" cy={cy} rx="19" ry={RY} fill={c.body} />
+            {k === tones.length - 1 && (
+              <>
+                <ellipse cx="20" cy={cy} rx="16" ry={RY - 2.2} fill="none" stroke={c.edge} strokeWidth="3.2" strokeDasharray="5.4 5.4" />
+                <ellipse cx="20" cy={cy} rx="10.6" ry="5.9" fill={c.face} stroke={c.edge} strokeWidth="0.7" />
+                <ellipse cx="20" cy={cy} rx="6.6" ry="3.6" fill={t === "gold" ? "url(#k-steel)" : "url(#k-gold)"} />
+                <ellipse cx="20" cy={cy} rx="19" ry={RY} fill="url(#k-gloss)" />
+              </>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Chips plus the amount on a small glass plate: a bet in front of a seat, or the pot. */
+export function Bet({
+  amount,
+  tones = ["ivory", "petrol"],
+  w = 22,
+  className = "",
+  label,
+}: {
+  amount: number;
+  tones?: ChipTone[];
+  w?: number;
+  className?: string;
+  label?: string;
+}) {
+  return (
+    <span className={`k-bet ${className}`}>
+      <Stack tones={tones} w={w} />
+      <span className="k-bet-v">
+        {label && <small>{label}</small>}
+        <b className="k-num">{fmt(amount)}</b>
+      </span>
+    </span>
+  );
+}
+
+/** The dealer button: a thick porcelain puck. */
+export function Dealer({ size = 24, className = "" }: { size?: number; className?: string }) {
+  return (
+    <span className={`k-dealer ${className}`} style={vars({ "--s": `${size}px` })}>
+      D
+    </span>
+  );
+}
+
+/* ================================================================= cards */
+
+const SUIT_PATH: Record<string, string> = {
+  "♠": "M12 1.8C9 6.4 3.4 9.5 3.4 14a4.6 4.6 0 0 0 7.7 3.4c-.2 2-1 3.6-2.7 4.9h7.2c-1.7-1.3-2.5-2.9-2.7-4.9A4.6 4.6 0 0 0 20.6 14c0-4.5-5.6-7.6-8.6-12.2z",
+  "♥": "M12 21.4C6.9 17.1 2.4 13.5 2.4 8.6c0-3 2.3-5.4 5.2-5.4 1.8 0 3.4.9 4.4 2.5 1-1.6 2.6-2.5 4.4-2.5 2.9 0 5.2 2.4 5.2 5.4 0 4.9-4.5 8.5-9.6 12.8z",
+  "♦": "M12 1.6c2.1 3.6 4.8 6.9 7.8 10.4-3 3.5-5.7 6.8-7.8 10.4-2.1-3.6-4.8-6.9-7.8-10.4 3-3.5 5.7-6.8 7.8-10.4z",
+  "♣": "M12 2.2a4.4 4.4 0 0 0-4 6.3 4.4 4.4 0 1 0 2.6 7.6c-.3 2.5-1.2 4.4-2.9 5.7h8.6c-1.7-1.3-2.6-3.2-2.9-5.7a4.4 4.4 0 1 0 2.6-7.6 4.4 4.4 0 0 0-4-6.3z",
+};
+
+/** Suit glyph as a path, so every card draws the same shapes whatever the font. */
+export function Suit({ suit, size = 14, className = "" }: { suit: string; size?: number; className?: string }) {
+  return (
+    <svg className={`k-suit ${className}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden>
+      <path d={SUIT_PATH[suit]} />
+    </svg>
+  );
+}
+
+/** Porcelain playing card: corner indices, big centre pip, framed monogram on court cards. */
+export function PCard({
+  c,
+  w = 56,
+  tilt = 0,
+  className = "",
+  glow,
+  dim,
+}: {
+  c: Card;
+  w?: number;
+  tilt?: number;
+  className?: string;
+  glow?: "gold" | "cyan";
+  dim?: boolean;
+}) {
+  const style = vars({ "--w": `${w}px`, transform: tilt ? `rotate(${tilt}deg)` : "none" });
+  if (c === "back")
+    return (
+      <span className={`k-card k-card-back ${dim ? "k-card-dim" : ""} ${className}`} style={style}>
+        <i className="k-card-back-in">{w >= 20 && <Mark size={Math.round(w * 0.42)} />}</i>
+      </span>
+    );
+  const small = w < 34;
+  const court = c.rank === "K" || c.rank === "Q" || c.rank === "J";
+  const idx = (
+    <>
+      <b>{c.rank}</b>
+      <Suit suit={c.suit} size={Math.round(w * (small ? 0.3 : 0.2))} />
+    </>
+  );
+  return (
+    <span
+      className={`k-card ${isRed(c) ? "red" : "blk"} ${small ? "k-card-s" : ""} ${glow ? `k-card-glow-${glow}` : ""} ${dim ? "k-card-dim" : ""} ${className}`}
+      style={style}
+    >
+      <span className="k-card-idx">{idx}</span>
+      {court ? (
+        <span className="k-card-court">
+          <b>{c.rank}</b>
+          <Suit suit={c.suit} size={Math.round(w * 0.2)} />
+        </span>
+      ) : (
+        <span className="k-card-pip">
+          <Suit suit={c.suit} size={Math.round(w * (c.rank === "A" ? 0.56 : 0.46))} />
+        </span>
+      )}
+      <span className="k-card-idx k-card-idx-b">{idx}</span>
+    </span>
+  );
+}
+
+/** An empty board slot. */
+export const Slot = ({ w = 56 }: { w?: number }) => <span className="k-slot" style={vars({ "--w": `${w}px` })} />;
+
+/* ================================================================== misc */
+
+export function Spark({
+  points,
+  w = 120,
+  h = 32,
+  className = "",
+}: {
+  points: number[];
+  w?: number;
+  h?: number;
+  className?: string;
+}) {
+  const min = Math.min(...points, 0);
+  const max = Math.max(...points, 0);
+  const span = max - min || 1;
+  const xy = points.map((p, i) => [(i / (points.length - 1)) * (w - 4) + 2, h - 3 - ((p - min) / span) * (h - 6)]);
+  const d = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join("");
+  const zero = h - 3 - ((0 - min) / span) * (h - 6);
+  const last = points[points.length - 1];
+  return (
+    <svg className={`k-spark k-spark-${tone(last)} ${className}`} width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>
+      <line x1="0" x2={w} y1={zero} y2={zero} className="k-spark-zero" />
+      <path d={`${d}L${xy[xy.length - 1][0]} ${h}L2 ${h}Z`} className="k-spark-fill" />
+      <path d={d} className="k-spark-line" fill="none" />
+      <circle cx={xy[xy.length - 1][0]} cy={xy[xy.length - 1][1]} r="2.6" className="k-spark-dot" />
+    </svg>
+  );
+}
+
+export function QR({ size = 132, seed = 37 }: { size?: number; seed?: number }) {
+  const m = qrMatrix(seed);
+  const n = m.length;
+  return (
+    <span className="k-qr" style={{ width: size, height: size }}>
+      <svg width={size - 16} height={size - 16} viewBox={`0 0 ${n} ${n}`} shapeRendering="crispEdges" aria-hidden>
+        {m.map((row, y) => row.map((on, x) => (on ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="#0B171C" /> : null)))}
+      </svg>
+      <span className="k-qr-mark">
+        <Mark size={Math.round(size * 0.2)} />
+      </span>
+    </span>
+  );
+}
+
+const TOWERS: [number, number, number][] = [
+  [0, 120, 46], [50, 92, 38], [92, 136, 30], [126, 60, 44], [174, 110, 36], [214, 140, 52], [270, 84, 34],
+  [308, 30, 40], [352, 118, 48], [404, 96, 30], [438, 128, 56], [498, 70, 42], [544, 112, 34], [582, 50, 38],
+  [624, 132, 46], [674, 100, 32], [710, 76, 48], [762, 124, 40], [806, 88, 36], [846, 140, 44], [894, 104, 50],
+  [948, 126, 52],
+];
+const WINDOWS = skylineWindows(11, TOWERS);
+
+/** The night city behind the glass: towers, lit windows, one beacon. Purely decorative. */
+export function Skyline({ className = "" }: { className?: string }) {
+  return (
+    <svg className={`k-skyline ${className}`} viewBox="0 0 1000 200" preserveAspectRatio="xMidYMax slice" aria-hidden>
+      <defs>
+        <linearGradient id="k-tower" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#16313A" />
+          <stop offset="1" stopColor="#0A161B" />
+        </linearGradient>
+      </defs>
+      {TOWERS.map(([x, top, w]) => (
+        <rect key={x} x={x} y={top} width={w - 3} height={200 - top} fill="url(#k-tower)" />
+      ))}
+      <rect x="326" y="12" width="3" height="20" fill="#16313A" />
+      <circle cx="327.5" cy="11" r="2.2" fill="#FF6A5C" />
+      {WINDOWS.map(([x, y, w, h, o], i) => (
+        <rect key={i} x={x} y={y} width={w} height={h} fill={i % 7 ? "#F3DDA6" : "#9BEFFF"} opacity={o} />
+      ))}
+    </svg>
+  );
+}
+
+/** Small "ok" tick used inside fields. */
+export const OkTick = () => (
+  <span className="k-ok">
+    <Check size={13} strokeWidth={3.2} />
+  </span>
+);

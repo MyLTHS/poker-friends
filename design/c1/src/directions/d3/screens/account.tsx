@@ -15,12 +15,11 @@ import {
   HomeBar,
   Logo,
   MHead,
+  MRail,
   Money,
   Root,
-  StatusBar,
   Sticker,
   Strength,
-  TabBar,
   Token,
 } from "../ui";
 
@@ -28,14 +27,35 @@ const eye = <Eye size={19} strokeWidth={2.6} />;
 
 /* ================================================================== login */
 
+const GuestBtn = () => (
+  <div className="guest-wrap">
+    <Btn tone="lime" size="lg" block>
+      Chơi ngay bằng khách
+    </Btn>
+    <Sticker tone="sun" tilt={6} className="guest-stk">
+      không cần email
+    </Sticker>
+  </div>
+);
+
 function LoginForm({ mobile }: { mobile?: boolean }) {
+  const pw = <Field label="Mật khẩu" value="••••••••••" secret state="focus" icon={<KeyRound size={18} strokeWidth={2.6} />} right={eye} />;
   return (
     <div className={`authform ${mobile ? "authform-m" : ""}`}>
       <h2 className={mobile ? "h-m" : "h1"}>Vào bàn thôi!</h2>
       {!mobile && <p className="lead">Đăng nhập để giữ chip và lịch sử ở mọi phòng.</p>}
       <Field label="Email" value="lym@example.com" icon={<Mail size={18} strokeWidth={2.6} />} />
-      <Field label="Mật khẩu" value="••••••••••" secret state="focus" icon={<KeyRound size={18} strokeWidth={2.6} />} right={eye} />
-      <span className="auth-forgot">Quên mật khẩu?</span>
+      {mobile ? (
+        <div className="pw-wrap">
+          {pw}
+          <span className="auth-forgot">Quên mật khẩu?</span>
+        </div>
+      ) : (
+        <>
+          {pw}
+          <span className="auth-forgot">Quên mật khẩu?</span>
+        </>
+      )}
       <Btn tone="pink" size="lg" block>
         Đăng nhập
       </Btn>
@@ -43,14 +63,7 @@ function LoginForm({ mobile }: { mobile?: boolean }) {
       <Btn tone="white" size="lg" block icon={<GoogleG />}>
         Tiếp tục với Google
       </Btn>
-      <div className="guest-wrap">
-        <Btn tone="lime" size="lg" block>
-          Chơi ngay bằng khách
-        </Btn>
-        <Sticker tone="sun" tilt={6} className="guest-stk">
-          không cần email
-        </Sticker>
-      </div>
+      {!mobile && <GuestBtn />}
       <span className="auth-foot">
         Chưa có tài khoản? <b>Đăng ký</b>
       </span>
@@ -69,18 +82,6 @@ function DeskAuth({ children }: { children: ReactNode }) {
   );
 }
 
-function MobAuthTop() {
-  return (
-    <div className="mauth-top">
-      <Logo size={20} />
-      <h1>
-        Poker với <em>hội bạn thân</em>
-      </h1>
-      <PartyArt compact />
-    </div>
-  );
-}
-
 function DeskLogin() {
   return (
     <DeskAuth>
@@ -94,12 +95,20 @@ function DeskLogin() {
 function MobLogin() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <MobAuthTop />
-      <div className="msheet msheet-auth">
-        <LoginForm mobile />
-        <HomeBar />
+      <div className="mpage mauth">
+        <section className="mauth-art">
+          <Logo size={18} />
+          <h1>
+            Poker với <em>hội bạn thân</em>
+          </h1>
+          <PartyArt compact />
+          <GuestBtn />
+        </section>
+        <section className="mpanel">
+          <LoginForm mobile />
+        </section>
       </div>
+      <HomeBar />
     </Root>
   );
 }
@@ -107,11 +116,24 @@ function MobLogin() {
 /* ================================================================= signup */
 
 function SignupForm({ mobile }: { mobile?: boolean }) {
+  const email = (
+    <Field label="Email" value="lym@example.com" icon={<Mail size={18} strokeWidth={2.6} />} state="ok" right={<Check size={18} strokeWidth={3.2} className="ok-ic" />} />
+  );
+  const name = <Field label="Tên ở bàn" value="Lym" hint="Mọi người thấy tên này cạnh ghế của bạn. Đổi được sau." />;
   return (
     <div className={`authform ${mobile ? "authform-m" : ""}`}>
       {!mobile && <h2 className="h1">Tạo tài khoản</h2>}
-      <Field label="Email" value="lym@example.com" icon={<Mail size={18} strokeWidth={2.6} />} state="ok" right={<Check size={18} strokeWidth={3.2} className="ok-ic" />} />
-      <Field label="Tên ở bàn" value="Lym" hint="Mọi người thấy tên này cạnh ghế của bạn. Đổi được sau." />
+      {mobile ? (
+        <div className="mgrid2">
+          {email}
+          {name}
+        </div>
+      ) : (
+        <>
+          {email}
+          {name}
+        </>
+      )}
       <Field label="Mật khẩu" value="•••••••••••" secret state="focus" icon={<KeyRound size={18} strokeWidth={2.6} />} right={eye} />
       <div className="pw-meter">
         <Strength level={3} label="Khá mạnh" />
@@ -130,11 +152,9 @@ function SignupForm({ mobile }: { mobile?: boolean }) {
       <Btn tone="pink" size="lg" block pressed={mobile}>
         Tạo tài khoản
       </Btn>
-      {!mobile && (
-        <span className="auth-foot">
-          Đã có tài khoản? <b>Đăng nhập</b>
-        </span>
-      )}
+      <span className="auth-foot">
+        Đã có tài khoản? <b>Đăng nhập</b>
+      </span>
     </div>
   );
 }
@@ -150,14 +170,14 @@ function VerifyCard({ mobile }: { mobile?: boolean }) {
         </span>
       </div>
       <div className="verify-btns">
-        <Btn tone="sky" size={mobile ? "md" : "lg"} block={!mobile}>
+        <Btn tone="sky" size={mobile ? "md" : "lg"} block>
           Mở hộp thư
         </Btn>
-        <Btn tone="ghost" size={mobile ? "md" : "lg"} block={!mobile} className="btn-off">
+        <Btn tone="ghost" size={mobile ? "md" : "lg"} block className="btn-off">
           Gửi lại · 0:45
         </Btn>
       </div>
-      {!mobile && <small className="verify-tip">Không thấy thư? Xem trong mục Spam hoặc Quảng cáo.</small>}
+      <small className="verify-tip">Không thấy thư? Xem trong mục Spam hoặc Quảng cáo.</small>
     </div>
   );
 }
@@ -186,11 +206,20 @@ function DeskSignup() {
 function MobSignup() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <MHead title="Đăng ký" sub="Giữ chip và lịch sử ở mọi phòng" />
-      <div className="mpage msignup">
-        <SignupForm mobile />
-        <VerifyCard mobile />
+      <div className="mpage mpair msignup">
+        <section className="mcol">
+          <MHead title="Đăng ký" sub="Giữ chip và lịch sử ở mọi phòng" />
+          <SignupForm mobile />
+        </section>
+        <div className="m-connector">
+          <Sticker tone="sun" tilt={-8}>
+            gửi <ArrowRight size={14} strokeWidth={3.4} />
+          </Sticker>
+        </div>
+        <section className="card mcard authcard-after">
+          <Eyebrow tone="lime">Sau khi gửi</Eyebrow>
+          <VerifyCard mobile />
+        </section>
       </div>
       <HomeBar />
     </Root>
@@ -263,15 +292,16 @@ function DeskForgot() {
 function MobForgot() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <MHead title="Quên mật khẩu" sub="Đặt lại qua email" />
-      <div className="mpage mforgot">
-        <div className="card mcard">
-          <ForgotStep1 mobile />
-        </div>
+      <div className="mpage mpair mforgot">
+        <section className="mcol">
+          <MHead title="Quên mật khẩu" sub="Đặt lại qua email" />
+          <div className="card mcard">
+            <ForgotStep1 mobile />
+          </div>
+        </section>
         <div className="m-connector">
-          <Sticker tone="sun" tilt={-4}>
-            📧 mở link trong email ↓
+          <Sticker tone="sun" tilt={-8}>
+            📧 bấm link <ArrowRight size={14} strokeWidth={3.4} />
           </Sticker>
         </div>
         <div className="card mcard">
@@ -289,7 +319,7 @@ function GuestCard({ mobile }: { mobile?: boolean }) {
   return (
     <div className={`guest ${mobile ? "guest-m" : ""}`}>
       <div className="guest-head">
-        <Avatar name={GUEST.name} size={mobile ? 48 : 64} />
+        <Avatar name={GUEST.name} size={mobile ? 44 : 64} />
         <span>
           <small>Bạn đang chơi bằng khách</small>
           <b className="guest-name">{GUEST.name}</b>
@@ -381,11 +411,14 @@ function DeskUpgrade() {
 function MobUpgrade() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <MHead title="Nâng cấp tài khoản" sub="Từ khách lên tài khoản thật" />
-      <div className="mpage mupgrade">
-        <GuestCard mobile />
-        <UpgradeForm mobile />
+      <div className="mpage mpair mupgrade">
+        <section className="mcol">
+          <MHead title="Nâng cấp tài khoản" sub="Từ khách lên tài khoản thật" />
+          <GuestCard mobile />
+        </section>
+        <section className="card mcard">
+          <UpgradeForm mobile />
+        </section>
       </div>
       <HomeBar />
     </Root>
@@ -398,7 +431,7 @@ function ProfileHead({ mobile }: { mobile?: boolean }) {
   return (
     <div className={`prof-head ${mobile ? "prof-head-m" : ""}`}>
       <span className="prof-av">
-        <Avatar name="Lym" size={mobile ? 84 : 112} />
+        <Avatar name="Lym" size={mobile ? 64 : 112} />
         <span className="prof-edit">
           <Pencil size={14} strokeWidth={3} />
         </span>
@@ -493,19 +526,26 @@ function DeskProfile() {
 function MobProfile() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <MHead title="Hồ sơ" back={false} center />
-      <div className="mpage mprofile">
-        <ProfileHead mobile />
-        <span className="sec-h">Cách đăng nhập</span>
-        <Methods />
-        <span className="sec-h">Phòng đang có chip</span>
-        <MyRooms />
-        <Btn tone="ghost" size="md" block icon={<LogOut size={18} strokeWidth={3} />} className="logout">
-          Đăng xuất
-        </Btn>
+      <MRail active={2} />
+      <div className="mpage mpage-rail mprofile">
+        <section className="card mcard prof-l">
+          <ProfileHead mobile />
+          <span className="sec-h">Cách đăng nhập</span>
+          <Methods />
+          <Btn tone="ghost" size="md" block icon={<LogOut size={18} strokeWidth={3} />} className="logout">
+            Đăng xuất
+          </Btn>
+        </section>
+        <section className="card mcard prof-r">
+          <span className="sec-h">Phòng đang có chip</span>
+          <p className="lead">Chip tính riêng từng phòng, không có ví chung.</p>
+          <MyRooms />
+          <div className="prof-sum">
+            <span>Tổng lời/lỗ 2 phòng</span>
+            <Money n={PROFILE.rooms.reduce((a, r) => a + r.net, 0)} className="money-pill money-big" />
+          </div>
+        </section>
       </div>
-      <TabBar active={2} />
       <HomeBar />
     </Root>
   );

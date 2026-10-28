@@ -1,5 +1,6 @@
-// The poker table for d1: a top-down oval (desktop) or a tall vertical oval (mobile), seats
-// placed on fixed coordinates so nothing overlaps, plus the bars and panels around it.
+// The poker table for d1: a top-down oval, seats placed on fixed coordinates so nothing
+// overlaps, plus the bars and panels around it. On the landscape phone the stage is the left
+// 612px of the 844×390 frame; the right column holds the actions or a panel.
 import type { CSSProperties, ReactNode } from "react";
 import {
   ChevronLeft,
@@ -83,28 +84,30 @@ const GEO: Record<
     meBet: { x: 550, y: 468 },
     dealer: { k: 0.28, r: 38, sign: 1 },
   },
+  // Landscape phone: seat points are avatar centres, except seat 1 (bottom centre of my cards
+  // and plate). Seats 7 and 9 stay left of x 532 so the chat drawer never cuts one in half.
   mobile: {
-    w: 390,
-    h: 544,
-    c: { x: 195, y: 244 },
-    oval: { l: 53, t: 48, w: 284, h: 392 },
-    board: { x: 195, y: 250 },
+    w: 612,
+    h: 390,
+    c: { x: 328, y: 198 },
+    oval: { l: 116, t: 94, w: 424, h: 210 },
+    board: { x: 328, y: 198 },
     cardW: 40,
-    pot: { x: 200, y: 190 },
-    mark: { x: 195, y: 304 },
+    pot: { x: 328, y: 146 },
+    mark: { x: 328, y: 238 },
     seats: {
-      1: { x: 195, y: 494 },
-      2: { x: 60, y: 384 },
-      3: { x: 40, y: 244 },
-      4: { x: 60, y: 104 },
-      5: { x: 145, y: 40 },
-      6: { x: 245, y: 40 },
-      7: { x: 330, y: 104 },
-      8: { x: 350, y: 244 },
-      9: { x: 330, y: 384 },
+      1: { x: 328, y: 364 },
+      2: { x: 162, y: 290 },
+      3: { x: 86, y: 192 },
+      4: { x: 162, y: 98 },
+      5: { x: 268, y: 58 },
+      6: { x: 388, y: 58 },
+      7: { x: 494, y: 98 },
+      8: { x: 570, y: 192 },
+      9: { x: 494, y: 290 },
     },
-    meBet: { x: 195, y: 402 },
-    dealer: { k: 0.36, r: 26, sign: -1 },
+    meBet: { x: 328, y: 266 },
+    dealer: { k: 0.36, r: 32, sign: 1 },
   },
 };
 
@@ -116,9 +119,6 @@ const at = (p: Pt, extra?: CSSProperties): CSSProperties => ({ left: p.x, top: p
 function betPos(device: Device, seat: number): Pt {
   const g = GEO[device];
   if (seat === 1) return g.meBet;
-  // On the narrow mobile felt the side seats would push their bet into the board: lift it above.
-  if (device === "mobile" && seat === 3) return { x: 114, y: 194 };
-  if (device === "mobile" && seat === 8) return { x: 276, y: 194 };
   return lerp(g.seats[seat], g.c, 0.42);
 }
 
@@ -218,14 +218,14 @@ function SeatTag({ s, device }: { s: SeatView; device: Device }) {
 
 function SeatPod({ device, s, cx }: { device: Device; s: SeatView; cx: number }) {
   const p = seatPos(device, s.seat);
-  const avSize = device === "desktop" ? 56 : 40;
+  const avSize = device === "desktop" ? 56 : 36;
   if (s.state === "empty") {
     return (
       <div className="seat seat-empty" style={at(p)}>
         <span className="chair" style={{ width: avSize, height: avSize }}>
-          <Plus size={device === "desktop" ? 18 : 14} strokeWidth={1.8} />
+          <Plus size={device === "desktop" ? 18 : 14} strokeWidth={2} />
         </span>
-        <span className="chair-label">Ghế trống</span>
+        <span className="chair-label">Ngồi vào</span>
       </div>
     );
   }
@@ -268,17 +268,18 @@ function SeatPod({ device, s, cx }: { device: Device; s: SeatView; cx: number })
   );
 }
 
-/** My own seat: big hole cards, wide plate. Desktop sits under the rail; mobile is a row above the dock. */
+/** My own seat: big hole cards, wide plate. Desktop stacks cards over the plate under the rail; the
+ *  phone puts the cards beside the plate (hint above it) at the bottom centre of the stage. */
 function MeSeat({ device, s, hint }: { device: Device; s: SeatView; hint?: ReactNode }) {
   const p = seatPos(device, 1);
   const cards = s.cards ?? [];
   const d = device === "desktop";
   return (
-    <div className={`me me-${device} st-${s.state}`} style={d ? at(p) : undefined}>
+    <div className={`me me-${device} st-${s.state}`} style={at(p)}>
       {s.delta && <span className={`delta delta-${s.delta.kind}`}>{s.delta.text}</span>}
       <span className="me-cards">
         {cards.length > 0 ? (
-          cards.map((c, i) => <PlayingCard key={i} card={c} w={d ? 84 : 62} rotate={i === 0 ? -6 : 6} className="me-card" />)
+          cards.map((c, i) => <PlayingCard key={i} card={c} w={d ? 84 : 54} rotate={i === 0 ? -6 : 6} className="me-card" />)
         ) : (
           <span className="me-nocards">{s.state === "folded" ? "Đã bỏ bài" : "Chưa có bài"}</span>
         )}
@@ -286,8 +287,8 @@ function MeSeat({ device, s, hint }: { device: Device; s: SeatView; hint?: React
       </span>
       <span className="me-plate">
         <span className="me-av">
-          <Avatar name={s.name ?? "?"} size={d ? 44 : 42} />
-          {s.timer && <TimerRing size={d ? 44 : 42} left={s.timer.left} total={s.timer.total} gap={2} stroke={3.5} />}
+          <Avatar name={s.name ?? "?"} size={d ? 44 : 38} />
+          {s.timer && <TimerRing size={d ? 44 : 38} left={s.timer.left} total={s.timer.total} gap={2} stroke={3.5} />}
         </span>
         <span className="me-id">
           <b>
@@ -603,45 +604,86 @@ export function PreAction({ label, on = false }: { label: string; on?: boolean }
   );
 }
 
-/* ---------- mobile chrome ---------- */
+/* ---------- landscape phone chrome ---------- */
 
-export function MobileTableBar({ model, chatBadge, watchers = 3 }: { model: { room: string; blinds: string; handNo: number }; chatBadge?: number; watchers?: number }) {
+/** Over the stage, no background: back + room on the left, viewers / chat / more on the right. */
+export function MobileTableBar({
+  model,
+  chatBadge,
+  watchers = 3,
+  title,
+  sub,
+  right,
+}: {
+  model: { room: string; blinds: string; handNo: number };
+  chatBadge?: number;
+  watchers?: number;
+  title?: ReactNode;
+  sub?: ReactNode;
+  right?: ReactNode;
+}) {
   return (
     <header className="tbar-m">
-      <IconBtn label="Sảnh">
+      <IconBtn label="Quay lại">
         <ChevronLeft size={22} strokeWidth={2} />
       </IconBtn>
       <span className="tbar-m-title">
-        <b>{model.room}</b>
-        <small>
-          Blind {model.blinds} · Ván #{model.handNo}
-        </small>
+        <b>{title ?? model.room}</b>
+        <small>{sub ?? `Blind ${model.blinds} · Ván #${model.handNo}`}</small>
       </span>
-      <span className="tbar-m-watch">
-        <Eye size={15} strokeWidth={2} />
-        {watchers}
+      <span className="tbar-m-right">
+        {right ?? (
+          <>
+            <span className="tbar-m-watch">
+              <Eye size={15} strokeWidth={2} />
+              {watchers}
+            </span>
+            <IconBtn label="Chat" badge={chatBadge}>
+              <MessageCircle size={20} strokeWidth={1.9} />
+            </IconBtn>
+            <IconBtn label="Thêm">
+              <Ellipsis size={20} strokeWidth={2} />
+            </IconBtn>
+          </>
+        )}
       </span>
-      <IconBtn label="Chat" badge={chatBadge}>
-        <MessageCircle size={20} strokeWidth={1.9} />
-      </IconBtn>
-      <IconBtn label="Thêm">
-        <Ellipsis size={20} strokeWidth={2} />
-      </IconBtn>
     </header>
   );
 }
 
-export function TurnDock({ toCall, raise, presets, active = 0, min, max }: {
+/** The right column of the phone table (x 612 → edge); content stops 44px before the edge. */
+export function PhonePanel({ className = "", children }: { className?: string; children: ReactNode }) {
+  return <aside className={`ppanel ${className}`}>{children}</aside>;
+}
+
+/** My turn on the phone: the clock on top, raise sizing in the middle, the three actions at the
+ *  bottom right where the right thumb rests (Tố largest). */
+export function TurnPanel({ toCall, raise, presets, active = 0, min, max, left, total }: {
   toCall: number;
   raise: number;
   presets: { label: string; amount: number }[];
   active?: number;
   min: number;
   max: number;
+  left: number;
+  total: number;
 }) {
   const frac = (raise - min) / (max - min);
   return (
-    <div className="dock">
+    <PhonePanel className="tpanel">
+      <div className="tp-clock">
+        <span className="tp-secs">
+          <b>{left}</b>
+          <small>giây</small>
+        </span>
+        <span className="tp-label">
+          <span className="abar-eyebrow">Tới lượt bạn</span>
+          <small>Hết giờ sẽ tự bỏ bài</small>
+        </span>
+        <span className="abar-timebar">
+          <i style={{ width: `${(left / total) * 100}%` }} />
+        </span>
+      </div>
       <div className="presets-m">
         {presets.map((p, i) => (
           <span key={p.label} className={`preset${i === active ? " is-active" : ""}`}>
@@ -657,13 +699,14 @@ export function TurnDock({ toCall, raise, presets, active = 0, min, max }: {
         <span className="slider">
           <span className="slider-fill" style={{ width: `${frac * 100}%` }} />
           <span className="slider-thumb" style={{ left: `${frac * 100}%` }} />
+          <span className="slider-min">{fmt(min)}</span>
+          <span className="slider-max">{fmt(max)}</span>
         </span>
         <span className="step-btn">
           <Plus size={16} strokeWidth={2.2} />
         </span>
-        <span className="amount-box">{fmt(raise)}</span>
       </div>
-      <div className="dock-acts">
+      <div className="tp-acts">
         <button type="button" className="act act-fold">
           <span>Bỏ</span>
         </button>
@@ -676,10 +719,6 @@ export function TurnDock({ toCall, raise, presets, active = 0, min, max }: {
           <b>{fmt(raise)}</b>
         </button>
       </div>
-    </div>
+    </PhonePanel>
   );
-}
-
-export function SheetGrabber() {
-  return <span className="grabber" />;
 }

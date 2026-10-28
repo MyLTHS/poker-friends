@@ -31,10 +31,9 @@ import {
   HomeBar,
   IconBtn,
   MobileAppBar,
-  MobileTabBar,
+  MobileRail,
   PlayingCard,
   Root,
-  StatusBar,
   Strength,
   Wordmark,
   fmt,
@@ -72,13 +71,15 @@ function AuthHero({ headline, sub }: { headline: ReactNode; sub: ReactNode }) {
         <h1 className="hero-title">{headline}</h1>
         <p className="hero-sub">{sub}</p>
       </div>
+      <div className="hero-lamp" />
       <div className="hero-table">
         <div className="hero-felt">
           <div className="felt-line" />
         </div>
         <div className="hero-cards">
-          <PlayingCard card={card("As")} w={96} rotate={-12} />
-          <PlayingCard card={card("Kh")} w={96} rotate={6} />
+          <PlayingCard card="back" w={92} rotate={-24} />
+          <PlayingCard card={card("As")} w={96} rotate={-10} />
+          <PlayingCard card={card("Kh")} w={96} rotate={7} />
         </div>
         <div className="hero-chips hc-1">
           <ChipStack amount={760} cols={3} size={34} max={5} />
@@ -103,24 +104,29 @@ function AuthHero({ headline, sub }: { headline: ReactNode; sub: ReactNode }) {
   );
 }
 
+/** Landscape phone: the left half of the login, a corner of the felt under the brand. */
 function MobileHero({ title, sub }: { title: ReactNode; sub?: ReactNode }) {
   return (
     <div className="m-hero">
+      <div className="hero-lamp" />
       <div className="m-hero-felt">
         <div className="felt-line" />
       </div>
       <div className="m-hero-content">
         <Wordmark small />
+        <span className="eyebrow">Texas Hold'em · chip ảo · giữa bạn bè</span>
         <h1 className="m-hero-title">{title}</h1>
         {sub && <p className="m-hero-sub">{sub}</p>}
       </div>
       <div className="m-hero-cards">
-        <PlayingCard card={card("As")} w={52} rotate={-14} />
-        <PlayingCard card={card("Kh")} w={52} rotate={8} />
+        <PlayingCard card="back" w={54} rotate={-26} />
+        <PlayingCard card={card("As")} w={56} rotate={-12} />
+        <PlayingCard card={card("Kh")} w={56} rotate={8} />
       </div>
       <div className="m-hero-chips">
-        <ChipStack amount={630} cols={3} size={22} max={4} />
+        <ChipStack amount={630} cols={3} size={24} max={4} />
       </div>
+      <span className="hero-dealer">D</span>
     </div>
   );
 }
@@ -140,7 +146,16 @@ function Checkbox({ on, children }: { on: boolean; children: ReactNode }) {
 /* ================= login ================= */
 
 function LoginForm({ device }: { device: Device }) {
-  const lg = device === "mobile" ? "lg" : "lg";
+  const alternatives = (
+    <>
+      <Btn kind="light" size="lg" block icon={<GoogleG />}>
+        Tiếp tục với Google
+      </Btn>
+      <Btn kind="ghost" size="lg" block icon={<UserRound size={18} strokeWidth={1.8} />}>
+        Chơi ngay bằng khách
+      </Btn>
+    </>
+  );
   return (
     <div className="form-stack">
       <Field label="Email" icon={<Mail size={17} strokeWidth={1.8} />} value="lym@example.com" />
@@ -155,16 +170,11 @@ function LoginForm({ device }: { device: Device }) {
         <Checkbox on>Nhớ đăng nhập</Checkbox>
         <span className="link">Quên mật khẩu?</span>
       </div>
-      <Btn kind="primary" size={lg} block>
+      <Btn kind="primary" size="lg" block>
         Đăng nhập
       </Btn>
       <Or />
-      <Btn kind="light" size={lg} block icon={<GoogleG />}>
-        Tiếp tục với Google
-      </Btn>
-      <Btn kind="ghost" size={lg} block icon={<UserRound size={18} strokeWidth={1.8} />}>
-        Chơi ngay bằng khách
-      </Btn>
+      {device === "desktop" ? alternatives : <div className="form-pair">{alternatives}</div>}
       <p className="form-foot">
         Chưa có tài khoản? <span className="link">Đăng ký</span>
       </p>
@@ -176,9 +186,8 @@ export function Login({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-auth">
-        <StatusBar />
         <MobileHero title="Chào mừng trở lại" sub="Bàn quen đang chờ bạn." />
-        <div className="m-auth-body">
+        <div className="m-auth-form">
           <LoginForm device="mobile" />
         </div>
         <HomeBar />
@@ -212,9 +221,9 @@ export function Login({ device }: { device: Device }) {
 
 /* ================= signup ================= */
 
-function SignupForm() {
-  return (
-    <div className="form-stack">
+function SignupForm({ device }: { device: Device }) {
+  const identity = (
+    <>
       <Field label="Email" icon={<Mail size={17} strokeWidth={1.8} />} value="lym@example.com" state="ok" />
       <Field
         label="Tên ở bàn"
@@ -222,6 +231,11 @@ function SignupForm() {
         value="Lym"
         hint="Bạn bè thấy tên này ở bàn · 2–16 ký tự"
       />
+    </>
+  );
+  return (
+    <div className="form-stack">
+      {device === "desktop" ? identity : <div className="form-pair">{identity}</div>}
       <div className="field">
         <span className="field-label">Mật khẩu</span>
         <span className="input is-focus">
@@ -284,23 +298,32 @@ export function Signup({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-auth">
-        <StatusBar />
         <MobileAppBar
           title="Tạo tài khoản"
+          sub="Vào hội để giữ chip, lịch sử và mở bàn riêng."
           left={
             <IconBtn>
               <ChevronLeft size={22} />
             </IconBtn>
           }
+          right={
+            <span className="appbar-note">
+              Đã có tài khoản? <span className="link">Đăng nhập</span>
+            </span>
+          }
         />
-        <div className="m-page is-under-sheet">
-          <p className="m-lead">Vào hội để giữ chip, lịch sử và mở bàn riêng.</p>
-          <SignupForm />
-        </div>
-        <div className="scrim scrim-soft" />
-        <div className="sheet verify-sheet">
-          <span className="grabber" />
-          <VerifyNotice device="mobile" />
+        <div className="m-split m-signup">
+          <div className="m-col">
+            <SignupForm device="mobile" />
+          </div>
+          <div className="m-col">
+            <span className="step-label">
+              <i>2</i> Sau khi bấm "Tạo tài khoản"
+            </span>
+            <div className="m-card is-quiet">
+              <VerifyNotice device="mobile" />
+            </div>
+          </div>
         </div>
         <HomeBar />
       </Root>
@@ -326,7 +349,7 @@ export function Signup({ device }: { device: Device }) {
           <div className="auth-card">
             <h2 className="auth-title">Tạo tài khoản</h2>
             <p className="auth-sub">Chỉ mất một phút.</p>
-            <SignupForm />
+            <SignupForm device="desktop" />
             <Or />
             <Btn kind="light" size="lg" block icon={<GoogleG />}>
               Đăng ký bằng Google
@@ -425,23 +448,23 @@ export function Forgot({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-auth">
-        <StatusBar />
         <MobileAppBar
           title="Lấy lại mật khẩu"
+          sub="Chip và lịch sử vẫn nằm yên ở bàn."
           left={
             <IconBtn>
               <ChevronLeft size={22} />
             </IconBtn>
           }
         />
-        <div className="m-page">
+        <div className="m-split m-forgot">
           <div className="m-card">
             <ForgotRequest device="mobile" />
           </div>
-          <div className="m-connector">
-            <ArrowDown size={14} strokeWidth={2.2} />
-            Bấm link trong email sẽ mở
-          </div>
+          <span className="flow-arrow">
+            <ArrowRight size={18} strokeWidth={2} />
+            <small>link trong email</small>
+          </span>
           <div className="m-card">
             <ForgotReset device="mobile" />
           </div>
@@ -558,20 +581,24 @@ export function Upgrade({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-auth">
-        <StatusBar />
         <MobileAppBar
           title="Nâng cấp tài khoản"
+          sub="Bạn đang chơi bằng khách"
           left={
             <IconBtn>
               <ChevronLeft size={22} />
             </IconBtn>
           }
         />
-        <div className="m-page">
-          <GuestPass device="mobile" />
-          <KeepRibbon />
-          <UpgradeForm device="mobile" />
-          <p className="m-note">Khách chỉ lưu trên trình duyệt này — xoá dữ liệu trình duyệt là mất chỗ.</p>
+        <div className="m-split m-upgrade">
+          <div className="m-col">
+            <GuestPass device="mobile" />
+            <KeepRibbon />
+            <p className="m-note">Khách chỉ lưu trên trình duyệt này — xoá dữ liệu trình duyệt là mất chỗ.</p>
+          </div>
+          <div className="m-col">
+            <UpgradeForm device="mobile" />
+          </div>
         </div>
         <HomeBar />
       </Root>
@@ -688,30 +715,46 @@ export function Profile({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-app">
-        <StatusBar />
-        <MobileAppBar title="Hồ sơ" right={<span className="link">Sửa</span>} />
-        <div className="m-page m-profile">
-          <div className="p-id-m">
+        <MobileRail active="profile" />
+        <main className="m-main m-profile">
+          <div className="m-col p-card-m">
+            <span className="link is-muted p-edit-m">Sửa</span>
             <Avatar name={PROFILE.name} size={64} className="av-lg" />
-            <span>
-              <b>{PROFILE.name}</b>
-              <small>
-                {PROFILE.email}
-                <Badge kind="gain" icon={<BadgeCheck size={12} strokeWidth={2.4} />}>
-                  Đã xác minh
-                </Badge>
-              </small>
+            <b className="p-name-m">{PROFILE.name}</b>
+            <span className="p-email">
+              {PROFILE.email}
+              <Badge kind="gain" icon={<BadgeCheck size={12} strokeWidth={2.4} />}>
+                Đã xác minh
+              </Badge>
             </span>
+            <div className="p-stats">
+              <span>
+                <b>38</b>
+                <small>ván tối nay</small>
+              </span>
+              <span>
+                <b>2</b>
+                <small>phòng có chip</small>
+              </span>
+              <span>
+                <b>1</b>
+                <small>bàn làm chủ</small>
+              </span>
+            </div>
+            <Btn kind="danger" size="md" block icon={<LogOut size={16} />}>
+              Đăng xuất
+            </Btn>
           </div>
-          <h4 className="m-sec">Phòng đang có chip</h4>
-          <ProfileRooms device="mobile" />
-          <h4 className="m-sec">Cách đăng nhập</h4>
-          <ProfileMethods />
-          <Btn kind="danger" size="lg" block icon={<LogOut size={17} />}>
-            Đăng xuất
-          </Btn>
-        </div>
-        <MobileTabBar active="profile" />
+          <div className="m-col">
+            <div className="m-sec-row">
+              <h4 className="m-sec">Phòng đang có chip</h4>
+              <span className="link is-muted">Xem lịch sử</span>
+            </div>
+            <ProfileRooms device="mobile" />
+            <h4 className="m-sec">Cách đăng nhập</h4>
+            <ProfileMethods />
+          </div>
+        </main>
         <HomeBar />
       </Root>
     );

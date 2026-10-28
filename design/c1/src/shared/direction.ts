@@ -4,7 +4,7 @@ import type { Device, ScreenId } from "./screens";
 
 /** What each design direction (src/directions/<id>/index.tsx) exports as default. */
 export type Direction = {
-  id: "d1" | "d2" | "d3";
+  id: "d1" | "d2" | "d3" | "d4";
   name: string; // Vietnamese, 2–4 words
   tagline: string; // one line
   description: string; // 2–4 sentences: mood, who it suits, strengths and trade-offs
