@@ -1,1054 +1,902 @@
-// Table screens: turn, showdown, 7-2, reconnect, owner panel, chat.
+// Kính & Ánh Kim (d2) — table screens: my turn, showdown, the 7-2 moment, reconnect / paused,
+// owner panel, chat. Desktop: top bar + stage + a glass column on the right. Phone: stage on
+// the left, a glass column (or drawer / sheet) along the right edge.
 import type { ReactNode } from "react";
 import {
+  Check,
   Copy,
-  Info,
-  Lock,
-  LogOut,
-  MessageCircle,
+  Crown,
+  DoorClosed,
+  Eye,
+  Hourglass,
   Minus,
-  Pause,
+  PauseCircle,
   Plus,
   RefreshCw,
   Send,
   ServerCrash,
   Smile,
   Sparkles,
-  Trophy,
-  UserPlus,
+  Timer,
   UserX,
   WifiOff,
   X,
 } from "lucide-react";
 
-import {
-  CHAT,
-  HANDS,
-  OWNER,
-  QUICK_EMOJI,
-  SEVEN_DEUCE,
-  TABLE_SHOWDOWN,
-  TABLE_TURN,
-  card,
-  type Seat,
-} from "../../../shared/data";
+import { CHAT, OWNER, QUICK_EMOJI, SEVEN_DEUCE, TABLE_SHOWDOWN, TABLE_TURN, type Seat } from "../../../shared/data";
 import type { Device } from "../../../shared/screens";
+import { fmt } from "../lib";
 import {
-  D_SEATS,
-  DeskTable,
-  IdleBar,
-  MobHero,
-  MobTable,
-  TurnBar,
-  TurnSheet,
-  type DeskTableProps,
-  type MobTableProps,
+  Actions,
+  HeroCards,
+  LogLine,
+  MiniCards,
+  MTableTop,
+  Pot,
+  STAGE,
+  SEAT_AT,
+  Table,
+  TableTop,
+  TurnHead,
+  type SeatOpts,
 } from "../table";
-import {
-  Avatar,
-  Badge,
-  Btn,
-  CardText,
-  Check,
-  Chip,
-  ChipStack,
-  Field,
-  HomeBar,
-  IconBtn,
-  OnTable,
-  PCard,
-  Progress,
-  Root,
-  SecHead,
-  Seg,
-  VariantCap,
-  fmt,
-  type Pt,
-} from "../ui";
+import { Avatar, Btn, Chip, Eyebrow, Glass, IconBtn, Pill, Ring, Root, Seg, Suit } from "../ui";
 
-const ME_TURN = TABLE_TURN.seats.find((s) => s.isMe)!;
-const ME_SHOW = TABLE_SHOWDOWN.seats.find((s) => s.isMe)!;
-/** Board cards that make Chi's flush (9♥ K♥ 7♥ with A♥ 5♥). */
-const SHOW_MARKS = [true, false, true, false, true];
+const T = TABLE_TURN;
+const SD = TABLE_SHOWDOWN;
+const S7 = SEVEN_DEUCE;
+const ME_CARDS = T.seats[0].cards!;
 
-/* =====================================================================
-   Right-column panels (desktop)
-   ===================================================================== */
-
-function LogRow({ n, a, x, now, auto }: { n: string; a: ReactNode; x?: ReactNode; now?: boolean; auto?: boolean }) {
+/** The stage box: under the top bar on desktop, the left part of the phone. */
+function Stage({ d, children, className = "" }: { d: Device; children: ReactNode; className?: string }) {
   return (
-    <div className={`log-r${now ? " now" : ""}${auto ? " auto" : ""}`}>
-      <span className="log-n">{n}</span>
-      <span className="log-a">{a}</span>
-      {x && <span className="log-x">{x}</span>}
+    <div className={`k-stagebox k-stagebox-${d} ${className}`} style={{ width: STAGE[d].w, height: STAGE[d].h }}>
+      {children}
     </div>
   );
 }
 
-function LogPanel() {
+/* ============================================================= table-turn */
+
+function TurnLog() {
   return (
-    <div className="log">
-      <div className="log-head">
-        <span className="serif">Ván #37</span>
-        <span className="mono">21:03 · blind 10/20</span>
-      </div>
-      <div className="log-street">
-        <span className="eyebrow">Preflop</span>
-        <span className="sec-rule" />
-        <span className="mono">pot 180</span>
-      </div>
-      <LogRow n="Giang" a="bịt nhỏ" x="10" />
-      <LogRow n="Hà" a="bịt lớn" x="20" />
-      <LogRow n="Khoa" a="theo" x="20" />
-      <LogRow n="Lym" a="tố lên" x="30" />
-      <LogRow n="An" a="theo" x="30" />
-      <LogRow n="Bình" a="bỏ bài" />
-      <LogRow n="Chi" a="theo" x="30" />
-      <LogRow n="Giang, Hà, Khoa" a="theo" x="30" />
-      <div className="log-street">
-        <span className="eyebrow">Flop</span>
-        <span className="log-cards">
-          {TABLE_TURN.board.map((c, i) => (
-            <CardText key={i} c={c} />
-          ))}
-        </span>
-        <span className="sec-rule" />
-        <span className="mono">pot 260</span>
-      </div>
-      <LogRow n="Giang" a="check · tự động" x={<WifiOff size={12} strokeWidth={2} />} auto />
-      <LogRow n="Hà" a="check" />
-      <LogRow n="Khoa" a="check" />
-      <LogRow n="Lym" a="check" />
-      <LogRow n="An" a="cược" x="40" />
-      <LogRow n="Chi" a="theo" x="40" />
-      <LogRow n="Hà" a="bỏ bài" />
-      <LogRow n="Lym" a="đang nghĩ…" x="0:14" now />
-      <div className="log-street pending">
-        <span className="eyebrow">Turn · River</span>
-        <span className="sec-rule" />
-        <span>chưa chia</span>
-      </div>
-      <p className="side-foot">
-        Mọi ván được ghi lại đầy đủ — xem lại từng bước ở <b>Lịch sử</b>.
-      </p>
-    </div>
-  );
-}
-
-function PlayersPanel({ seats, spectators }: { seats: Seat[]; spectators: string[] }) {
-  const state: Record<string, ReactNode> = {
-    winner: <Badge kind="ink">Thắng</Badge>,
-    "all-in": <Badge kind="red">All-in</Badge>,
-    folded: <Badge kind="muted">Đã bỏ</Badge>,
-    "sitting-out": <Badge kind="dash">Đang nghỉ</Badge>,
-    disconnected: <Badge kind="warn">Mất kết nối</Badge>,
-  };
-  return (
-    <div className="plist">
-      <SecHead title="Tại bàn" meta={`${seats.filter((s) => s.state !== "empty").length}/9 ghế`} />
-      {seats.map((s) => (
-        <div key={s.seat} className={`pl-r${s.state === "empty" ? " empty" : ""}${s.isMe ? " me" : ""}`}>
-          <span className="pl-seat mono">{String(s.seat).padStart(2, "0")}</span>
-          {s.state === "empty" ? (
-            <>
-              <span className="pl-hole" />
-              <span className="pl-name">Ghế trống</span>
-              <span className="pl-mini">mời bạn vào</span>
-            </>
-          ) : (
-            <>
-              <Avatar name={s.name!} size={28} />
-              <span className="pl-name">
-                {s.name}
-                {s.isMe && <em> · bạn</em>}
-                {s.isButton && <span className="pl-d">D</span>}
-              </span>
-              <span className="pl-st">{state[s.state]}</span>
-              <span className="mono pl-stack">{fmt(s.stack ?? 0)}</span>
-            </>
-          )}
-        </div>
-      ))}
-      <SecHead title="Người xem" meta={`${spectators.length} người`} />
-      <div className="pl-specs">
-        {spectators.map((n) => (
-          <span key={n} className="pl-spec">
-            <Avatar name={n} size={24} />
-            {n}
-          </span>
-        ))}
-      </div>
-      <Btn v="line" s="md" block icon={<UserPlus size={16} strokeWidth={1.8} />}>
-        Mời thêm bạn
-      </Btn>
-    </div>
-  );
-}
-
-function ChatLine({ m, me, spectator }: { m: (typeof CHAT)[number]; me?: boolean; spectator?: boolean }) {
-  return (
-    <div className={`msg${me ? " me" : ""}`}>
-      <Avatar name={m.name} size={28} />
-      <div className="msg-b">
-        <div className="msg-h">
-          <b>{m.name}</b>
-          {me && <em>bạn</em>}
-          {spectator && <Badge kind="dash">đang xem</Badge>}
-          <span className="mono">{m.at}</span>
-        </div>
-        <p>{m.text.replace("(đang xem) ", "")}</p>
-      </div>
-    </div>
-  );
-}
-
-function ChatBody() {
-  return (
-    <>
-      <div className="msg-sys">
-        <span className="sec-rule" />
-        <span>
-          <Trophy size={12} strokeWidth={2} /> Ván #38 · Chi thắng <b className="mono">1.840</b>
-        </span>
-        <span className="sec-rule" />
-      </div>
-      {CHAT.map((m, i) => (
-        <ChatLine key={i} m={m} me={m.name === "Lym"} spectator={m.name === "Mai"} />
-      ))}
-    </>
-  );
-}
-
-function ChatComposer() {
-  return (
-    <div className="composer">
-      <div className="emoji-row">
-        {QUICK_EMOJI.map((e) => (
-          <span key={e} className="emoji">
-            {e}
-          </span>
-        ))}
-        <span className="emoji more">
-          <Smile size={18} strokeWidth={1.8} />
-        </span>
-      </div>
-      <div className="compose-row">
-        <Field placeholder="Nhắn cho cả bàn…" />
-        <span className="send">
-          <Send size={17} strokeWidth={1.9} />
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function ChatPanel() {
-  return (
-    <div className="chat">
-      <div className="chat-specs">
-        <span className="eyebrow">Đang xem</span>
-        <span className="spec-avs">
-          {TABLE_SHOWDOWN.spectators.map((n) => (
-            <Avatar key={n} name={n} size={24} />
-          ))}
-        </span>
-        <span>{TABLE_SHOWDOWN.spectators.join(", ")}</span>
-      </div>
-      <div className="chat-list">
-        <ChatBody />
-      </div>
-      <ChatComposer />
-    </div>
-  );
-}
-
-function SevenLedger({ compact }: { compact?: boolean }) {
-  return (
-    <div className={`ledger${compact ? " compact" : ""}`}>
-      {SEVEN_DEUCE.payments.map((p) => (
-        <div key={p.name} className="lg-r">
-          <Avatar name={p.name} size={compact ? 24 : 26} />
-          <span className="lg-n">
-            {p.name}
-            {p.name === "Lym" && <em> · bạn</em>}
-          </span>
-          {p.note && <span className="lg-note">{p.note}</span>}
-          <span className="mono neg lg-v">−{p.amount}</span>
-        </div>
-      ))}
-      <div className="lg-r lg-zero">
-        <Avatar name="Hà" size={compact ? 24 : 26} />
-        <span className="lg-n">Hà</span>
-        <span className="lg-note">còn 0 chip — không trả</span>
-        <span className="mono lg-v">0</span>
-      </div>
-      <div className="lg-total">
-        <span>
-          Bình nhận <em>({SEVEN_DEUCE.payments.length} × {SEVEN_DEUCE.bonus})</em>
-        </span>
-        <b className="mono">+{SEVEN_DEUCE.total}</b>
-      </div>
-    </div>
-  );
-}
-
-function SevenPanel() {
-  return (
-    <div className="seven-side">
-      <div className="log-head">
-        <span className="serif">Ván #37 · kết thúc</span>
-        <span className="mono">21:03</span>
-      </div>
-      <LogRow n="Bình" a="tố lên" x="120" />
-      <LogRow n="Còn lại" a="đều bỏ bài · 4 người" />
-      <LogRow n="Bình" a="ăn pot" x="340" />
-      <div className="rule-box">
-        <span className="eyebrow red">
-          <Sparkles size={12} strokeWidth={2} /> Luật thưởng 7-2
-        </span>
-        <p>
-          Cầm <CardText c={card("7c")} /> <CardText c={card("2d")} /> và ăn pot vì mọi người bỏ bài → bài tự lật, mỗi
-          người đang ngồi bàn trả <b className="mono">{SEVEN_DEUCE.bonus}</b>, kể cả người đang nghỉ.
-        </p>
-      </div>
-      <SecHead title="Sổ thưởng" meta="6 dòng" />
-      <SevenLedger />
-    </div>
-  );
-}
-
-/* =====================================================================
-   Shared data shapes for the scenes
-   ===================================================================== */
-
-const turnDesk: DeskTableProps = {
-  room: TABLE_TURN.room,
-  blinds: TABLE_TURN.blinds,
-  handNo: TABLE_TURN.handNo,
-  seats: TABLE_TURN.seats,
-  board: TABLE_TURN.board,
-  pot: TABLE_TURN.pot,
-  showBets: true,
-  heroHint: (
-    <>
-      <span className="eyebrow">Bài của bạn</span>
-      <b>K cao, chờ sảnh</b>
-      <small>Cần một lá 10 · còn 4 lá</small>
-    </>
-  ),
-  side: <LogPanel />,
-  sideTab: 2,
-  bar: <TurnBar />,
-};
-
-const turnMob: MobTableProps = {
-  room: TABLE_TURN.room,
-  blinds: TABLE_TURN.blinds,
-  handNo: TABLE_TURN.handNo,
-  pot: TABLE_TURN.pot,
-  seats: TABLE_TURN.seats,
-  board: TABLE_TURN.board,
-  showBets: true,
-};
-
-const turnHint = (
-  <>
-    <span className="eyebrow">Bài của bạn</span>
-    <b>K cao</b>
-    <small>chờ sảnh, cần lá 10</small>
-  </>
-);
-
-function WinBanner({ at, small }: { at: Pt; small?: boolean }) {
-  const chi = TABLE_SHOWDOWN.seats.find((s) => s.state === "winner")!;
-  return (
-    <OnTable at={at} className={`win-banner${small ? " sm" : ""}`}>
-      <span className="wb-txt">
-        <span className="wb-top">
-          {!small && <Trophy size={15} strokeWidth={2} />}
-          <b>{chi.name} thắng</b>
-          <span className="mono">{fmt(TABLE_SHOWDOWN.pot)}</span>
-        </span>
-        <span className="wb-hand">{chi.hand}</span>
+    <section className="k-sec k-col-log">
+      <span className="k-sec-h">
+        <Eyebrow>Diễn biến ván #37</Eyebrow>
+        <small className="k-col-note">Flop</small>
       </span>
-      {small && (
-        <span className="wb-cards">
-          {chi.cards!.map((c, i) => (
-            <PCard key={i} c={c} size="xs" />
-          ))}
-        </span>
-      )}
-    </OnTable>
+      <ul className="k-log">
+        <LogLine>
+          Flop <MiniCards cards={T.board} />
+        </LogLine>
+        <LogLine who="An">
+          <b>An</b> cược <b className="k-num">40</b>
+        </LogLine>
+        <LogLine who="Chi">
+          <b>Chi</b> theo <b className="k-num">40</b>
+        </LogLine>
+        <LogLine who="Lym" tone="now">
+          <b>Tới lượt bạn</b> · cần theo <b className="k-num">40</b>
+        </LogLine>
+      </ul>
+    </section>
   );
 }
 
-const showDesk: DeskTableProps = {
-  room: TABLE_SHOWDOWN.room,
-  blinds: TABLE_SHOWDOWN.blinds,
-  handNo: TABLE_SHOWDOWN.handNo,
-  seats: TABLE_SHOWDOWN.seats,
-  board: TABLE_SHOWDOWN.board,
-  marks: SHOW_MARKS,
-  win: { seat: 4, amount: TABLE_SHOWDOWN.pot },
-  spectators: TABLE_SHOWDOWN.spectators,
-  center: <WinBanner at={[550, 214]} />,
-  under: (
-    <svg className="flow" width={1100} height={704} aria-hidden="true">
-      <path d="M 550 236 Q 430 236 338 206" />
-    </svg>
-  ),
-  over: (
-    <OnTable at={D_SEATS[4].bet} className="collect">
-      <ChipStack />
-      <span className="mono">+{fmt(TABLE_SHOWDOWN.pot)}</span>
-    </OnTable>
-  ),
-  heroHint: (
-    <>
-      <span className="eyebrow">Kết quả của bạn</span>
-      <b>Bộ ba K · thua</b>
-      <small>
-        Ván #38: <span className="mono neg">{fmt(HANDS[0].players.find((p) => p.name === "Lym")!.net)}</span>
-      </small>
-    </>
-  ),
-  sideTab: 0,
-  side: <PlayersPanel seats={TABLE_SHOWDOWN.seats} spectators={TABLE_SHOWDOWN.spectators} />,
-  bar: (
-    <IdleBar
-      eyebrow="Ván #38 · lật bài"
-      title="Ván #39 bắt đầu sau 0:04"
-      progress={0.6}
-      sub="Chỉ bài của Lym và Chi được lật; bài người khác vẫn úp."
-      actions={
-        <>
-          <Btn v="line" s="lg">
-            Xem lại ván #38
-          </Btn>
-          <Btn v="ghost" s="lg">
-            Đứng dậy
-          </Btn>
-        </>
-      }
-    />
-  ),
-};
-
-const showMob: MobTableProps = {
-  room: TABLE_SHOWDOWN.room,
-  blinds: TABLE_SHOWDOWN.blinds,
-  handNo: TABLE_SHOWDOWN.handNo,
-  pot: TABLE_SHOWDOWN.pot,
-  seats: TABLE_SHOWDOWN.seats,
-  board: TABLE_SHOWDOWN.board,
-  marks: SHOW_MARKS,
-  center: <WinBanner at={[195, 236]} small />,
-};
-
-const showHint = (
-  <>
-    <span className="eyebrow">Kết quả</span>
-    <b>Bộ ba K</b>
-    <small>
-      thua · <span className="mono neg">{fmt(HANDS[0].players.find((p) => p.name === "Lym")!.net)}</span>
-    </small>
-  </>
-);
-
-/* =====================================================================
-   table-turn
-   ===================================================================== */
-
-export function TableTurn({ device }: { device: Device }) {
-  if (device === "desktop")
+function TableTurn({ device: d }: { device: Device }) {
+  const hero = <HeroCards cards={ME_CARDS} d={d} />;
+  if (d === "desktop")
     return (
-      <Root device="desktop">
-        <DeskTable {...turnDesk} />
-      </Root>
-    );
-  return (
-    <Root device="mobile">
-      <MobTable {...turnMob} />
-      <MobHero s={ME_TURN} hint={turnHint} />
-      <TurnSheet />
-    </Root>
-  );
-}
-
-/* =====================================================================
-   table-showdown
-   ===================================================================== */
-
-export function TableShowdown({ device }: { device: Device }) {
-  if (device === "desktop")
-    return (
-      <Root device="desktop">
-        <DeskTable {...showDesk} />
-      </Root>
-    );
-  return (
-    <Root device="mobile">
-      <MobTable {...showMob} />
-      <MobHero s={ME_SHOW} hint={showHint} />
-      <div className="msheet idle" style={{ top: 604 }}>
-        <span className="handle" />
-        <div className="idle-row">
-          <span className="serif idle-t">Ván #39 sau 0:04</span>
-          <Progress value={0.6} tone="ink" />
-        </div>
-        <div className="idle-specs">
-          <span className="spec-avs">
-            {TABLE_SHOWDOWN.spectators.map((n) => (
-              <Avatar key={n} name={n} size={24} />
+      <Root device={d} bg="table">
+        <TableTop hand={T.handNo} />
+        <Stage d={d}>
+          <Table d={d} seats={T.seats} board={T.board} pot={T.pot} hero={hero} />
+        </Stage>
+        <aside className="k-col k-glass">
+          <TurnHead d={d} />
+          <div className="k-tocall">
+            <span>
+              Cần theo <b className="k-num">40</b>
+            </span>
+            <i />
+            <span>
+              Pot <b className="k-num">260</b>
+            </span>
+            <i />
+            <span>
+              Tố tối thiểu <b className="k-num">80</b>
+            </span>
+          </div>
+          <Actions d={d} />
+          <div className="k-hr" />
+          <TurnLog />
+          <div className="k-col-foot k-peek">
+            <span className="k-sec-h">
+              <Eyebrow tone="mute">Chat</Eyebrow>
+              <span className="k-link">
+                Mở chat · <b className="k-num">2</b> tin mới
+              </span>
+            </span>
+            {CHAT.slice(0, 2).map((m) => (
+              <span key={m.at + m.name} className="k-peek-i">
+                <Avatar name={m.name} size={22} ring="none" />
+                <b>{m.name}</b>
+                <span>{m.text}</span>
+              </span>
             ))}
-          </span>
-          <span>
-            <b>{TABLE_SHOWDOWN.spectators.length} người xem</b> · {TABLE_SHOWDOWN.spectators.join(", ")}
-          </span>
-        </div>
-        <div className="idle-checks">
-          <Check on>Tự check / bỏ</Check>
-          <Check>Nghỉ từ ván sau</Check>
-        </div>
-        <div className="idle-acts">
-          <Btn v="line" s="lg">
-            Xem lại ván
-          </Btn>
-          <Btn v="ink" s="lg" icon={<MessageCircle size={17} strokeWidth={1.9} />}>
-            Chat <em className="count">2</em>
-          </Btn>
-        </div>
-        <HomeBar />
-      </div>
+          </div>
+        </aside>
+      </Root>
+    );
+  return (
+    <Root device={d} bg="table">
+      <Stage d={d}>
+        <Table d={d} seats={T.seats} board={T.board} pot={T.pot} hero={hero} />
+        <MTableTop hand={T.handNo} />
+      </Stage>
+      <aside className="k-mcol k-glass">
+        <TurnHead d={d} />
+        <Actions d={d} />
+      </aside>
     </Root>
   );
 }
 
-/* =====================================================================
-   seven-deuce — Bình (seat 3) bluffs with 7-2; everyone else pays 50.
-   Giang has left the table (seat 7 empty), Hà has 0 chips and pays nothing.
-   ===================================================================== */
+/* ========================================================= table-showdown */
 
-const SD_SEATS: Seat[] = TABLE_TURN.seats.map((s): Seat => {
-  if (s.seat === 3) return { seat: 3, name: "Bình", stack: 1500, cards: SEVEN_DEUCE.cards, state: "winner", hand: `ăn pot ${SEVEN_DEUCE.pot}` };
-  if (s.seat === 7) return { seat: 7, state: "empty" };
-  const paid = SEVEN_DEUCE.payments.some((p) => p.name === s.name) ? SEVEN_DEUCE.bonus : 0;
-  const base = { ...s, stack: (s.stack ?? 0) - paid, bet: undefined, timer: undefined, lastAction: undefined };
-  if (s.state === "sitting-out") return base;
-  if (s.state === "empty") return s;
-  return { ...base, state: "folded", cards: s.isMe ? s.cards : [] };
-});
+const SD_OPTS: Record<number, SeatOpts> = { 4: { reveal: true } };
 
-const PAYERS: { seat: number; note?: string }[] = [
-  { seat: 1 },
-  { seat: 2 },
-  { seat: 4 },
-  { seat: 6, note: "đang nghỉ vẫn trả" },
-  { seat: 9 },
+function Watchers({ d }: { d: Device }) {
+  return (
+    <div className={`k-watchbar ${d === "mobile" ? "k-watchbar-m" : ""}`}>
+      <Eye size={d === "mobile" ? 14 : 16} strokeWidth={2.2} />
+      <b className="k-num">{SD.spectators.length}</b>
+      <span>đang xem</span>
+      <span className="k-watchbar-av">
+        {SD.spectators.map((n) => (
+          <span key={n} className="k-watcher">
+            <Avatar name={n} size={d === "mobile" ? 22 : 26} ring="none" />
+            {d === "desktop" && n}
+          </span>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+function WinnerCard({ d }: { d: Device }) {
+  const mob = d === "mobile";
+  return (
+    <div className={`k-win ${mob ? "k-win-m" : ""}`}>
+      <span className="k-win-rays" aria-hidden />
+      <Avatar name="Chi" size={mob ? 40 : 64} ring="gold" />
+      <span className="k-win-t">
+        <small>
+          <Crown size={mob ? 11 : 13} strokeWidth={2.4} /> Chi thắng ván #{SD.handNo}
+        </small>
+        <b className="k-num">+{fmt(SD.winner.amount)}</b>
+        <em>{SD.winner.hand}</em>
+      </span>
+    </div>
+  );
+}
+
+function ShownHands({ d }: { d: Device }) {
+  const mob = d === "mobile";
+  const rows = [
+    { name: "Chi", cards: SD.seats[3].cards!, hand: "Thùng già A", win: true },
+    { name: "Lym", cards: SD.seats[0].cards!, hand: "Bộ ba K", win: false },
+  ];
+  return (
+    <div className="k-shownlist">
+      {rows.map((r) => (
+        <div key={r.name} className={`k-shownrow ${r.win ? "win" : ""}`}>
+          {!mob && <Avatar name={r.name} size={30} ring={r.win ? "gold" : "steel"} />}
+          <span className="k-shownrow-n">
+            <b>
+              {r.name}
+              {r.name === "Lym" && <em>bạn</em>}
+            </b>
+            <small>{r.hand}</small>
+          </span>
+          <MiniCards cards={r.cards} w={mob ? 24 : 30} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NextHand({ d, n = 4, hand = 39 }: { d: Device; n?: number; hand?: number }) {
+  return (
+    <div className={`k-next ${d === "mobile" ? "k-next-m" : ""}`}>
+      <Ring size={d === "mobile" ? 34 : 44} left={n} total={6} stroke={3} tone="gold">
+        <b className="k-num">{n}</b>
+      </Ring>
+      <span>
+        <b>Ván #{hand} sắp chia</b>
+        <small>Tự chia sau {n} giây</small>
+      </span>
+    </div>
+  );
+}
+
+function TableShowdown({ device: d }: { device: Device }) {
+  const hero = <HeroCards cards={SD.seats[0].cards!} d={d} />;
+  const table = (
+    <Table
+      d={d}
+      seats={SD.seats}
+      board={SD.board}
+      pot={SD.pot}
+      potLabel="Chi ăn"
+      opts={SD_OPTS}
+      hero={hero}
+      glowBoard={[0, 1, 2, 4]}
+      dimBoard={[3]}
+    />
+  );
+  if (d === "desktop")
+    return (
+      <Root device={d} bg="table">
+        <TableTop hand={SD.handNo} extra={<Pill tone="gold">Showdown</Pill>} />
+        <Stage d={d}>
+          {table}
+          <Watchers d={d} />
+        </Stage>
+        <aside className="k-col k-glass">
+          <Eyebrow>Showdown · ván #{SD.handNo}</Eyebrow>
+          <WinnerCard d={d} />
+          <ShownHands d={d} />
+          <div className="k-hr" />
+          <section className="k-sec">
+            <Eyebrow tone="mute">Trên bàn lúc này</Eyebrow>
+            <ul className="k-log">
+              <LogLine who="An">
+                <b>An</b> all-in <b className="k-num">920</b>, hết chip
+              </LogLine>
+              <LogLine who="Giang">
+                <b>Giang</b> mất kết nối · giữ ghế <b className="k-num">0:42</b>
+              </LogLine>
+              <LogLine who="Dũng">
+                <b>Dũng</b> đang nghỉ, không vào ván
+              </LogLine>
+              <LogLine>
+                <b>2 ghế trống</b> · bạn bè vào ngồi được
+              </LogLine>
+            </ul>
+          </section>
+          <div className="k-col-foot">
+            <NextHand d={d} />
+          </div>
+        </aside>
+      </Root>
+    );
+  return (
+    <Root device={d} bg="table">
+      <Stage d={d}>
+        {table}
+        <MTableTop hand={SD.handNo} right={false} />
+      </Stage>
+      <aside className="k-mcol k-glass">
+        <WinnerCard d={d} />
+        <ShownHands d={d} />
+        <NextHand d={d} />
+        <Watchers d={d} />
+      </aside>
+    </Root>
+  );
+}
+
+/* ============================================================ seven-deuce */
+
+const S7_SEATS: Seat[] = [
+  { seat: 1, name: "Lym", stack: 1410, state: "folded", isMe: true },
+  { seat: 2, name: "An", stack: 870, state: "folded" },
+  { seat: 3, name: "Bình", stack: 1500, cards: S7.cards, state: "winner" },
+  { seat: 4, name: "Chi", stack: 2160, state: "folded", isButton: true },
+  { seat: 5, state: "empty" },
+  { seat: 6, name: "Dũng", stack: 590, state: "sitting-out" },
+  { seat: 7, state: "empty" },
+  { seat: 8, name: "Hà", stack: 0, state: "folded" },
+  { seat: 9, name: "Khoa", stack: 250, state: "folded" },
 ];
 
-function payLines(to: Pt, from: Pt[]) {
-  return from.map(([x, y], i) => {
-    const mx = (x + to[0]) / 2;
-    const my = (y + to[1]) / 2 + (y > to[1] ? 30 : -30);
-    return <path key={i} d={`M ${x} ${y} Q ${mx} ${my} ${to[0] + 18} ${to[1]}`} />;
-  });
+function s7Opts(d: Device): Record<number, SeatOpts> {
+  const out: Record<number, SeatOpts> = {};
+  for (const s of S7_SEATS) {
+    if (!s.name) continue;
+    const p = S7.payments.find((x) => x.name === s.name);
+    if (p) out[s.seat] = { tag: <Pill tone="red">−{p.amount}</Pill>, extra: d === "desktop" && p.note ? <small className="k-paynote">{p.note}</small> : undefined };
+    else if (s.name === "Hà") out[s.seat] = { tag: <Pill tone="mute">{d === "desktop" ? "Hết chip · không trả" : "Hết chip"}</Pill> };
+    else if (s.name === "Bình") out[s.seat] = { reveal: true, tag: <Pill tone="gold" icon={<Crown size={12} strokeWidth={2.4} />}>+{S7.total}</Pill> };
+  }
+  return out;
 }
 
-function SevenDeuceDesk() {
-  const to = D_SEATS[3].bet;
+/** Light trails from every payer to Bình, with a chip riding each one. */
+function Trails({ d }: { d: Device }) {
+  const to = SEAT_AT[d][3];
+  const payers = [1, 2, 4, 6, 9];
+  const st = STAGE[d];
   return (
-    <DeskTable
-      room={TABLE_TURN.room}
-      blinds={TABLE_TURN.blinds}
-      handNo={TABLE_TURN.handNo}
-      seats={SD_SEATS}
-      board={TABLE_TURN.board}
-      boardDim
-      center={<></>}
-      seatTabs={{
-        3: (
-          <Badge kind="red" icon={<Sparkles size={11} strokeWidth={2} />}>
-            Bluff 7-2
-          </Badge>
-        ),
-      }}
-      under={
-        <svg className="flow pay" width={1100} height={704} aria-hidden="true">
-          {payLines(
-            to,
-            PAYERS.map((p) => D_SEATS[p.seat].bet),
-          )}
-        </svg>
-      }
-      over={
-        <>
-          <div className="stamp" style={{ left: 356, top: 214, width: 388, height: 178 }}>
-            <div className="stamp-cards">
-              <PCard c={SEVEN_DEUCE.cards[0]} size="lg" style={{ transform: "rotate(-7deg)" }} />
-              <PCard c={SEVEN_DEUCE.cards[1]} size="lg" style={{ transform: "rotate(5deg) translate(-14px, 6px)" }} />
-            </div>
-            <div className="stamp-txt">
-              <span className="eyebrow red">Thưởng 7-2 · tự lật</span>
-              <b className="serif">Bình bluff thành công!</b>
-              <span className="stamp-sum">
-                <b className="mono">+{SEVEN_DEUCE.total}</b>
-                <small>
-                  {SEVEN_DEUCE.payments.length} người × {SEVEN_DEUCE.bonus} · cộng pot {SEVEN_DEUCE.pot}
-                </small>
-              </span>
-            </div>
-          </div>
-          {PAYERS.map((p) => (
-            <OnTable key={p.seat} at={D_SEATS[p.seat].bet} className="pay-tag">
-              <Chip size={14} />
-              <b className="mono">−{SEVEN_DEUCE.bonus}</b>
-              {p.note && <small>{p.note}</small>}
-            </OnTable>
-          ))}
-          <OnTable at={D_SEATS[8].bet} className="pay-tag zero">
-            <small>0 chip · miễn</small>
-          </OnTable>
-          <OnTable at={to} className="collect">
-            <ChipStack />
-            <span className="mono">+{SEVEN_DEUCE.total}</span>
-          </OnTable>
-        </>
-      }
-      side={<SevenPanel />}
-      sideTab={2}
-      bar={
-        <IdleBar
-          eyebrow="Ván #37 · đã xong"
-          title="Ván #38 bắt đầu sau 0:06"
-          progress={0.25}
-          sub="Đã ghi vào sổ: 5 dòng −50 và 1 dòng +250 cho Bình."
-          actions={
-            <>
-              <Btn v="line" s="lg">
-                Xem lại ván #37
-              </Btn>
-              <Btn v="ghost" s="lg">
-                Đứng dậy
-              </Btn>
-            </>
-          }
-        />
-      }
-    />
-  );
-}
-
-function SevenDeuceMob() {
-  const neg = <Badge kind="red">−50</Badge>;
-  return (
-    <>
-      <MobTable
-        room={TABLE_TURN.room}
-        blinds={TABLE_TURN.blinds}
-        handNo={TABLE_TURN.handNo}
-        pot={SEVEN_DEUCE.pot}
-        seats={SD_SEATS}
-        board={[]}
-        noBoard
-        badges={{ 2: neg, 3: <Badge kind="ink">+250</Badge>, 4: neg, 6: neg, 8: <Badge kind="muted">0 chip</Badge>, 9: neg }}
-        center={
-          <>
-            <div className="board-pos" style={{ left: 155, top: 186 }}>
-              <div className="board board-xs">
-                {TABLE_TURN.board.map((c, i) => (
-                  <PCard key={i} c={c} size="xs" dim />
-                ))}
-              </div>
-            </div>
-            <div className="stamp m" style={{ left: 104, top: 228, width: 182, height: 132 }}>
-              <span className="eyebrow red">Bluff 7-2 · tự lật</span>
-              <div className="stamp-row">
-                <div className="stamp-cards">
-                  <PCard c={SEVEN_DEUCE.cards[0]} size="sm" style={{ transform: "rotate(-7deg)" }} />
-                  <PCard c={SEVEN_DEUCE.cards[1]} size="sm" style={{ transform: "rotate(6deg) translate(-8px, 3px)" }} />
-                </div>
-                <span className="stamp-sum">
-                  <b className="mono">+{SEVEN_DEUCE.total}</b>
-                  <small>pot {SEVEN_DEUCE.pot}</small>
-                </span>
-              </div>
-            </div>
-          </>
-        }
-      />
-      <div className="msheet seven" style={{ top: 460 }}>
-        <span className="handle" />
-        <span className="eyebrow red">
-          <Sparkles size={12} strokeWidth={2} /> Thưởng 7-2 · ván #37
-        </span>
-        <h2 className="serif">Bình bluff 7-2 thành công!</h2>
-        <p className="seven-sub">Mọi người bỏ bài — bài tự lật cho cả bàn. Mỗi người đang ngồi trả {SEVEN_DEUCE.bonus}.</p>
-        <SevenLedger compact />
-        <HomeBar />
-      </div>
-    </>
-  );
-}
-
-export function SevenDeuce({ device }: { device: Device }) {
-  return <Root device={device}>{device === "desktop" ? <SevenDeuceDesk /> : <SevenDeuceMob />}</Root>;
-}
-
-/* =====================================================================
-   reconnect — two variants on one board
-   ===================================================================== */
-
-function ReconnectCard({ compact }: { compact?: boolean }) {
-  return (
-    <div className={`ovl-card${compact ? " compact" : ""}`}>
-      <span className="ovl-ic warn">
-        <RefreshCw size={compact ? 20 : 24} strokeWidth={1.8} />
-      </span>
-      <span className="eyebrow">Mất kết nối · lần thử 3</span>
-      <h2 className="serif">Đang kết nối lại…</h2>
-      {!compact && <p>Bàn vẫn chơi tiếp trong lúc bạn vắng mặt. Đến lượt bạn thì đồng hồ vẫn chạy như thường.</p>}
-      <div className="ovl-timer">
-        <span className="ovl-timer-h">
-          <span>Đồng hồ của bạn vẫn chạy</span>
-          <b className="mono">0:09</b>
-        </span>
-        <Progress value={9 / 20} />
-        <small>Hết giờ: tự check nếu được, không thì tự bỏ bài.</small>
-      </div>
-      <div className="ovl-acts">
-        <Btn v="ink" s={compact ? "md" : "lg"} icon={<RefreshCw size={16} strokeWidth={1.9} />}>
-          Thử lại ngay
-        </Btn>
-        <Btn v="ghost" s={compact ? "md" : "lg"}>
-          Về sảnh
-        </Btn>
-      </div>
-    </div>
-  );
-}
-
-function PausedCard({ compact }: { compact?: boolean }) {
-  return (
-    <div className={`ovl-card paused${compact ? " compact" : ""}`}>
-      <span className="ovl-ic ink">
-        <ServerCrash size={compact ? 20 : 24} strokeWidth={1.8} />
-      </span>
-      <span className="eyebrow">Lỗi máy chủ · 21:04</span>
-      <h2 className="serif">Bàn tạm dừng</h2>
-      <p>Ván #37 dừng đúng chỗ. Không ai mất chip — khi máy chủ chạy lại, ván chơi tiếp từ nhật ký.</p>
-      <div className="ovl-list">
-        <span>
-          <Pause size={14} strokeWidth={2} /> Đồng hồ đã dừng cho mọi người
-        </span>
-        <span>
-          <RefreshCw size={14} strokeWidth={2} /> Đang khôi phục… thử lại sau <b className="mono">5</b> giây
-        </span>
-      </div>
-      <div className="ovl-acts">
-        <Btn v="ink" s={compact ? "md" : "lg"}>
-          Chờ ở bàn
-        </Btn>
-        <Btn v="line" s={compact ? "md" : "lg"}>
-          Về sảnh
-        </Btn>
-      </div>
-    </div>
-  );
-}
-
-function ReconnectDesk() {
-  const meWait: Seat = { ...ME_TURN, timer: { left: 9, total: 20 } };
-  const seats = TABLE_TURN.seats.map((s) => (s.isMe ? meWait : s));
-  return (
-    <>
-      <div className="half" style={{ left: 0, top: 0, width: 719, height: 900 }}>
-        <div className="crop" style={{ left: -190, top: 0 }}>
-          <DeskTable
-            {...turnDesk}
-            seats={seats}
-            status={
-              <Badge kind="warn" icon={<WifiOff size={12} strokeWidth={2} />}>
-                Mất kết nối
-              </Badge>
-            }
-          />
-        </div>
-        <div className="veil" />
-        <VariantCap letter="A">Bạn mất mạng — đồng hồ vẫn chạy</VariantCap>
-        <div className="ovl-pos" style={{ left: 150, top: 220, width: 420 }}>
-          <ReconnectCard />
-        </div>
-      </div>
-      <div className="half-rule" style={{ left: 719 }} />
-      <div className="half" style={{ left: 721, top: 0, width: 719, height: 900 }}>
-        <div className="crop" style={{ left: -190, top: 0 }}>
-          <DeskTable
-            {...turnDesk}
-            seats={seats}
-            status={
-              <Badge kind="ink" icon={<Pause size={12} strokeWidth={2} />}>
-                Tạm dừng
-              </Badge>
-            }
-          />
-        </div>
-        <div className="veil strong" />
-        <VariantCap letter="B">Lỗi máy chủ — bàn tạm dừng</VariantCap>
-        <div className="ovl-pos" style={{ left: 150, top: 220, width: 420 }}>
-          <PausedCard />
-        </div>
-      </div>
-    </>
-  );
-}
-
-function ReconnectMob() {
-  return (
-    <>
-      <div className="half" style={{ left: 0, top: 0, width: 390, height: 421 }}>
-        <div className="crop" style={{ left: 0, top: 0 }}>
-          <MobTable {...turnMob} stripTag={<span className="strip-warn">· mất mạng</span>} />
-        </div>
-        <div className="veil" />
-        <div className="ovl-pos" style={{ left: 24, top: 108, width: 342 }}>
-          <ReconnectCard compact />
-        </div>
-        <VariantCap letter="A">Bạn mất mạng</VariantCap>
-      </div>
-      <div className="half-rule h" style={{ top: 421 }} />
-      <div className="half" style={{ left: 0, top: 423, width: 390, height: 421 }}>
-        <div className="crop" style={{ left: 0, top: -96 }}>
-          <MobTable {...turnMob} />
-        </div>
-        <div className="veil strong" />
-        <div className="ovl-pos" style={{ left: 24, top: 52, width: 342 }}>
-          <PausedCard compact />
-        </div>
-        <VariantCap letter="B">Lỗi máy chủ</VariantCap>
-      </div>
-    </>
-  );
-}
-
-export function Reconnect({ device }: { device: Device }) {
-  return (
-    <Root device={device} className="board-2">
-      {device === "desktop" ? <ReconnectDesk /> : <ReconnectMob />}
-    </Root>
-  );
-}
-
-/* =====================================================================
-   owner-panel
-   ===================================================================== */
-
-type OwnerRow = (typeof OWNER.players)[number];
-const ADJUST: Record<string, number> = { Bình: 500, Dũng: -100 };
-
-function OwnerPlayer({ p, compact }: { p: OwnerRow; compact?: boolean }) {
-  const delta = ADJUST[p.name];
-  const isMe = p.name === "Lym";
-  return (
-    <div className={`own-r${p.inHand ? " locked" : ""}`}>
-      <Avatar name={p.name} size={compact ? 30 : 34} />
-      <span className="own-who">
-        <b>
-          {p.name}
-          {isMe && <em> · bạn</em>}
-        </b>
-        <small>
-          Ghế {p.seat} · {p.inHand ? "đang trong ván" : (p.note ?? "ngoài ván")}
-        </small>
-      </span>
-      <span className="mono own-stack">{fmt(p.stack)}</span>
-      {p.inHand ? (
-        <span className="own-lock">
-          <Lock size={13} strokeWidth={2} />
-          {compact ? "Đợi hết ván" : "Đợi hết ván mới chỉnh"}
-        </span>
-      ) : (
-        <span className="own-step">
-          <span className="stp">
-            <Minus size={14} strokeWidth={2} />
-          </span>
-          <span className={`stp-v mono ${delta > 0 ? "pos" : "neg"}`}>{delta > 0 ? `+${delta}` : `−${-delta}`}</span>
-          <span className="stp">
-            <Plus size={14} strokeWidth={2} />
-          </span>
-          {!compact && (
-            <Btn v={delta > 0 ? "red" : "line"} s="sm">
-              {delta > 0 ? "Cấp" : "Trừ"}
-            </Btn>
-          )}
-        </span>
-      )}
-      {isMe ? (
-        <span className="own-kick ghost" />
-      ) : (
-        <IconBtn icon={<UserX size={16} strokeWidth={1.8} />} label={`Mời ${p.name} ra`} className="own-kick" />
-      )}
-    </div>
-  );
-}
-
-function OwnerBody({ compact }: { compact?: boolean }) {
-  return (
-    <>
-      <section className="own-sec">
-        <SecHead title="Chip người chơi" meta={`${OWNER.players.length} người`} />
-        <p className="note">
-          <Info size={14} strokeWidth={1.9} />
-          Chỉ chỉnh được khi người đó không ở trong ván. Mỗi lần cấp/trừ là một dòng trong sổ.
-        </p>
-        {OWNER.players.map((p) => (
-          <OwnerPlayer key={p.name} p={p} compact={compact} />
-        ))}
-        {compact && (
-          <Btn v="red" s="md" block>
-            Áp dụng: Bình +500 · Dũng −100
-          </Btn>
-        )}
-      </section>
-      <section className="own-sec own-grid">
-        <div>
-          <SecHead title="Blind" />
-          <div className="blind-row">
-            <Field label="Nhỏ" value="20" mono />
-            <span className="slash">/</span>
-            <Field label="Lớn" value="40" mono state="focus" />
-          </div>
-          <span className="pending">
-            <Clock3 /> {OWNER.pending} · đang 10/20
-          </span>
-        </div>
-        <div>
-          <SecHead title="Giây suy nghĩ" />
-          <Seg items={["15", "20", "30", "45"]} on={1} mono className="secs" />
-          <span className="own-hint">Áp dụng từ ván sau · không có giờ dự trữ</span>
-        </div>
-      </section>
-      <section className="own-sec">
-        <SecHead title="Link mời" />
-        <div className="invite-row">
-          <span className="invite-url mono">{OWNER.invite.replace("https://", "")}</span>
-          <Btn v="line" s="sm" icon={<Copy size={14} strokeWidth={1.9} />}>
-            Chép
-          </Btn>
-          <Btn v="ghost" s="sm" icon={<RefreshCw size={14} strokeWidth={1.9} />}>
-            Đổi link
-          </Btn>
-        </div>
-        <span className="own-hint">Đổi link thì link cũ hết hiệu lực ngay.</span>
-      </section>
-      <section className="own-sec danger">
-        <div>
-          <b>Đóng phòng</b>
-          <small>Chốt sổ lời/lỗ và mời mọi người rời bàn. Không mở lại được.</small>
-        </div>
-        <Btn v="danger" s="md" icon={<LogOut size={15} strokeWidth={1.9} />}>
-          Đóng phòng
-        </Btn>
-      </section>
-    </>
-  );
-}
-
-function Clock3() {
-  return (
-    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
-      <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M8 4.6V8l2.4 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+    <svg className="k-trails" width={st.w} height={st.h} viewBox={`0 0 ${st.w} ${st.h}`} aria-hidden>
+      <defs>
+        <linearGradient id="k-trail" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="#f0dcaa" stopOpacity="0" />
+          <stop offset="1" stopColor="#f0dcaa" stopOpacity="0.9" />
+        </linearGradient>
+      </defs>
+      {payers.map((seat) => {
+        const a = SEAT_AT[d][seat];
+        const mx = (a.x + to.x) / 2 + (st.c.x - (a.x + to.x) / 2) * 0.35;
+        const my = (a.y + to.y) / 2 + (st.c.y - (a.y + to.y) / 2) * 0.35;
+        return <path key={seat} d={`M${a.x} ${a.y}Q${mx} ${my} ${to.x} ${to.y}`} className="k-trail" />;
+      })}
     </svg>
   );
 }
 
-function OwnerDesk() {
+function TrailChips({ d }: { d: Device }) {
+  const to = SEAT_AT[d][3];
+  const st = STAGE[d];
   return (
     <>
-      <DeskTable {...turnDesk} />
-      <div className="veil" style={{ width: 880 }} />
-      <aside className="drawer" style={{ left: 880, width: 560 }}>
-        <header className="dr-head">
-          <div>
-            <span className="eyebrow">Bảng chủ phòng</span>
-            <h2 className="serif">{OWNER.room}</h2>
-            <small>7/9 ghế · đang chơi ván #37 · bàn vẫn chạy khi bảng này mở</small>
-          </div>
-          <IconBtn icon={<X size={20} strokeWidth={1.8} />} label="Đóng" />
-        </header>
-        <div className="dr-body">
-          <OwnerBody />
-        </div>
-      </aside>
+      {[1, 2, 4, 6, 9].map((seat, i) => {
+        const a = SEAT_AT[d][seat];
+        const mx = (a.x + to.x) / 2 + (st.c.x - (a.x + to.x) / 2) * 0.35;
+        const my = (a.y + to.y) / 2 + (st.c.y - (a.y + to.y) / 2) * 0.35;
+        // a point at t = 0.55 on the quadratic curve
+        const t = 0.55;
+        const x = (1 - t) ** 2 * a.x + 2 * (1 - t) * t * mx + t ** 2 * to.x;
+        const y = (1 - t) ** 2 * a.y + 2 * (1 - t) * t * my + t ** 2 * to.y;
+        return (
+          <span key={seat} className="k-flychip" style={{ left: x, top: y }}>
+            <Chip tone={(["ruby", "ivory", "petrol", "onyx", "ruby"] as const)[i]} size={d === "mobile" ? 14 : 22} />
+          </span>
+        );
+      })}
     </>
   );
 }
 
-function OwnerMob() {
+function Medal({ d }: { d: Device }) {
+  const mob = d === "mobile";
   return (
-    <>
-      <MobTable {...turnMob} />
-      <div className="veil" />
-      <div className="msheet owner" style={{ top: 52 }}>
-        <span className="handle" />
-        <header className="dr-head">
-          <div>
-            <span className="eyebrow">Bảng chủ phòng</span>
-            <h2 className="serif">{OWNER.room}</h2>
-          </div>
-          <IconBtn icon={<X size={20} strokeWidth={1.8} />} label="Đóng" />
-        </header>
-        <OwnerBody compact />
-        <HomeBar />
+    <div className={`k-medal ${mob ? "k-medal-m" : ""}`}>
+      <span className="k-medal-rays" aria-hidden />
+      <span className="k-medal-disc">
+        <small>Thưởng</small>
+        <b>
+          7<Suit suit="♣" size={mob ? 12 : 20} />2<Suit suit="♦" size={mob ? 12 : 20} className="red" />
+        </b>
+        <em className="k-num">+{S7.total}</em>
+      </span>
+      <span className="k-medal-ribbon">
+        <Sparkles size={mob ? 11 : 14} strokeWidth={2.2} />
+        {mob ? "Bluff 7-2!" : "Bình bluff bằng 7-2!"}
+      </span>
+    </div>
+  );
+}
+
+function Ledger({ d }: { d: Device }) {
+  const mob = d === "mobile";
+  return (
+    <div className={`k-ledger ${mob ? "k-ledger-m" : ""}`}>
+      <div className="k-ledger-head">
+        <Avatar name="Bình" size={mob ? 34 : 52} ring="gold" />
+        <span className="k-ledger-ht">
+          <small>Thưởng 7-2 · ván #37</small>
+          <b>
+            Bình nhận <em className="k-num">+{S7.total}</em>
+          </b>
+        </span>
       </div>
-    </>
+      <ul className="k-ledger-l">
+        {S7.payments.map((p) => (
+          <li key={p.name}>
+            <Avatar name={p.name} size={mob ? 20 : 26} ring="none" />
+            <span className="k-ledger-n">
+              {p.name}
+              {p.name === "Lym" && <em>bạn</em>}
+              {p.note && <small>{mob ? "đang nghỉ" : p.note}</small>}
+            </span>
+            <b className="k-num k-down">−{p.amount}</b>
+          </li>
+        ))}
+        <li className="muted">
+          <Avatar name="Hà" size={mob ? 20 : 26} ring="none" className="k-av-dim" />
+          <span className="k-ledger-n">
+            Hà<small>{mob ? "hết chip" : "hết chip nên không trả"}</small>
+          </span>
+          <b className="k-num">0</b>
+        </li>
+      </ul>
+      <div className="k-ledger-sum">
+        <span>Tổng · 5 người × {S7.bonus}</span>
+        <b className="k-num k-up">+{S7.total}</b>
+      </div>
+    </div>
   );
 }
 
-export function OwnerPanel({ device }: { device: Device }) {
-  return <Root device={device}>{device === "desktop" ? <OwnerDesk /> : <OwnerMob />}</Root>;
-}
-
-/* =====================================================================
-   chat
-   ===================================================================== */
-
-export function Chat({ device }: { device: Device }) {
-  if (device === "desktop")
+function SevenDeuce({ device: d }: { device: Device }) {
+  const table = (
+    <Table
+      d={d}
+      seats={S7_SEATS}
+      board={[]}
+      pot={S7.pot}
+      opts={s7Opts(d)}
+      className="k-table-s7"
+      center={
+        <>
+          <Medal d={d} />
+          <Pot n={S7.pot} label="Bình ăn" d={d} />
+        </>
+      }
+    >
+      <Trails d={d} />
+      <TrailChips d={d} />
+    </Table>
+  );
+  if (d === "desktop")
     return (
-      <Root device="desktop">
-        <DeskTable {...showDesk} sideTab={1} side={<ChatPanel />} />
+      <Root device={d} bg="table">
+        <TableTop hand={37} extra={<Pill tone="gold" icon={<Sparkles size={12} strokeWidth={2.4} />}>Thưởng 7-2</Pill>} />
+        <Stage d={d}>{table}</Stage>
+        <aside className="k-col k-glass">
+          <Eyebrow>Khoảnh khắc 7-2</Eyebrow>
+          <p className="k-col-lead">
+            Bình ăn pot bằng 7-2 khi mọi người bỏ bài. Bài tự lật cho cả bàn xem, mỗi người đang có ghế trả thưởng {S7.bonus}.
+          </p>
+          <Ledger d={d} />
+          <div className="k-react">
+            <span>Thả cảm xúc cho Bình</span>
+            <span className="k-react-e">
+              {["👏", "😂", "🔥", "😱", "🙏"].map((e) => (
+                <i key={e}>{e}</i>
+              ))}
+            </span>
+          </div>
+          <div className="k-col-foot">
+            <NextHand d={d} n={6} hand={38} />
+          </div>
+        </aside>
       </Root>
     );
   return (
-    <Root device="mobile">
-      <MobTable {...showMob} />
-      <div className="veil soft" />
-      <div className="msheet chat-sheet" style={{ top: 300 }}>
-        <span className="handle" />
-        <div className="cs-tabs">
-          <span className="on">
-            Chat <em>2</em>
-          </span>
-          <span>Người xem · {TABLE_SHOWDOWN.spectators.length}</span>
-          <IconBtn icon={<X size={18} strokeWidth={1.8} />} label="Thu gọn" />
-        </div>
-        <div className="chat-specs">
-          <span className="spec-avs">
-            {TABLE_SHOWDOWN.spectators.map((n) => (
-              <Avatar key={n} name={n} size={22} />
-            ))}
-          </span>
-          <span>{TABLE_SHOWDOWN.spectators.join(", ")} đang xem</span>
-        </div>
-        <div className="chat-list">
-          <ChatBody />
-        </div>
-        <ChatComposer />
-        <HomeBar />
-      </div>
+    <Root device={d} bg="table">
+      <Stage d={d}>
+        {table}
+        <MTableTop hand={37} right={false} />
+      </Stage>
+      <aside className="k-mcol k-glass">
+        <Ledger d={d} />
+        <span className="k-mnext">
+          Ván #38 chia sau <b className="k-num">6</b> giây
+        </span>
+      </aside>
     </Root>
   );
+}
+
+/* ============================================================== reconnect */
+
+const RC_SEATS: Seat[] = T.seats.map((s) => (s.isMe ? { ...s, timer: { left: 9, total: 20 } } : s));
+
+function Reconnecting({ d }: { d: Device }) {
+  const mob = d === "mobile";
+  return (
+    <div className={`k-rc ${mob ? "k-rc-m" : ""}`}>
+      <span className="k-rc-spin" aria-hidden>
+        <WifiOff size={mob ? 18 : 26} strokeWidth={2.2} />
+      </span>
+      <b className="k-rc-t">Đang kết nối lại…</b>
+      <span className="k-rc-s">
+        Ghế và chip của bạn vẫn giữ nguyên. Lần thử <b className="k-num">2</b> · tự thử lại sau <b className="k-num">3</b> giây.
+      </span>
+      <span className="k-rc-clock">
+        <Ring size={mob ? 36 : 46} left={9} total={20} stroke={3} tone="red">
+          <b className="k-num">9</b>
+        </Ring>
+        <span>
+          <b>Đồng hồ của bạn vẫn chạy</b>
+          <small>Hết giờ sẽ tự check, không check được thì tự bỏ bài.</small>
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function Paused({ d }: { d: Device }) {
+  const mob = d === "mobile";
+  return (
+    <div className={`k-paused ${mob ? "k-paused-m" : ""}`}>
+      <div className="k-paused-art" aria-hidden>
+        <span className="k-paused-felt">
+          <PauseCircle size={mob ? 26 : 40} strokeWidth={1.6} />
+        </span>
+      </div>
+      <span className="k-paused-tag">
+        <ServerCrash size={13} strokeWidth={2.4} /> Lỗi máy chủ
+      </span>
+      <b className="k-paused-t">Bàn tạm dừng</b>
+      <span className="k-paused-s">Máy chủ đang gặp sự cố. Ván #37 được giữ nguyên, đồng hồ cũng dừng, không ai mất chip.</span>
+      {!mob && (
+        <ul className="k-paused-l">
+          <li>
+            <Timer size={15} strokeWidth={2.2} />
+            <span>
+              Đồng hồ dừng ở <b className="k-num">14</b> giây
+            </span>
+          </li>
+          <li>
+            <RefreshCw size={15} strokeWidth={2.2} />
+            <span>Tự chơi tiếp khi máy chủ ổn lại</span>
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Reconnect({ device: d }: { device: Device }) {
+  const table = <Table d={d} seats={RC_SEATS} board={T.board} pot={T.pot} hero={<HeroCards cards={ME_CARDS} d={d} />} className="k-table-dim" />;
+  if (d === "desktop")
+    return (
+      <Root device={d} bg="table">
+        <TableTop hand={T.handNo} extra={<Pill tone="red" icon={<WifiOff size={12} strokeWidth={2.4} />}>Mất mạng</Pill>} />
+        <Stage d={d}>
+          {table}
+          <div className="k-veil" />
+          <Glass strong className="k-rc-card">
+            <Reconnecting d={d} />
+          </Glass>
+        </Stage>
+        <aside className="k-col k-glass">
+          <Eyebrow tone="red">Biến thể khi lỗi máy chủ</Eyebrow>
+          <Paused d={d} />
+          <div className="k-col-foot">
+            <Btn tone="glass" size="lg" block>
+              Về sảnh
+            </Btn>
+          </div>
+        </aside>
+      </Root>
+    );
+  return (
+    <Root device={d} bg="table">
+      <Stage d={d}>
+        {table}
+        <div className="k-veil" />
+        <MTableTop hand={T.handNo} right={false} />
+        <Glass strong className="k-rc-card k-rc-card-m">
+          <Reconnecting d={d} />
+        </Glass>
+      </Stage>
+      <aside className="k-mcol k-glass">
+        <Eyebrow tone="red">Khi lỗi máy chủ</Eyebrow>
+        <Paused d={d} />
+        <Btn tone="glass" block className="k-mcol-foot">
+          Về sảnh
+        </Btn>
+      </aside>
+    </Root>
+  );
+}
+
+/* ============================================================ owner-panel */
+
+function PlayerRows({ d }: { d: Device }) {
+  const mob = d === "mobile";
+  return (
+    <div className="k-own-list">
+      {OWNER.players.map((p) => {
+        const sel = p.name === "An";
+        return (
+          <div key={p.name} className={`k-own-p ${sel ? "sel" : ""}`}>
+            <div className="k-own-row">
+              <Avatar name={p.name} size={mob ? 28 : 36} ring={sel ? "gold" : "steel"} />
+              <span className="k-own-n">
+                <b>
+                  {p.name}
+                  {p.name === "Lym" && <em>bạn</em>}
+                </b>
+                <small>
+                  Ghế {p.seat} · {p.note ?? (p.inHand ? "đang trong ván" : "chờ ván sau")}
+                </small>
+              </span>
+              <b className="k-own-stack k-num">{fmt(p.stack)}</b>
+              {!mob && (
+                <span className="k-own-btns">
+                  <span className="k-mini-b">
+                    <Minus size={15} strokeWidth={2.4} />
+                  </span>
+                  <span className="k-mini-b">
+                    <Plus size={15} strokeWidth={2.4} />
+                  </span>
+                  {p.name !== "Lym" && (
+                    <span className="k-mini-b red">
+                      <UserX size={15} strokeWidth={2.2} />
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+            {sel && (
+              <div className="k-own-grant">
+                <Seg items={["Cấp thêm", "Trừ bớt"]} active={0} small />
+                <span className="k-own-amt">
+                  <Chip size={mob ? 14 : 16} />
+                  <b className="k-num">500</b>
+                </span>
+                <Btn tone="gold" size="sm" icon={<Check size={15} strokeWidth={2.6} />}>
+                  {mob ? "Cấp" : "Cấp cho An"}
+                </Btn>
+                <small className="k-own-note">
+                  {mob ? "Đang trong ván: cộng khi ván #37 xong." : "An đang trong ván: chip được cộng ngay khi ván #37 xong."}
+                </small>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function OwnerSettings({ d }: { d: Device }) {
+  const mob = d === "mobile";
+  return (
+    <div className="k-own-set">
+      <div className="k-own-blk">
+        <span className="k-own-lbl">Blind</span>
+        <span className="k-own-blind">
+          <span className="old k-num">10/20</span>
+          <i>→</i>
+          <span className="new k-num">20/40</span>
+        </span>
+        <Pill tone="gold" icon={<Hourglass size={11} strokeWidth={2.4} />}>
+          {mob ? "từ ván sau" : OWNER.pending}
+        </Pill>
+      </div>
+      <div className="k-own-blk">
+        <span className="k-own-lbl">Giây suy nghĩ</span>
+        <span className="k-stepper">
+          <span className="k-mini-b">
+            <Minus size={14} strokeWidth={2.4} />
+          </span>
+          <b className="k-num">20</b>
+          <span className="k-mini-b">
+            <Plus size={14} strokeWidth={2.4} />
+          </span>
+        </span>
+        {!mob && <small>Áp dụng từ lượt tiếp theo</small>}
+      </div>
+      <div className="k-own-blk k-own-link">
+        <span className="k-own-lbl">Link mời</span>
+        <span className="k-linkbox">
+          <span>{OWNER.invite.replace("https://", "")}</span>
+          <Copy size={14} strokeWidth={2.2} />
+        </span>
+        <span className="k-own-linkrow">
+          <Btn tone="glass" size="sm" icon={<RefreshCw size={14} strokeWidth={2.4} />}>
+            Đổi link
+          </Btn>
+          <small>Link cũ sẽ hết hiệu lực ngay.</small>
+        </span>
+      </div>
+      <div className="k-own-close">
+        <span className="k-own-close-t">
+          <b>Đóng phòng</b>
+          <small>Chốt bảng lời/lỗ cho mọi người, không chơi tiếp được.</small>
+        </span>
+        <Btn tone="danger" size="sm" icon={<DoorClosed size={14} strokeWidth={2.4} />}>
+          Đóng
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+function OwnerPanel({ device: d }: { device: Device }) {
+  const table = <Table d={d} seats={T.seats} board={T.board} pot={T.pot} hero={<HeroCards cards={ME_CARDS} d={d} />} className="k-table-hint" />;
+  if (d === "desktop")
+    return (
+      <Root device={d} bg="table">
+        <TableTop hand={T.handNo} />
+        <Stage d={d}>{table}</Stage>
+        <aside className="k-sheet k-glass k-glass-strong">
+          <header className="k-sheet-h">
+            <span className="k-sheet-ht">
+              <Eyebrow>Chủ phòng</Eyebrow>
+              <b className="k-h2">Bảng chủ phòng</b>
+              <small>{OWNER.room} · 7 người đang ngồi · bạn là chủ phòng</small>
+            </span>
+            <IconBtn icon={<X size={18} strokeWidth={2.2} />} />
+          </header>
+          <div className="k-sheet-cols">
+            <section className="k-sec">
+              <span className="k-sec-h">
+                <b className="k-h3">Người chơi & chip</b>
+                <small className="k-col-note">bấm + / − để cấp hoặc trừ</small>
+              </span>
+              <PlayerRows d={d} />
+            </section>
+            <section className="k-sec">
+              <b className="k-h3">Luật bàn</b>
+              <OwnerSettings d={d} />
+            </section>
+          </div>
+        </aside>
+      </Root>
+    );
+  return (
+    <Root device={d} bg="table">
+      <Stage d={d}>{table}</Stage>
+      <aside className="k-msheet k-glass k-glass-strong">
+        <section className="k-msheet-l">
+          <header className="k-msheet-h">
+            <IconBtn icon={<X size={18} strokeWidth={2.2} />} />
+            <span className="k-msheet-ht">
+              <b>Bảng chủ phòng</b>
+              <small>{OWNER.room} · bấm để cấp / trừ</small>
+            </span>
+          </header>
+          <PlayerRows d={d} />
+        </section>
+        <section className="k-msheet-r">
+          <OwnerSettings d={d} />
+        </section>
+      </aside>
+    </Root>
+  );
+}
+
+/* =================================================================== chat */
+
+function Bubble({ m, mob }: { m: (typeof CHAT)[number]; mob?: boolean }) {
+  const mine = m.name === "Lym";
+  const watching = m.text.startsWith("(đang xem)");
+  const text = watching ? m.text.replace("(đang xem)", "").trim() : m.text;
+  return (
+    <div className={`k-msg ${mine ? "mine" : ""}`}>
+      {!mine && <Avatar name={m.name} size={mob ? 24 : 30} ring="none" />}
+      <span className="k-msg-b">
+        {!mine && (
+          <small>
+            {m.name}
+            {watching && <em>đang xem</em>}
+            <i className="k-num">{m.at}</i>
+          </small>
+        )}
+        <span className="k-msg-t">{text}</span>
+      </span>
+    </div>
+  );
+}
+
+function ChatPane({ d }: { d: Device }) {
+  const mob = d === "mobile";
+  return (
+    <>
+      <div className="k-chat-h">
+        <Seg
+          items={[
+            <>
+              Chat <b className="k-num">5</b>
+            </>,
+            <>
+              Đang xem <b className="k-num">3</b>
+            </>,
+          ]}
+          active={0}
+          small={mob}
+        />
+        {mob ? <IconBtn icon={<X size={18} strokeWidth={2.2} />} /> : <IconBtn icon={<Eye size={18} strokeWidth={2.1} />} badge={3} className="k-ibtn-quiet" />}
+      </div>
+      {!mob && (
+        <div className="k-viewers">
+          <span className="k-sec-h">
+            <Eyebrow tone="mute">Người đang xem</Eyebrow>
+            <small className="k-col-note">không thấy bài úp</small>
+          </span>
+          <div className="k-viewers-l">
+            {SD.spectators.map((n, i) => (
+              <span key={n} className="k-viewer">
+                <Avatar name={n} size={30} ring="none" />
+                <span>
+                  <b>{n}</b>
+                  <small>{["từ 20:58", "từ 21:01", "từ 21:05"][i]}</small>
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="k-chat-list">
+        <div className="k-sys">
+          <Crown size={13} strokeWidth={2.4} /> Ván #38 · Chi thắng <b className="k-num">1.840</b>
+        </div>
+        {CHAT.map((m, i) => (
+          <Bubble key={i} m={m} mob={mob} />
+        ))}
+      </div>
+      <div className="k-emoji">
+        {QUICK_EMOJI.map((e) => (
+          <span key={e}>{e}</span>
+        ))}
+        {!mob && <small>Gửi nhanh</small>}
+      </div>
+      <div className="k-composer">
+        <Smile size={18} strokeWidth={2.1} />
+        <span>
+          ván này ai all-in đi 😆
+          <i className="k-caret" />
+        </span>
+        <span className="k-send">
+          <Send size={16} strokeWidth={2.4} />
+        </span>
+      </div>
+    </>
+  );
+}
+
+function Chat({ device: d }: { device: Device }) {
+  const table = (
+    <Table
+      d={d}
+      seats={SD.seats}
+      board={SD.board}
+      pot={SD.pot}
+      potLabel="Chi ăn"
+      opts={{ 4: { say: "flush rồi nha 🎉" }, 2: { say: "ai bluff kìa 😏" } }}
+      hero={<HeroCards cards={SD.seats[0].cards!} d={d} />}
+    />
+  );
+  if (d === "desktop")
+    return (
+      <Root device={d} bg="table">
+        <TableTop hand={SD.handNo} chatBadge={0} />
+        <Stage d={d}>{table}</Stage>
+        <aside className="k-col k-glass k-col-chat">
+          <ChatPane d={d} />
+        </aside>
+      </Root>
+    );
+  return (
+    <Root device={d} bg="table">
+      <Stage d={d}>
+        {table}
+        <MTableTop hand={SD.handNo} right={false} />
+      </Stage>
+      <i className="k-drawer-shade" />
+      <aside className="k-drawer k-glass k-glass-strong">
+        <ChatPane d={d} />
+      </aside>
+    </Root>
+  );
+}
+
+/* ================================================================ router */
+
+export function renderPlay(screen: string, device: Device): ReactNode {
+  switch (screen) {
+    case "table-turn":
+      return <TableTurn device={device} />;
+    case "table-showdown":
+      return <TableShowdown device={device} />;
+    case "seven-deuce":
+      return <SevenDeuce device={device} />;
+    case "reconnect":
+      return <Reconnect device={device} />;
+    case "owner-panel":
+      return <OwnerPanel device={device} />;
+    case "chat":
+      return <Chat device={device} />;
+    default:
+      return null;
+  }
 }
 

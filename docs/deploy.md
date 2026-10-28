@@ -1,8 +1,13 @@
-# Deploy và vận hành (bản nháp B5)
+# Deploy và vận hành
 
 > Phần **staging thật trên VPS chưa làm**: chờ chủ dự án có VPS, tên miền và SSH key (roadmap B5).
-> Trang này ghi những điều **bắt buộc đúng** khi deploy, rút ra từ code đã có, và quy trình xử lý
-> sự cố đã có lệnh. Cấu hình Caddy/Compose cho production viết và thử cùng lúc với staging.
+> Cấu hình production đã có và được CI dựng thử mỗi PR (workflow `Ops`, job `prod-smoke`):
+> [`docker-compose.prod.yml`](../docker-compose.prod.yml), [`deploy/Caddyfile`](../deploy/Caddyfile),
+> mẫu `.env` ở [`deploy/env.production.example`](../deploy/env.production.example). Trang này ghi
+> những điều **bắt buộc đúng** khi deploy; xử lý sự cố, backup, đổi bản: [runbook.md](runbook.md).
+>
+> Trước khi có VPS, các buổi chơi thử chạy trên máy Mac của chủ dự án qua Cloudflare Tunnel:
+> [choi-online.md](choi-online.md) (`scripts/play-online.sh`, `docker-compose.home.yml`).
 
 ## Bắt buộc khi deploy
 
@@ -30,40 +35,26 @@
    pong. Caddy phải để WebSocket đi qua (mặc định của `reverse_proxy` đã được) và không cắt kết nối
    im lặng dưới 60 giây.
 
-## Sao lưu và khôi phục (diễn tập khi có staging)
+## Cài lần đầu trên server
 
-Dữ liệu cần giữ nằm hết trong PostgreSQL (sổ chip, ván, lệnh, tài khoản). Redis chỉ là kênh phát
-tin, mất không sao.
+1. Cài Docker, trỏ tên miền về IP server, mở cổng 80 và 443.
+2. `git clone` repo vào `/srv/poker-friends`, `cp deploy/env.production.example .env`, sửa mọi
+   chỗ có "doi-ten" / "thay-bang" (mục 2 ở trên).
+3. `docker compose -f docker-compose.prod.yml up -d --build`. Caddy tự lấy chứng chỉ HTTPS.
+4. Backup lần đầu và kiểm nó (thư mục `backups/` không có trong git nên tạo trước):
 
-```bash
-docker compose exec -T db pg_dump -U poker -Fc poker > backup-$(date +%F).dump
-```
+   ```bash
+   mkdir -p backups
+   docker compose -f docker-compose.prod.yml run --rm tools scripts/backup.sh
+   scripts/check-backup-age.sh
+   ```
 
-Khôi phục vào một DB trống (diễn tập trên staging, không bao giờ trên production đang chạy):
+5. Đặt backup hằng ngày bằng cron: [runbook.md](runbook.md#backup-hằng-ngày-và-diễn-tập).
 
-```bash
-docker compose exec -T db pg_restore -U poker -d poker --clean --if-exists < backup-YYYY-MM-DD.dump
-```
-
-Sau khi khôi phục: kiểm tổng chip mỗi phòng bằng tổng chip đã cấp (Django Admin hoặc truy vấn
-`LedgerEntry`), rồi khởi động server và vào thử một bàn.
+Sao lưu và khôi phục (`scripts/backup.sh`, `scripts/restore.sh`, rồi `check_ledger`), bàn tạm
+dừng, lệch chip, đổi bản và quay về bản trước: [runbook.md](runbook.md).
 
 ## Sự cố: "Bàn tạm dừng" (`room.suspended`)
 
-Nghĩa là server đã ghi một lệnh nhưng engine không áp được, nên dừng phòng thay vì đoán
-(ADR-001 mục 5). Các phòng khác vẫn chạy. Người chơi chỉ thấy một câu chung; nguyên nhân nằm trong
-log server, dòng `room <room_id> suspended: ...` (mức CRITICAL).
-
-1. **Khởi động lại server**, rồi mở trang bàn của phòng đó: phòng chỉ được dựng lại bằng replay
-   lúc có người mở nó (ADR-001 mục 4), không phải ngay lúc server lên. Nếu lỗi chỉ thoáng qua thì
-   phòng chạy tiếp như thường.
-2. Nếu phòng **vẫn tạm dừng** sau khởi động lại (replay hỏng ở cùng một lệnh), xem log tìm dòng
-   `replay of hand <hand_id> failed`, rồi huỷ ván đó:
-
-   ```bash
-   uv run python manage.py void_hand <hand_id> --reason "mô tả ngắn lỗi"
-   ```
-
-   Chip chỉ ghi sổ khi ván xong, nên huỷ ván dở là mọi người về đúng số dư trước ván. Log lệnh
-   (`HandCommand`) giữ nguyên để điều tra; **không bao giờ xoá tay**.
-3. **Khởi động lại server lần nữa** để phòng dựng lại từ DB, rồi báo người chơi vào lại.
+Server đã ghi một lệnh nhưng engine không áp được, nên dừng phòng thay vì đoán (ADR-001 mục 5).
+Các bước xử lý (khởi động lại, `void_hand`): [runbook.md](runbook.md#bàn-tạm-dừng).

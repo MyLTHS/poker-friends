@@ -1,0 +1,117 @@
+# Production on one server (docs/deploy.md, docs/runbook.md). On the server, `.env` is the
+# production file copied from deploy/env.production.example; compose reads it both for the
+# ${...} values below and as each container's environment.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml run --rm tools scripts/backup.sh
+#
+# Only Caddy is reachable from outside (ports 80/443). Postgres and Redis have no published port.
+name: poker-friends
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+
+  backend:
+    # Exactly ONE Daphne process (docs/deploy.md "Bắt buộc" 1, ADR-001): each room's table
+    # lives in this process's memory, so two processes would be two writers for one table.
+    # container_name makes `--scale backend=2` fail instead of quietly starting a second one,
+    # and `up -d` stops the old container before starting the new one.
+    container_name: poker-friends-backend
+    image: poker-friends-backend:${APP_VERSION:-local}
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    # Migrations run before Daphne starts; back up first (docs/runbook.md "Đổi bản").
+    # Daphne's own defaults ping a silent WebSocket every 20 s and drop it after 30 s without a
+    # pong (docs/deploy.md "Bắt buộc" 4); a single Daphne process, no workers.
+    command: >-
+      sh -c "python manage.py migrate --noinput
+      && python manage.py collectstatic --noinput -v0
+      && exec daphne -b 0.0.0.0 -p 8000 config.asgi:application"
+    volumes:
+      - static:/app/staticfiles
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 2)"]
+      interval: 5s
+      start_period: 60s
+      retries: 20
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  web:
+    image: poker-friends-web:${APP_VERSION:-local}
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        # Baked into the browser bundle at build time: where the table's WebSocket connects.
+        # Empty (the default): the page's own address, which is right behind Caddy.
+        NEXT_PUBLIC_DJANGO_WS: ${NEXT_PUBLIC_DJANGO_WS:-}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 5s
+      start_period: 30s
+      retries: 20
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      # The domain (HTTPS certificate is automatic), or ":80" for a plain-HTTP smoke test.
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - static:/srv/static:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+  # Not started by `up`. Has pg_dump/pg_restore of the same version as the database:
+  #   docker compose -f docker-compose.prod.yml run --rm tools scripts/backup.sh
+  tools:
+    image: postgres:17
+    profiles: ["tools"]
+    env_file: .env
+    working_dir: /work
+    volumes:
+      - ./scripts:/work/scripts:ro
+      - ./backups:/work/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  static:
+  caddy_data:
+  caddy_config:

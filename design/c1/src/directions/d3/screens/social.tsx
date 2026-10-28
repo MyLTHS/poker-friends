@@ -16,14 +16,13 @@ import {
   IconBtn,
   Logo,
   MHead,
+  MRail,
   Money,
   PCard,
   Pill,
   Root,
   Seg,
-  StatusBar,
   Sticker,
-  TabBar,
   Token,
 } from "../ui";
 
@@ -46,9 +45,9 @@ function SevenCell({ n }: { n: number }) {
   return <b className={`seven-cell ${n > 0 ? "up" : "down"} num`}>{signed(n)}</b>;
 }
 
-function SummaryTable() {
+function SummaryTable({ mobile }: { mobile?: boolean }) {
   return (
-    <div className="sumtable">
+    <div className={mobile ? "sumtable sumtable-m" : "sumtable"}>
       <div className="sum-row sum-headrow">
         <span>Người chơi</span>
         <span>Được cấp</span>
@@ -60,10 +59,10 @@ function SummaryTable() {
       {SUMMARY.map((s) => (
         <div key={s.name} className={`sum-row ${s.name === "Lym" ? "sum-me" : ""}`}>
           <span className="sum-who">
-            <Avatar name={s.name} size={36} />
+            <Avatar name={s.name} size={mobile ? 28 : 36} />
             <b>{s.name}</b>
             {s.name === "Lym" && <em>bạn</em>}
-            {s.sevenDeuce > 0 && (
+            {s.sevenDeuce > 0 && !mobile && (
               <Sticker tone="sun" tilt={-5}>
                 7-2 😎
               </Sticker>
@@ -75,12 +74,13 @@ function SummaryTable() {
           <span className="num strong">{fmt(s.balance)}</span>
           <span className="sum-net">
             <Money n={s.net} className="money-pill" />
-            <NetBar n={s.net} />
+            {!mobile && <NetBar n={s.net} />}
           </span>
         </div>
       ))}
       <div className="sum-foot">
-        <Check size={16} strokeWidth={3.4} /> Cộng lời/lỗ cả phòng = <b className="num">0</b> · sổ cân, không ai “in” thêm chip
+        <Check size={16} strokeWidth={3.4} /> Cộng lời/lỗ cả phòng = <b className="num">0</b>
+        {mobile ? " · sổ cân" : " · sổ cân, không ai “in” thêm chip"}
       </div>
     </div>
   );
@@ -125,9 +125,7 @@ function HandRow({ h, mobile }: { h: (typeof HANDS)[number]; mobile?: boolean })
   );
 }
 
-function RoomSeg({ mobile }: { mobile?: boolean }) {
-  return <Seg items={["Bàn thứ Sáu", "Tập luyện nhẹ"]} active={0} tone="pink" className={mobile ? "seg-fill" : ""} />;
-}
+const RoomSeg = () => <Seg items={["Bàn thứ Sáu", "Tập luyện nhẹ"]} active={0} tone="pink" />;
 
 function DeskHistory() {
   return (
@@ -173,41 +171,29 @@ function DeskHistory() {
 function MobHistory() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <MHead title="Lịch sử & lời/lỗ" back={false} center />
-      <div className="mpage mhistory">
-        <RoomSeg mobile />
-        <span className="sec-h">Bảng tổng kết · 38 ván</span>
-        <div className="msum">
-          {SUMMARY.map((s) => (
-            <div key={s.name} className={`msum-row ${s.name === "Lym" ? "sum-me" : ""}`}>
-              <Avatar name={s.name} size={34} />
-              <span className="msum-t">
-                <b>
-                  {s.name}
-                  {s.name === "Lym" && <em>bạn</em>}
-                </b>
-                <small>
-                  cấp {fmt(s.granted)} · {s.hands} ván · 7-2 {s.sevenDeuce ? signed(s.sevenDeuce) : "0"}
-                </small>
-              </span>
-              <span className="msum-r">
-                <Money n={s.net} className="money-pill" />
-                <small>
-                  còn <b className="num">{fmt(s.balance)}</b>
-                </small>
-              </span>
-            </div>
-          ))}
+      <MRail active={1} />
+      <div className="mpage mpage-rail mhistory">
+        <div className="mhist-head">
+          <span>
+            <h1 className="h-m">Lịch sử & lời/lỗ</h1>
+            <small>Bàn thứ Sáu · chủ phòng Lym · 38 ván, 1 ván huỷ</small>
+          </span>
+          <RoomSeg />
         </div>
-        <span className="sec-h">Các ván gần đây</span>
-        <div className="mhands">
-          {HANDS.map((h) => (
-            <HandRow key={h.no} h={h} mobile />
-          ))}
-        </div>
+        <section className="card mcard mhist-sum">
+          <span className="sec-h">Bảng tổng kết</span>
+          <SummaryTable mobile />
+        </section>
+        <section className="mhist-hands">
+          <span className="sec-h">Các ván gần đây</span>
+          <div className="mscroll">
+            {HANDS.map((h) => (
+              <HandRow key={h.no} h={h} mobile />
+            ))}
+            <span className="more">Xem thêm 34 ván cũ hơn</span>
+          </div>
+        </section>
       </div>
-      <TabBar active={1} />
       <HomeBar />
     </Root>
   );
@@ -345,6 +331,14 @@ function Caption({ mobile }: { mobile?: boolean }) {
   );
 }
 
+const Result = () => (
+  <div className="result">
+    <Eyebrow tone="sun">Kết quả</Eyebrow>
+    <b>{R.timeline[R.timeline.length - 1]}</b>
+    <small>Bài của Bình vẫn úp: Bình thắng vì mọi người bỏ bài, không cần lật. Bạn: −60.</small>
+  </div>
+);
+
 function DeskReplay() {
   return (
     <Root device="desktop" className="bg-party">
@@ -378,11 +372,7 @@ function DeskReplay() {
         <aside className="replay-side">
           <span className="sec-h">Diễn biến ván</span>
           <Timeline />
-          <div className="result">
-            <Eyebrow tone="sun">Kết quả</Eyebrow>
-            <b>{R.timeline[R.timeline.length - 1]}</b>
-            <small>Bài của Bình vẫn úp: Bình thắng vì mọi người bỏ bài, không cần lật. Bạn: −60.</small>
-          </div>
+          <Result />
         </aside>
       </main>
     </Root>
@@ -392,14 +382,20 @@ function DeskReplay() {
 function MobReplay() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <MHead title={`Xem lại ván #${R.handNo}`} sub="Bàn thứ Sáu · 21:03" />
-      <div className="mreplay">
-        <ReplayTable mobile />
-        <Caption mobile />
-        <StepSlider mobile />
-        <Transport mobile />
-        <Timeline mobile />
+      <div className="mpage mreplay">
+        <section className="mreplay-main">
+          <MHead title={`Xem lại ván #${R.handNo}`} sub="Bàn thứ Sáu · 21:03" right={<Caption mobile />} />
+          <ReplayTable mobile />
+          <div className="mreplay-ctl">
+            <Transport mobile />
+            <StepSlider mobile />
+          </div>
+        </section>
+        <aside className="mreplay-side">
+          <span className="sec-h">Diễn biến ván</span>
+          <Timeline mobile />
+          <Result />
+        </aside>
       </div>
       <HomeBar />
     </Root>
@@ -412,7 +408,7 @@ function Skeleton({ mobile }: { mobile?: boolean }) {
   return (
     <div className={`skel ${mobile ? "skel-m" : ""}`}>
       {!mobile && <i className="sk sk-title" />}
-      {!mobile && <i className="sk sk-search" />}
+      <i className="sk sk-search" />
       {Array.from({ length: mobile ? 2 : 3 }, (_, k) => (
         <div key={k} className="sk-ticket">
           <i className="sk sk-stub" />
@@ -451,7 +447,7 @@ function NetError({ mobile }: { mobile?: boolean }) {
 
 function EmptyLobby({ mobile }: { mobile?: boolean }) {
   return (
-    <div className={`empty ${mobile ? "empty-m empty-m-row" : ""}`}>
+    <div className={`empty ${mobile ? "empty-m" : ""}`}>
       <span className="empty-table">
         <i className="et-felt" />
         <i className="et-s et-1" />
@@ -521,22 +517,22 @@ function DeskStates() {
 function MobStates() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <MHead title="Sảnh" back={false} center />
-      <KickedToast mobile />
-      <div className="mpage mstates">
-        <Eyebrow tone="sky">Đang tải</Eyebrow>
-        <Skeleton mobile />
-        <Eyebrow tone="orange">Lỗi mạng</Eyebrow>
-        <div className="card mcard">
+      <MRail active={0} />
+      <div className="mpage mpage-rail mstates">
+        <KickedToast mobile />
+        <section className="card mcard state-card">
+          <Eyebrow tone="sky">Đang tải</Eyebrow>
+          <Skeleton mobile />
+        </section>
+        <section className="card mcard state-card">
+          <Eyebrow tone="orange">Lỗi mạng ở sảnh</Eyebrow>
           <NetError mobile />
-        </div>
-        <Eyebrow tone="lime">Sảnh trống</Eyebrow>
-        <div className="card mcard">
+        </section>
+        <section className="card mcard state-card">
+          <Eyebrow tone="lime">Sảnh trống</Eyebrow>
           <EmptyLobby mobile />
-        </div>
+        </section>
       </div>
-      <TabBar active={0} />
       <HomeBar />
     </Root>
   );

@@ -19,20 +19,20 @@ import {
 
 import { OWNER, SEVEN_DEUCE, TABLE_SHOWDOWN, TABLE_TURN } from "../../shared/data";
 import type { Device } from "../../shared/screens";
-import { Avatar, Btn, CardText, Confetti, HomeBar, IconBtn, PlayingCard, Root, Segmented, StatusBar, fmt } from "./kit";
+import { Avatar, Btn, CardText, Confetti, HomeBar, IconBtn, PlayingCard, Root, Segmented, fmt } from "./kit";
 import {
   ChatComposer,
   ChatList,
   IdleBar,
   LogList,
   MobileTableBar,
+  PhonePanel,
   PreAction,
-  SheetGrabber,
   SidePanel,
   Stage,
   TableTopBar,
   TurnBar,
-  TurnDock,
+  TurnPanel,
   seatPos,
   type SeatView,
   type TableModel,
@@ -77,12 +77,11 @@ export function TableTurn({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-table">
-        <StatusBar />
-        <MobileTableBar model={T} chatBadge={2} />
         <div className="table-area-m">
           <Stage device="mobile" model={turnModel} meHint={<TurnHint left={14} />} />
         </div>
-        <TurnDock {...turnBarProps} />
+        <MobileTableBar model={T} chatBadge={2} />
+        <TurnPanel {...turnBarProps} left={14} total={20} />
         <HomeBar />
       </Root>
     );
@@ -186,31 +185,40 @@ export function TableShowdown({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-table">
-        <StatusBar />
-        <MobileTableBar model={S} chatBadge={3} />
         <div className="table-area-m">
-          <Stage device="mobile" model={showdownModel}>
+          <Stage device="mobile" model={showdownModel} meHint={<LossHint />}>
             <WinnerBanner device="mobile" />
           </Stage>
         </div>
-        <div className="dock dock-idle">
-          <div className="idle-m-head">
-            <span>
-              <small>Ván #{S.handNo} đã xong</small>
-              <b>Ván mới sau 4 giây</b>
+        <MobileTableBar model={S} chatBadge={3} />
+        <PhonePanel className="idle-panel">
+          <div className="ip-next">
+            <span className="abar-eyebrow">Ván #{S.handNo} đã xong</span>
+            <span className="next-hand">
+              <Hourglass size={15} strokeWidth={2} />
+              Ván mới sau <b>4</b> giây
             </span>
-            <span className="countdown-dot">4</span>
           </div>
+          <div className="ip-win">
+            <Crown size={16} strokeWidth={2} />
+            <span>
+              <b>Chi thắng {fmt(S.winner.amount)}</b>
+              <small>với Thùng già A — An all-in 920 không qua được</small>
+            </span>
+          </div>
+          <span className="ip-me">
+            Bạn: <b>Bộ ba K · thua 400</b>
+          </span>
           <Spectators device="mobile" />
-          <div className="dock-row">
-            <Btn kind="quiet" size="lg" icon={<Coffee size={17} />}>
+          <div className="ip-actions">
+            <Btn kind="quiet" block icon={<Coffee size={16} />}>
               Nghỉ ván sau
             </Btn>
-            <Btn kind="ghost" size="lg">
+            <Btn kind="ghost" block>
               Xem lại ván
             </Btn>
           </div>
-        </div>
+        </PhonePanel>
         <HomeBar />
       </Root>
     );
@@ -356,30 +364,33 @@ export function SevenDeuce({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-table">
-        <StatusBar />
-        <MobileTableBar model={T} chatBadge={4} />
         <div className="table-area-m">
           <Stage device="mobile" model={sevenModel} className="is-seven">
             <Confetti count={30} spread={0.8} className="cf-m" />
             <div className="sd-banner sd-banner-m">
-              <span className="sd-eyebrow">Bluff 7-2 thành công</span>
               <span className="sd-cards">
                 {SD.cards.map((c, i) => (
                   <PlayingCard key={i} card={c} w={44} rotate={i === 0 ? -7 : 7} />
                 ))}
               </span>
-              <span className="sd-reveal">Bài {SD.winner} tự lật cho cả bàn</span>
-              <b className="sd-amount">+{SD.total}</b>
-              <small className="sd-sub">
-                Ăn pot {SD.pot} khi cả bàn bỏ bài
-              </small>
+              <span className="sd-banner-text">
+                <span className="sd-eyebrow">Bluff 7-2 thành công</span>
+                <b className="sd-amount">+{SD.total}</b>
+                <span className="sd-reveal">Bài {SD.winner} tự lật cho cả bàn</span>
+                <small className="sd-sub">Ăn pot {SD.pot} khi cả bàn bỏ bài</small>
+              </span>
             </div>
-            <span className="sd-pointer" style={{ left: 116, top: bp.y }} />
+            <span className="sd-pointer" style={{ left: bp.x + 120, top: bp.y }} />
           </Stage>
         </div>
-        <div className="dock dock-seven">
+        <MobileTableBar model={T} chatBadge={4} />
+        <PhonePanel className="sd-panel">
           <SevenLedger device="mobile" />
-        </div>
+          <span className="next-hand">
+            <Hourglass size={15} strokeWidth={2} />
+            Ván mới sau <b>5</b> giây
+          </span>
+        </PhonePanel>
         <HomeBar />
       </Root>
     );
@@ -477,41 +488,43 @@ function ReconnectCard({ device }: { device: Device }) {
         </span>
       </span>
       <span className="rc-actions">
-        <Btn kind="primary" size={device === "desktop" ? "md" : "lg"} block={device === "mobile"} icon={<RotateCw size={16} />}>
+        <Btn kind="primary" size={device === "desktop" ? "md" : "lg"} icon={<RotateCw size={16} />}>
           Thử lại ngay
         </Btn>
-        {device === "desktop" && <Btn kind="ghost">Về sảnh</Btn>}
+        <Btn kind="ghost" size={device === "desktop" ? "md" : "lg"}>
+          Về sảnh
+        </Btn>
       </span>
     </div>
   );
 }
 
 function PausedCard({ device }: { device: Device }) {
+  // the phone column is 176px wide: shorter wording, same facts
+  const d = device === "desktop";
   return (
     <div className={`paused paused-${device}`}>
-      <span className="variant-label">Biến thể · lỗi máy chủ</span>
+      <span className="variant-label">{d ? "Biến thể · lỗi máy chủ" : "Lỗi máy chủ"}</span>
       <div className="paused-card">
         <span className="paused-icon">
-          <ServerCrash size={device === "desktop" ? 24 : 20} strokeWidth={1.9} />
+          <ServerCrash size={d ? 24 : 20} strokeWidth={1.9} />
         </span>
         <span className="paused-head">
           <b>Bàn tạm dừng</b>
-          <span>Máy chủ gặp sự cố. Ván #37 được giữ nguyên, đồng hồ dừng lại.</span>
+          <span>{d ? "Máy chủ gặp sự cố. Ván #37 được giữ nguyên, đồng hồ dừng lại." : "Máy chủ gặp sự cố. Ván #37 được giữ nguyên."}</span>
         </span>
-        {device === "desktop" && (
-          <ul className="paused-facts">
-            <li>
-              <Clock size={14} /> Đồng hồ dừng ở <b>14 giây</b>
-            </li>
-            <li>
-              <Lock size={14} /> Chip và bài <b>giữ nguyên</b>
-            </li>
-            <li>
-              <RefreshCw size={14} /> Tự thử lại sau <b>0:30</b>
-            </li>
-          </ul>
-        )}
-        <Btn kind="ghost" size={device === "desktop" ? "md" : "sm"} block={device === "desktop"} icon={<RotateCw size={15} />}>
+        <ul className="paused-facts">
+          <li>
+            <Clock size={14} /> {d ? "Đồng hồ dừng ở" : "Dừng ở"} <b>14 giây</b>
+          </li>
+          <li>
+            <Lock size={14} /> {d ? "Chip và bài" : "Chip"} <b>giữ nguyên</b>
+          </li>
+          <li>
+            <RefreshCw size={14} /> {d ? "Tự thử lại sau" : "Thử lại sau"} <b>0:30</b>
+          </li>
+        </ul>
+        <Btn kind="ghost" size="md" block icon={<RotateCw size={15} />}>
           Tải lại bàn
         </Btn>
       </div>
@@ -523,20 +536,23 @@ export function Reconnect({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-table">
-        <StatusBar />
-        <MobileTableBar model={T} />
-        <div className="conn-strip">
-          <span className="conn-dot" />
-          Mất kết nối · đang thử lại
-        </div>
         <div className="table-area-m is-dimmed is-spot-me">
           <Stage device="mobile" model={reconnectModel} meHint={<TurnHint left={9} />} />
         </div>
         <div className="scrim scrim-m" />
+        <MobileTableBar
+          model={T}
+          right={
+            <span className="conn-strip conn-strip-m">
+              <span className="conn-dot" />
+              Mất kết nối · đang thử lại
+            </span>
+          }
+        />
         <ReconnectCard device="mobile" />
-        <div className="dock dock-paused">
+        <PhonePanel className="paused-panel">
           <PausedCard device="mobile" />
-        </div>
+        </PhonePanel>
         <HomeBar />
       </Root>
     );
@@ -567,9 +583,20 @@ export function Reconnect({ device }: { device: Device }) {
 
 function OwnerPanel({ device }: { device: Device }) {
   const d = device === "desktop";
+  const notice = (
+    <div className="notice notice-brass">
+      <Clock size={16} strokeWidth={2} />
+      <span>
+        <b>{OWNER.pending}</b>
+        <small>Ván đang chơi giữ blind 10/20</small>
+      </span>
+      <span className="notice-link">Huỷ</span>
+    </div>
+  );
+  // Desktop stacks everything in one column; the landscape phone puts the notice in the header
+  // row and splits the rest into two columns (players | settings), see .owner-mobile.
   return (
     <div className={`owner owner-${device}`}>
-      {!d && <SheetGrabber />}
       <div className="owner-head">
         <span className="owner-crown">
           <Crown size={d ? 20 : 17} strokeWidth={2} />
@@ -578,20 +605,14 @@ function OwnerPanel({ device }: { device: Device }) {
           <b>Bảng chủ phòng</b>
           <small>{OWNER.room} · bạn là chủ phòng</small>
         </span>
+        {!d && notice}
         <IconBtn label="Đóng">
           <X size={18} />
         </IconBtn>
       </div>
-      <div className="notice notice-brass">
-        <Clock size={16} strokeWidth={2} />
-        <span>
-          <b>{OWNER.pending}</b>
-          <small>Ván đang chơi giữ blind 10/20</small>
-        </span>
-        <span className="notice-link">Huỷ</span>
-      </div>
+      {d && notice}
 
-      <section className="owner-sec">
+      <section className="owner-sec os-players">
         <h4>
           Người chơi & chip <small>{OWNER.players.length} người đang ngồi</small>
         </h4>
@@ -605,7 +626,7 @@ function OwnerPanel({ device }: { device: Device }) {
                   <span className="op-id">
                     <b>{p.name}</b>
                     <small>
-                      Ghế {p.seat} · {p.note ?? (p.inHand ? "đang trong ván" : "chờ ván sau")}
+                      Ghế {p.seat} · {p.note ?? (p.inHand ? (d ? "đang trong ván" : "trong ván") : "chờ ván sau")}
                     </small>
                   </span>
                   <span className="op-stack">{fmt(p.stack)}</span>
@@ -663,7 +684,7 @@ function OwnerPanel({ device }: { device: Device }) {
         </section>
       </div>
 
-      <section className="owner-sec">
+      <section className="owner-sec os-link">
         <h4>Link mời</h4>
         <div className="link-row">
           <span className="link-box">
@@ -686,7 +707,7 @@ function OwnerPanel({ device }: { device: Device }) {
       <section className="owner-danger">
         <span>
           <b>Đóng phòng</b>
-          <small>Kết thúc bàn, mọi người thấy bảng tổng kết lời/lỗ.</small>
+          <small>{d ? "Kết thúc bàn, mọi người thấy bảng tổng kết lời/lỗ." : "Kết thúc bàn, hiện bảng lời/lỗ."}</small>
         </span>
         <Btn kind="danger" size="sm">
           Đóng phòng
@@ -700,12 +721,11 @@ export function OwnerPanelScreen({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-table">
-        <StatusBar />
-        <MobileTableBar model={T} />
         <div className="table-area-m is-dimmed">
           <Stage device="mobile" model={turnModel} />
         </div>
-        <div className="scrim scrim-m" />
+        <MobileTableBar model={T} />
+        <div className="scrim scrim-full" />
         <OwnerPanel device="mobile" />
         <HomeBar />
       </Root>
@@ -762,15 +782,13 @@ export function ChatScreen({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-table">
-        <StatusBar />
-        <MobileTableBar model={T} />
-        <div className="table-area-m is-softdim">
+        <div className="table-area-m">
           <Stage device="mobile" model={chatModel} />
         </div>
+        <MobileTableBar model={T} right={false} />
         <div className="scrim scrim-soft" />
-        <div className="sheet chat-sheet">
-          <SheetGrabber />
-          <div className="sheet-tabs">
+        <div className="drawer chat-drawer">
+          <div className="drawer-tabs">
             <span className="is-active">
               Chat <i>5</i>
             </span>

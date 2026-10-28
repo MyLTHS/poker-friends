@@ -12,3 +12,5 @@ node_modules/
 .hypothesis/
 staticfiles/
 e2e.sqlite3
+backups/
+.play-online/

@@ -1,4 +1,4 @@
-// Mock data shared by the three directions (Vietnamese, like the real app). Shapes follow the
+// Mock data shared by the four directions (Vietnamese, like the real app). Shapes follow the
 // API (docs/api/) loosely; this app never calls a server.
 
 export type Suit = "♠" | "♥" | "♦" | "♣";

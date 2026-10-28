@@ -1,56 +1,32 @@
-import type { ReactNode } from "react";
-
+// Kính & Ánh Kim (d2) — a sky-lounge at night: frosted glass, champagne metal, petrol felt.
 import type { Direction } from "../../shared/direction";
-import type { Device, ScreenId } from "../../shared/screens";
-import { Forgot, Login, Profile, Signup, Upgrade } from "./screens/account";
-import { Chat, OwnerPanel, Reconnect, SevenDeuce, TableShowdown, TableTurn } from "./screens/play";
-import { HistoryScreen, Replay, States } from "./screens/records";
-import { CreateRoom, Invite, Lobby } from "./screens/rooms";
+import { renderAccount } from "./screens/account";
+import { renderPlay } from "./screens/play";
+import { renderRecords } from "./screens/records";
+import { renderRooms } from "./screens/rooms";
 import "./style.css";
-
-const SCREENS: Record<ScreenId, (p: { device: Device }) => ReactNode> = {
-  login: Login,
-  signup: Signup,
-  forgot: Forgot,
-  upgrade: Upgrade,
-  profile: Profile,
-  lobby: Lobby,
-  "create-room": CreateRoom,
-  invite: Invite,
-  "table-turn": TableTurn,
-  "table-showdown": TableShowdown,
-  "seven-deuce": SevenDeuce,
-  reconnect: Reconnect,
-  "owner-panel": OwnerPanel,
-  chat: Chat,
-  history: HistoryScreen,
-  replay: Replay,
-  states: States,
-};
 
 const direction: Direction = {
   id: "d2",
-  name: "Giấy & Mực",
-  tagline: "Một cuốn sổ điểm in đẹp: giấy ấm, mực đen, một nét đỏ quân bài.",
+  name: "Kính & Ánh Kim",
+  tagline: "Sảnh tầng thượng lúc nửa đêm: kính mờ, viền vàng sâm panh, bàn xanh dầu dưới một ngọn đèn.",
   description:
-    "Sáng, yên và gọn như trang sách: nền giấy ngà, chữ mực, đường kẻ mảnh, bàn chơi vẽ như bàn cờ với ghế là những tấm thẻ tên ngay hàng. " +
-    "Hợp người chơi ban ngày, ngồi lâu, hoặc ngại vẻ sòng bạc; số chip, blind và đồng hồ dùng chữ đơn cách nên đọc sổ lời/lỗ rất nhanh. " +
-    "Điểm mạnh là rõ ràng và dịu mắt; đổi lại không khí ít \"hồi hộp\" hơn một bàn nỉ xanh, khoảnh khắc ăn mừng như 7-2 dựa vào dấu mộc đỏ thay vì hiệu ứng.",
+    "Nền than chì chuyển xanh mòng két đêm, các tấm kính mờ có viền sáng 1px, điểm nhấn kim loại vàng sâm panh và một màu xanh điện cho “tới lượt bạn”, đỏ ấm cho lỗ và nguy hiểm. " +
+    "Hợp hội bạn thích cảm giác một ứng dụng poker cao cấp kiểu Apple: bàn xanh dầu có viền phản chiếu, chip kim loại – gốm có viền khảm, lá bài sứ trắng, vòng đếm giờ phát sáng. " +
+    "Điểm mạnh là sang, gọn và số đọc rất nhanh (một họ chữ Be Vietnam Pro: tiêu đề đậm 800, chữ thường 500–600, số căn phải cho thẳng cột); đánh đổi là nền tối nhiều lớp kính tốn công dựng lại và cần giữ kỷ luật chỉ hai màu nhấn.",
   swatches: [
-    { name: "Giấy", value: "#F4EFE6" },
-    { name: "Giấy trắng", value: "#FBF8F2" },
-    { name: "Mực", value: "#1E1B16" },
-    { name: "Mực nhạt", value: "#736A5D" },
-    { name: "Đỏ quân bài", value: "#C8372D" },
-    { name: "Xanh xô thơm", value: "#5E7B66" },
-    { name: "Nỉ nhạt", value: "#E3E7D8" },
-    { name: "Đường kẻ", value: "#D9CFBE" },
+    { name: "Than chì", value: "#0A0F14" },
+    { name: "Mòng két đêm", value: "#0B2C33" },
+    { name: "Kính mờ", value: "#162A33" },
+    { name: "Vàng sâm panh", value: "#E3C68C" },
+    { name: "Xanh điện", value: "#3EE6F2" },
+    { name: "Đỏ ấm", value: "#FF6F61" },
+    { name: "Nỉ xanh dầu", value: "#11605A" },
+    { name: "Sứ trắng", value: "#F5F7F8" },
   ],
-  fonts: ["Lora", "Be Vietnam Pro", "JetBrains Mono"],
-  render: (screen, device) => {
-    const Screen = SCREENS[screen];
-    return <Screen device={device} />;
-  },
+  fonts: ["Be Vietnam Pro"],
+  render: (screen, device) =>
+    renderPlay(screen, device) ?? renderAccount(screen, device) ?? renderRooms(screen, device) ?? renderRecords(screen, device),
 };
 
 export default direction;

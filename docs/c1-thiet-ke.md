@@ -1,14 +1,22 @@
-# C1 — Ba hướng thiết kế: cách xem và đưa vào Figma
+# C1 — Bốn hướng thiết kế: cách xem và đưa vào Figma
 
-Ba hướng vẽ **cùng 17 màn với cùng dữ liệu**, mỗi màn có bản **desktop 1440×900** và **điện thoại
-dọc 390×844** (tổng 34 khung mỗi hướng). Chỉ khác nhau ở cái nhìn và cách bố cục, để so cho công
-bằng. Code nằm ở `design/c1/`:
+Bốn hướng vẽ **cùng 17 màn với cùng dữ liệu**, mỗi màn có bản **desktop 1440×900** và **điện thoại
+xoay ngang 844×390** (tổng 34 khung mỗi hướng). Điện thoại chỉ dùng xoay ngang, không có bản dọc
+(chủ dự án chốt 27/10/2026, [spec](spec.md) #28). Bốn hướng chỉ khác nhau ở cái nhìn và cách bố cục,
+để so cho công bằng. Hướng D2 cũ (Giấy & Mực) đã bị thay bằng D2 Kính & Ánh Kim, và D4 được thêm vào,
+theo yêu cầu của chủ dự án. Code nằm ở `design/c1/`:
 
-| Hướng | Thư mục | Tinh thần |
-|---|---|---|
-| D1 · Nỉ & Đồng thau | `design/c1/src/directions/d1/` | Câu lạc bộ riêng ban đêm: nỉ xanh, viền gỗ, đồng thau, chữ có chân |
-| D2 · Giấy & Mực | `design/c1/src/directions/d2/` | Sáng, kiểu sổ ghi điểm in đẹp: giấy ngà, mực đen, một màu đỏ lá bài |
-| D3 · Kẹo Đêm | `design/c1/src/directions/d3/` | Vui, đậm, ưu tiên điện thoại: nền chàm, màu kẹo, nút to bo tròn |
+| Hướng | Thư mục | Tinh thần | Phông chữ (tiêu đề · chữ thường) |
+|---|---|---|---|
+| D1 · Nỉ & Đồng thau | `design/c1/src/directions/d1/` | Câu lạc bộ riêng ban đêm: nỉ xanh, viền gỗ, đồng thau, chữ kiểu Art Deco | Josefin Sans · Be Vietnam Pro |
+| D2 · Kính & Ánh Kim | `design/c1/src/directions/d2/` | Sảnh tầng thượng nửa đêm: kính mờ, viền vàng sâm panh, bàn xanh dầu dưới một ngọn đèn | Be Vietnam Pro (cả hai) |
+| D3 · Kẹo Đêm | `design/c1/src/directions/d3/` | Vui, đậm, ưu tiên điện thoại: nền chàm, màu kẹo, nút to bo tròn | M PLUS Rounded 1c · Plus Jakarta Sans |
+| D4 · Sơn Mài Vàng Son | `design/c1/src/directions/d4/` | Hồn tranh sơn mài Việt: sơn then, son đỏ, vàng lá, khảm vỏ trứng | Playfair Display · Be Vietnam Pro |
+
+Phông của D1, D2, D4 do chủ dự án chọn từ bảng mẫu chữ; cỡ chữ và độ đậm theo thang của D3 (chữ
+thường 14–15 px trở lên trên desktop, không dùng nét mảnh 400 trên nền tối). Mọi phông đều là Google
+Fonts có bộ chữ tiếng Việt (dấu chồng như ầ, ặ, ữ hiện đúng) và có sẵn trong Figma. Mỗi hướng tự nạp
+phông của mình ở đầu `style.css` trong thư mục của hướng đó.
 
 Các màn: đăng nhập, đăng ký, quên/đặt lại mật khẩu, nâng cấp từ khách, hồ sơ, lobby, tạo phòng,
 link mời, bàn tới lượt mình, bàn nhiều trạng thái (showdown, đã bỏ, nghỉ, mất kết nối, all-in, người
@@ -23,9 +31,9 @@ cd design/c1 && npm ci && npm run dev
 
 Mở <http://localhost:5174>:
 
-- Trang đầu: ba hướng cạnh nhau (bàn chơi desktop + điện thoại), mô tả, bảng màu, phông chữ.
+- Trang đầu: bốn hướng xếp 2×2 (bàn chơi desktop + điện thoại), mô tả, bảng màu, phông chữ.
 - Bấm tên một hướng: mọi màn của hướng đó.
-- "So từng màn": một màn ở cả ba hướng cạnh nhau.
+- "So từng màn": một màn ở cả bốn hướng cạnh nhau.
 - Bấm vào một khung: mở **khung đúng kích thước, không có gì khác**, địa chỉ dạng
   `http://localhost:5174/#/d2/table-turn/mobile`. Đây là trang để đưa vào Figma.
 
@@ -41,7 +49,7 @@ html.to.design**, vì nó chụp đúng trang đang mở trong trình duyệt c�
 1. Cài tiện ích **html.to.design** cho Chrome (Chrome Web Store) và plugin **html.to.design** trong
    Figma (Figma → Plugins → tìm "html.to.design").
 2. Chạy `npm run dev` như trên, mở một khung, ví dụ `http://localhost:5174/#/d1/lobby/desktop`.
-3. Đặt cửa sổ trình duyệt rộng hơn khung (desktop cần ≥ 1440 px; điện thoại thì cửa sổ nào cũng được).
+3. Đặt cửa sổ trình duyệt rộng hơn khung (desktop cần ≥ 1440 px, điện thoại ngang ≥ 844 px).
 4. Bấm biểu tượng tiện ích → chụp trang → nó tải về một file `.h2d`.
 5. Trong Figma, mở plugin html.to.design → tab nhập file → chọn file `.h2d` → plugin dựng khung.
 6. Lặp lại cho các khung cần. Gợi ý: mỗi hướng một trang (page) trong Figma; chỉ cần nhập vài màn
@@ -55,4 +63,4 @@ thước nên ảnh chụp chính là bản thiết kế) và kéo ảnh vào Fi
 
 Báo hướng bạn chọn (và chỗ muốn đổi, ví dụ "lấy D2 nhưng bàn chơi mobile của D3"). Hướng được chọn
 thành design system cho C2–C5: màu, chữ, lá bài, chip, nút, và các màn của `web/` được làm lại theo
-hướng đó. Hai hướng còn lại giữ trong `design/c1/` làm tư liệu.
+hướng đó. Ba hướng còn lại giữ trong `design/c1/` làm tư liệu.
