@@ -1,5 +1,9 @@
+from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.forms import BaseUserCreationForm
+
+from apps.accounts import services
 
 from .models import (
     ChatMessage,
@@ -28,6 +32,44 @@ class ViewOnlyAdmin(admin.ModelAdmin):
         return False
 
 
+class PlayerCreationForm(BaseUserCreationForm):
+    """ "Add user" makes a player who can log in at once: players log in with email + password,
+    and the email must be verified (services.create_player vouches for it)."""
+
+    email = forms.EmailField(label="Email", help_text="Người chơi đăng nhập bằng email này.")
+
+    class Meta(BaseUserCreationForm.Meta):
+        model = User
+        fields = ("email", "username")
+        labels = {"username": "Tên ở bàn"}
+
+    MESSAGES = {
+        "email_taken": ("email", "Email này đã có tài khoản."),
+        "username_taken": ("username", "Tên này đã có người dùng."),
+    }
+
+    def clean(self):
+        cleaned = super().clean()
+        email = cleaned.get("email")
+        if email and services.email_in_use(services.normalize_email(email)):
+            self.add_error("email", self.MESSAGES["email_taken"][1])
+        username = cleaned.get("username")
+        if username and services.username_in_use(username):  # "An" and "an" too
+            self.add_error("username", self.MESSAGES["username_taken"][1])
+        return cleaned
+
+    def save(self, commit=True):
+        data = self.cleaned_data
+        try:
+            return services.create_player(data["email"], data["username"], data["password1"])
+        except services.AccountError as error:  # lost a race with another sign-up
+            field, message = self.MESSAGES.get(error.code, (None, error.message))
+            raise forms.ValidationError({field: message} if field else message) from error
+
+    def save_m2m(self):
+        """Nothing to add: the admin calls this after save()."""
+
+
 @admin.register(User)
 class PokerUserAdmin(UserAdmin):
     fieldsets = UserAdmin.fieldsets + (("Poker Friends", {"fields": ("is_guest", "approved")}),)
@@ -35,6 +77,18 @@ class PokerUserAdmin(UserAdmin):
     list_filter = ("approved", "is_guest", "is_staff", "is_active")
     ordering = ("-date_joined",)
     actions = ["approve", "withdraw_approval"]
+    add_form = PlayerCreationForm
+    add_fieldsets = (
+        (
+            "Người chơi mới",
+            {
+                "description": "Tạo xong là đăng nhập được ngay bằng email và mật khẩu này "
+                "(email coi như đã xác minh, tài khoản coi như đã duyệt, không gửi thư). Người "
+                "chơi tự đổi mật khẩu được bằng “Quên mật khẩu”.",
+                "fields": ("email", "username", "password1", "password2"),
+            },
+        ),
+    )
 
     @admin.action(description="Duyệt (cho vào chơi, xác minh luôn email)")
     def approve(self, request, queryset):
