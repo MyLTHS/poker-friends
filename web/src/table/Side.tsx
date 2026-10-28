@@ -392,13 +392,16 @@ export function ChatDrawer({
     <>
       <div className={`scrim scrim-soft drawer-scrim${open ? " is-open" : ""}`} onClick={onClose} aria-hidden />
       <div ref={panel} className={`drawer chat-drawer${open ? " is-open" : ""}`} role="dialog" aria-modal={false} aria-label="Chat và người xem" tabIndex={-1} inert={!open}>
-        <div className="drawer-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "chat"} className={tab === "chat" ? "is-active" : ""} onClick={() => setTab("chat")}>
-            Chat <i>{messages.length}</i>
-          </button>
-          <button type="button" role="tab" aria-selected={tab === "watch"} className={tab === "watch" ? "is-active" : ""} onClick={() => setTab("watch")}>
-            Người xem <i>{spectators.length}</i>
-          </button>
+        <div className="drawer-tabs">
+          {/* the close button is not a tab: only the two tabs sit in the tablist */}
+          <span className="drawer-tablist" role="tablist" aria-label="Chat hoặc người xem">
+            <button type="button" role="tab" aria-selected={tab === "chat"} className={tab === "chat" ? "is-active" : ""} onClick={() => setTab("chat")}>
+              Chat <i>{messages.length}</i>
+            </button>
+            <button type="button" role="tab" aria-selected={tab === "watch"} className={tab === "watch" ? "is-active" : ""} onClick={() => setTab("watch")}>
+              Người xem <i>{spectators.length}</i>
+            </button>
+          </span>
           <IconButton label="Đóng" onClick={onClose}>
             <X size={18} />
           </IconButton>

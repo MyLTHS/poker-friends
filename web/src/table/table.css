@@ -2701,7 +2701,10 @@
     align-items: center;
     gap: 4px;
   }
-  .d1 .drawer-tabs > :is(span, button):not(.iconbtn) {
+  .d1 .drawer-tablist {
+    display: contents;
+  }
+  .d1 .drawer-tablist > button {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -2712,7 +2715,7 @@
     color: var(--ivory-3);
     white-space: nowrap;
   }
-  .d1 .drawer-tabs > .is-active:not(.iconbtn) {
+  .d1 .drawer-tablist > .is-active {
     background: rgba(243, 234, 215, 0.09);
     color: var(--ivory);
   }
