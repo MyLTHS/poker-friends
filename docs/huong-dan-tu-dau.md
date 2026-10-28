@@ -170,6 +170,10 @@ Link mời chứa link của buổi, nên **mỗi buổi phải lấy lại link
 
 Link mời có mã bí mật: chỉ gửi trong nhóm kín.
 
+Đang ở trong bàn chơi cũng lấy được link: bấm **Mời bạn** ở thanh trên cùng (trên điện thoại là
+biểu tượng người có dấu +). Bạn **Chép link** để gửi, hoặc mở **mã QR** cho bạn ngồi cạnh quét.
+Bạn bè vẫn cần tài khoản đã được bạn duyệt (bước 2.3) mới vào được.
+
 ### 2.5. Ngồi vào bàn và cấp chip
 
 1. Ở trang phòng, bấm **Ngồi đây** cạnh một ghế trống (hoặc **Vào bàn chơi** rồi **Ngồi vào**).
@@ -200,6 +204,8 @@ Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip đ
     scripts/play-online.sh verify ban@gmail.com
     ```
 
+- Có người tới muộn: bấm **Mời bạn** ngay trên bàn để chép link hoặc cho họ quét mã QR, không
+  cần rời bàn.
 - Ai gặp lỗi lạ thì nhắc họ bấm **Gửi phản hồi** (nút có ở mọi màn), hoặc nhắn bạn kèm giờ.
 
 ### 2.7. Hết buổi
