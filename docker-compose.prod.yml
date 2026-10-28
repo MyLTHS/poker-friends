@@ -62,7 +62,8 @@ services:
       dockerfile: web/Dockerfile
       args:
         # Baked into the browser bundle at build time: where the table's WebSocket connects.
-        NEXT_PUBLIC_DJANGO_WS: ${NEXT_PUBLIC_DJANGO_WS:?set NEXT_PUBLIC_DJANGO_WS in .env}
+        # Empty (the default): the page's own address, which is right behind Caddy.
+        NEXT_PUBLIC_DJANGO_WS: ${NEXT_PUBLIC_DJANGO_WS:-}
     restart: unless-stopped
     healthcheck:
       test:

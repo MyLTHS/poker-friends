@@ -97,7 +97,6 @@ jobs:
           sed -e 's/^SITE_ADDRESS=.*/SITE_ADDRESS=:80/' \
               -e 's/^DJANGO_ALLOWED_HOSTS=.*/DJANGO_ALLOWED_HOSTS=localhost/' \
               -e 's#^FRONTEND_URL=.*#FRONTEND_URL=http://localhost#' \
-              -e 's#^NEXT_PUBLIC_DJANGO_WS=.*#NEXT_PUBLIC_DJANGO_WS=ws://localhost#' \
               -e 's/^DJANGO_BEHIND_HTTPS_PROXY=.*/DJANGO_BEHIND_HTTPS_PROXY=false/' \
               -e "s/^DJANGO_SECRET_KEY=.*/DJANGO_SECRET_KEY=$(openssl rand -hex 32)/" \
               deploy/env.production.example > .env
@@ -124,6 +123,15 @@ jobs:
               async with connect(url, origin="http://localhost") as ws:
                   first = json.loads(await asyncio.wait_for(ws.recv(), 10))
                   print("first message:", first["type"])
+                  # A quiet socket must stay open: with Redis, a read timeout at or under
+                  # Channels' 5 s blocking read closed it with 1011 (REDIS_URL socket_timeout).
+                  try:
+                      while True:
+                          await asyncio.wait_for(ws.recv(), 12)
+                  except TimeoutError:
+                      pass
+                  await ws.send(json.dumps({"type": "resync.request"}))
+                  print("still open after 12 s quiet:", json.loads(await ws.recv())["type"])
               try:
                   async with connect(url, origin="http://evil.example"):
                       raise SystemExit("a foreign Origin was accepted")

@@ -64,6 +64,15 @@ describe("roomSocketUrl", () => {
     const { roomSocketUrl } = await import("./api");
     expect(roomSocketUrl("ws://localhost:8000", 7)).toBe("ws://localhost:8000/ws/rooms/7/");
   });
+
+  it("uses the page's own address when no base is set (behind Caddy or a tunnel)", async () => {
+    const { roomSocketUrl } = await import("./api");
+    const https = { protocol: "https:", host: "abc.trycloudflare.com" };
+    expect(roomSocketUrl("", 3, https)).toBe("wss://abc.trycloudflare.com/ws/rooms/3/");
+    expect(roomSocketUrl("", 3, { protocol: "http:", host: "localhost:8080" })).toBe(
+      "ws://localhost:8080/ws/rooms/3/",
+    );
+  });
 });
 
 describe("inviteUrl", () => {
