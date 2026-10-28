@@ -312,18 +312,22 @@ class TestClientErrors:
 
     def test_cookies_hole_cards_and_link_tokens_are_never_stored(self, guest):
         client = logged_in(guest)
-        client.cookies["sessionid"] = client.cookies["sessionid"].value  # a real session cookie
+        session = client.cookies["sessionid"].value  # this player's real session
         leaky = {
-            "message": "Failed: sessionid=abc123secret; csrftoken=tok456",
-            "stack": 'state {"cards":["As","Kd"],"deck":["2c","3d"]} Cookie: sessionid=abc',
+            "message": f"Failed: sessionid={session}; csrftoken=tok456",
+            "stack": (
+                'state {"cards":["As","Kd"],"deck":["2c","3d"]}\n'
+                f"Cookie: theme=dark; sessionid={session}\n"
+                "X-CSRFToken: tok789"
+            ),
             "page": "/account/reset?uid=4&token=c9x-reset-token#top",
+            "user_agent": f"Mozilla/5.0 sessionid={session}",
         }
         assert post(client, "/api/client-errors/", leaky).status_code == 204
         row = ClientError.objects.get()
-        stored = " ".join([row.message, row.stack, row.page, row.user_agent])
-        for secret in ("abc123secret", "tok456", '"As"', '"Kd"', '"2c"', "c9x-reset-token"):
+        stored = " ".join([row.message, row.stack, row.page, row.user_agent, row.release])
+        for secret in (session, "tok456", "tok789", '"As"', '"Kd"', '"2c"', "c9x-reset-token"):
             assert secret not in stored, secret
-        assert client.cookies["sessionid"].value not in stored
         assert "[đã xoá]" in row.message and row.page.startswith("/account/reset?uid=")
 
     def test_nobody_reads_errors_over_http(self, guest):
