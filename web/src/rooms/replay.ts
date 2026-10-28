@@ -15,13 +15,3 @@ export function describeStep(action: AppliedAction | null, names: Record<string,
   const amount = action.kind === "raise" ? ` ${action.amount}` : "";
   return `${who} ${VERB[action.kind]}${amount}${action.timeout ? " (hết giờ)" : ""}`;
 }
-
-type Listed = { hand_id: number; hand_no: number; voided: boolean };
-
-/** The replayable hands just before (older) and after (newer) `handId` in the room's hand list. */
-export function neighbours<H extends Listed>(hands: H[], handId: number): { prev: H | null; next: H | null } {
-  const playable = hands.filter((h) => !h.voided || h.hand_id === handId).sort((a, b) => a.hand_no - b.hand_no);
-  const i = playable.findIndex((h) => h.hand_id === handId);
-  if (i < 0) return { prev: null, next: null };
-  return { prev: playable[i - 1] ?? null, next: playable[i + 1] ?? null };
-}

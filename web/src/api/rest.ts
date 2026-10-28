@@ -885,6 +885,14 @@ export interface components {
              *     theo số ghế; `[]` nếu ván kết thúc vì mọi người bỏ bài (kể cả khi lật 7-2).
              */
             showdown: components["schemas"]["ShowdownHand"][];
+            /** @description Ván xong (không bị huỷ) ngay trước ván này trong phòng, theo số ván; `null` nếu không có. Không giới hạn trong 100 ván của danh sách. */
+            prev_hand: components["schemas"]["HandLink"] | null;
+            /** @description Ván xong (không bị huỷ) ngay sau ván này; `null` nếu không có. */
+            next_hand: components["schemas"]["HandLink"] | null;
+        };
+        HandLink: {
+            hand_id: number;
+            hand_no: number;
         };
         RoomSummary: {
             players: {

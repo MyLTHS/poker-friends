@@ -24,7 +24,7 @@ import { useTableFx, type SeatPlace } from "@/table/TableFx";
 import { ButtonLink, D1Root, ErrorState, Spinner, fmt, signed } from "@/ui";
 
 import { createRoomsApi, type HandReplay } from "./api";
-import { describeStep, neighbours } from "./replay";
+import { describeStep } from "./replay";
 
 const STEP_MS = 1400;
 
@@ -94,7 +94,6 @@ export function ReplayScreen({ handId }: { handId: number }) {
   const [replay, setReplay] = useState<HandReplay | null>(null);
   const [roomName, setRoomName] = useState("");
   const [maxSeats, setMaxSeats] = useState(9);
-  const [around, setAround] = useState<ReturnType<typeof neighbours<HandRow>>>({ prev: null, next: null });
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -112,9 +111,6 @@ export function ReplayScreen({ handId }: { handId: number }) {
         if (cancelled || !room.ok) return;
         setRoomName(room.data.room.name);
         setMaxSeats(room.data.room.max_seats);
-      });
-      rooms.hands(result.data.room_id).then((list) => {
-        if (!cancelled && list.ok) setAround(neighbours(list.data.hands, handId));
       });
     });
     return () => {
@@ -162,6 +158,7 @@ export function ReplayScreen({ handId }: { handId: number }) {
 
   // Keyboard: ← → step, Shift+← → the hand before / after, space plays.
   const router = useRouter();
+  const around = useMemo(() => ({ prev: replay?.prev_hand ?? null, next: replay?.next_hand ?? null }), [replay]);
   const keys = useRef({ goTo, step, playing, around });
   useEffect(() => {
     keys.current = { goTo, step, playing, around };
@@ -391,7 +388,7 @@ function resultLine(replay: HandReplay, names: Record<string, string>): string {
   return `${winners.map(won).join(", ")}${seven}`;
 }
 
-type HandRow = { hand_id: number; hand_no: number; voided: boolean };
+type HandRow = { hand_id: number; hand_no: number };
 
 /** The hand before / after in the room's history (design: top bar of the replay). */
 function HandNav({ device, around }: { device: Device; around: { prev: HandRow | null; next: HandRow | null } }) {
