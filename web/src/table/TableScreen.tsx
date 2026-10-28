@@ -20,6 +20,7 @@ import { useDevice } from "./device";
 import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
 import { ConnStrip, PausedCard, ReconnectCard } from "./Overlays";
+import { winnerLines } from "./handName";
 import { canPreAct, facingBet } from "./reducer";
 import { describeAction, raisePresets, tableView, type SeatView } from "./seatView";
 import { SevenDeuceStage, SevenLedger, SevenMedal } from "./SevenDeuce";
@@ -545,17 +546,14 @@ function NextHand() {
 }
 
 function WinnerBanner({ device, winners, nameOf, handOf }: { device: Device; winners: PlayerResult[]; nameOf: (id: string) => string; handOf: (id: string) => string | undefined }) {
-  const names = winners.map((w) => nameOf(w.player_id));
-  const made = handOf(winners[0].player_id);
-  const total = winners.reduce((s, w) => s + w.hand_net, 0);
+  const { title, detail } = winnerLines(winners.map((w) => ({ name: nameOf(w.player_id), amount: w.hand_net, hand: handOf(w.player_id) })));
   return (
     <div className={`win-banner win-${device}`} role="status">
       <span className="win-crown">
         <Crown size={device === "desktop" ? 16 : 13} strokeWidth={2.2} />
       </span>
-      <b>{winners.length === 1 ? `${names[0]} thắng ${fmt(total)}` : `${names.join(", ")} chia pot`}</b>
-      {winners.length === 1 && made && <small>{made}</small>}
-      {winners.length > 1 && <small>Mỗi người {winners.map((w) => `+${fmt(w.hand_net)}`).join(" · ")}{made ? ` · ${made}` : ""}</small>}
+      <b>{title}</b>
+      {detail && <small>{detail}</small>}
     </div>
   );
 }
@@ -610,16 +608,18 @@ function idleContent({
   if (hand?.complete) {
     const net = myResult ? myResult.hand_net + myResult.seven_deuce_net : null;
     const showdown = hand.players.filter((p) => p.in_hand && p.cards.length && p.cards.every((c) => c !== "??")).length > 1;
-    const made = winners[0] && handOf(winners[0].player_id);
     const mine = myResult && handOf(myResult.player_id);
-    const win = winners.length === 1 ? `${nameOf(winners[0].player_id)} thắng ${fmt(winners[0].hand_net)}` : winners.length > 1 ? `${winners.map((w) => nameOf(w.player_id)).join(", ")} chia pot` : undefined;
+    // Each winner with their own hand: a split or side pot can be won with different hands.
+    const lines = winners.length ? winnerLines(winners.map((w) => ({ name: nameOf(w.player_id), amount: w.hand_net, hand: handOf(w.player_id) }))) : null;
+    const win = lines?.title;
+    const shownSub = lines?.detail && (winners.length === 1 ? `với ${lines.detail}` : lines.detail);
     return {
       eyebrow: `Ván #${hand.hand_no} đã xong`,
       status: "Chờ ván mới",
       center: "Ván mới sắp bắt đầu.",
       mine: net === null ? (me ? undefined : "Bạn đang xem") : `Bạn: ${mine ? `${mine} · ` : ""}${net > 0 ? `thắng ${signed(net)}` : net < 0 ? `thua ${fmt(net)}` : "hoà vốn"}`,
       win: celebration ? undefined : win,
-      winSub: made ? `với ${made}` : showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined,
+      winSub: shownSub || (showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined),
     };
   }
   // Seated but not dealt in: say why (no chips, sitting out, or simply next hand).

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { HandCategory, ShowdownHand } from "@/api/protocol";
 
-import { boardHighlights, handName, showdownBySeat } from "./handName";
+import { boardHighlights, handName, showdownBySeat, winnerLines } from "./handName";
 
 const entry = (category: HandCategory, cards: string[], seat = 1): ShowdownHand =>
   ({ player_id: String(seat), seat, category, cards }) as ShowdownHand;
@@ -47,5 +47,21 @@ describe("showdownBySeat", () => {
   it("maps each seat to the name of its hand", () => {
     const names = showdownBySeat([entry("one_pair", ["Ac", "Ad", "Qh", "Jh", "7d"], 3)]);
     expect(names).toEqual({ 3: "Đôi A" });
+  });
+});
+
+describe("winnerLines", () => {
+  it("one winner: the amount, then the hand", () => {
+    expect(winnerLines([{ name: "Chi", amount: 1840, hand: "Thùng già A" }])).toEqual({ title: "Chi thắng 1.840", detail: "Thùng già A" });
+    expect(winnerLines([{ name: "Chi", amount: 40 }])).toEqual({ title: "Chi thắng 40", detail: undefined });
+  });
+
+  it("several winners: each one's own amount and own hand, never one hand for all", () => {
+    const lines = winnerLines([
+      { name: "An", amount: 900, hand: "Thùng già A" },
+      { name: "Chi", amount: 300, hand: "Đôi K" },
+      { name: "Bình", amount: 50 },
+    ]);
+    expect(lines).toEqual({ title: "An, Chi, Bình chia pot", detail: "An +900 (Thùng già A) · Chi +300 (Đôi K) · Bình +50" });
   });
 });

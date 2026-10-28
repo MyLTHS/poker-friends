@@ -3,6 +3,7 @@
 // reads cards[0] (and cards[2] / cards[3]) to write "Thùng già A", "Cù lũ K đôi 9".
 
 import type { HandCategory } from "@/api/protocol";
+import { fmt } from "@/ui/format";
 
 /** A ShowdownHand from the socket or from the REST replay (which types cards as a plain array). */
 export type ShownHand = { player_id: string; seat: number; category: HandCategory; cards: readonly string[] };
@@ -42,4 +43,15 @@ export function showdownBySeat(showdown: readonly ShownHand[] | null | undefined
 export function boardHighlights(showdown: readonly ShownHand[] | null | undefined, board: string[]): number[] {
   const used = new Set((showdown ?? []).flatMap((entry) => entry.cards));
   return board.flatMap((card, i) => (used.has(card) ? [i] : []));
+}
+
+export type Winner = { name: string; amount: number; hand?: string };
+
+/** "Chi thắng 1.840" + "Thùng già A"; several winners each keep their own amount and hand. */
+export function winnerLines(winners: Winner[]): { title: string; detail?: string } {
+  if (winners.length === 1) return { title: `${winners[0].name} thắng ${fmt(winners[0].amount)}`, detail: winners[0].hand };
+  return {
+    title: `${winners.map((w) => w.name).join(", ")} chia pot`,
+    detail: winners.map((w) => `${w.name} +${fmt(w.amount)}${w.hand ? ` (${w.hand})` : ""}`).join(" · "),
+  };
 }
