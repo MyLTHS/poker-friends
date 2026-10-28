@@ -9,6 +9,7 @@ consumer as ``table.message`` events through the channel layer (``Actor._send``)
 import json
 import uuid
 
+from autobahn.exception import Disconnected
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from apps.accounts.ratelimit import RateLimited
@@ -117,6 +118,15 @@ class RoomConsumer(AsyncWebsocketConsumer):
             self.actor.chat(self.player_id, message["payload"]["text"].strip())
             return
         self.actor.submit_command(self.conn, self.player_id, message)
+
+    async def send(self, text_data=None, bytes_data=None, close=False):
+        try:
+            await super().send(text_data=text_data, bytes_data=bytes_data, close=close)
+        except Disconnected:
+            # Daphne: the client began closing a moment ago and its websocket.disconnect is on
+            # the way. Raising here would end this consumer before disconnect() runs, leaving
+            # the actor sending to a dead socket until its channel fills up (seen in a soak).
+            pass
 
     async def table_message(self, event):
         """From the actor via the channel layer: relay as-is."""
