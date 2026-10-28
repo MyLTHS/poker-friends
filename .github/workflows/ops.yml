@@ -1,0 +1,139 @@
+name: Ops
+
+# Phase E checks that need no server: a backup really restores (restore-drill), and the
+# production compose file really starts and routes through Caddy (prod-smoke).
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 20 * * 0" # every Sunday 03:00 Vietnam time: the drill keeps proving itself
+  workflow_dispatch:
+
+jobs:
+  restore-drill:
+    # Bằng chứng "backup đã thử khôi phục": play hands into Postgres, back up with
+    # scripts/backup.sh, restore into another database with scripts/restore.sh, check_ledger.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: poker
+          POSTGRES_USER: poker
+          POSTGRES_PASSWORD: poker
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U poker -d poker"
+          --health-interval 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://poker:poker@localhost:5432/poker
+      RESTORED_URL: postgres://poker:poker@localhost:5432/poker_restored
+      # The scripts run with the database's own pg_dump/pg_restore version, as in production
+      # (the compose "tools" service), not the runner's older client.
+      PG: docker run --rm --network host -v ${{ github.workspace }}:/work -w /work postgres:17
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.3"
+      - run: uv sync --frozen
+      - name: Play hands into the database
+        run: |
+          uv run python manage.py migrate --noinput -v0
+          uv run python manage.py simulate_hands --hands 200 --players 9 --seed ${{ github.run_number }}
+          uv run python manage.py simulate_hands --hands 300 --players 2 --seven-deuce-bonus 150 --seed ${{ github.run_number }}
+          uv run python manage.py simulate_hands --hands 50 --players 5 --leave-unfinished
+          uv run python manage.py check_ledger
+      - name: Back up
+        run: $PG scripts/backup.sh -d "$DATABASE_URL" -o backups/drill.dump
+      - name: Restore refuses a database that has data
+        run: |
+          if $PG scripts/restore.sh -d "$DATABASE_URL" backups/drill.dump; then
+            echo "restore.sh restored over a database with data" >&2
+            exit 1
+          fi
+      - name: Restore into a new, empty database
+        run: |
+          $PG psql "$DATABASE_URL" -c "CREATE DATABASE poker_restored"
+          $PG scripts/restore.sh -d "$RESTORED_URL" backups/drill.dump
+      - name: The restored database checks out
+        run: |
+          DATABASE_URL="$RESTORED_URL" uv run python manage.py migrate --check
+          DATABASE_URL="$RESTORED_URL" uv run python manage.py check_ledger
+      - name: Same rows, and the ledger is still append-only
+        run: |
+          for table in games_user games_room games_ledgerentry games_hand games_handcommand; do
+            q="SELECT count(*) FROM $table"
+            a=$($PG psql "$DATABASE_URL" -Atc "$q")
+            b=$($PG psql "$RESTORED_URL" -Atc "$q")
+            echo "$table: $a -> $b"
+            test "$a" = "$b"
+          done
+          if $PG psql "$RESTORED_URL" -c "UPDATE games_ledgerentry SET amount = amount"; then
+            echo "the append-only trigger did not survive the restore" >&2
+            exit 1
+          fi
+
+  prod-smoke:
+    # docker-compose.prod.yml + deploy/Caddyfile, over plain HTTP (no domain in CI).
+    runs-on: ubuntu-latest
+    env:
+      DC: docker compose -f docker-compose.prod.yml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.3"
+      - name: Production .env, changed only for http://localhost
+        run: |
+          sed -e 's/^SITE_ADDRESS=.*/SITE_ADDRESS=:80/' \
+              -e 's/^DJANGO_ALLOWED_HOSTS=.*/DJANGO_ALLOWED_HOSTS=localhost/' \
+              -e 's#^FRONTEND_URL=.*#FRONTEND_URL=http://localhost#' \
+              -e 's#^NEXT_PUBLIC_DJANGO_WS=.*#NEXT_PUBLIC_DJANGO_WS=ws://localhost#' \
+              -e 's/^DJANGO_BEHIND_HTTPS_PROXY=.*/DJANGO_BEHIND_HTTPS_PROXY=false/' \
+              -e "s/^DJANGO_SECRET_KEY=.*/DJANGO_SECRET_KEY=$(openssl rand -hex 32)/" \
+              deploy/env.production.example > .env
+      - run: $DC config -q
+      - name: Start everything
+        run: $DC up -d --build --wait --wait-timeout 600
+      - name: HTTP through Caddy
+        run: |
+          curl -fsS -o /dev/null http://localhost/
+          curl -fsS http://localhost/api/auth/config/
+          curl -fsS -o /dev/null http://localhost/admin/login/
+          curl -fsS -o /dev/null http://localhost/static/admin/css/base.css
+      - name: WebSocket through Caddy
+        run: |
+          room=$($DC exec -T backend python manage.py create_demo_room --name Smoke | sed -n 's/.*room \([0-9]*\).*/\1/p')
+          uv run --no-project --with websockets==15.0.1 python - "$room" <<'EOF'
+          import asyncio, json, sys
+          from websockets.asyncio.client import connect
+          from websockets.exceptions import InvalidStatus
+
+          url = f"ws://localhost/ws/rooms/{sys.argv[1]}/"
+
+          async def main():
+              async with connect(url, origin="http://localhost") as ws:
+                  first = json.loads(await asyncio.wait_for(ws.recv(), 10))
+                  print("first message:", first["type"])
+              try:
+                  async with connect(url, origin="http://evil.example"):
+                      raise SystemExit("a foreign Origin was accepted")
+              except InvalidStatus as error:
+                  print("foreign Origin refused:", error.response.status_code)
+
+          asyncio.run(main())
+          EOF
+      - name: Backup through the tools service, then check_ledger
+        run: |
+          $DC run --rm -T tools scripts/backup.sh
+          ls -l backups/
+          $DC exec -T backend python manage.py check_ledger
+      - name: Only one backend (one Daphne), tried last
+        run: |
+          $DC up -d --scale backend=2 backend || true
+          test "$($DC ps -q backend | wc -l)" -eq 1
+      - name: Logs when it fails
+        if: failure()
+        run: $DC logs --no-color --tail 200
