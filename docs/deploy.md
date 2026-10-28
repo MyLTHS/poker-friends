@@ -5,6 +5,9 @@
 > [`docker-compose.prod.yml`](../docker-compose.prod.yml), [`deploy/Caddyfile`](../deploy/Caddyfile),
 > mẫu `.env` ở [`deploy/env.production.example`](../deploy/env.production.example). Trang này ghi
 > những điều **bắt buộc đúng** khi deploy; xử lý sự cố, backup, đổi bản: [runbook.md](runbook.md).
+>
+> Trước khi có VPS, các buổi chơi thử chạy trên máy Mac của chủ dự án qua Cloudflare Tunnel:
+> [choi-online.md](choi-online.md) (`scripts/play-online.sh`, `docker-compose.home.yml`).
 
 ## Bắt buộc khi deploy
 
