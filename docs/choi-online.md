@@ -5,7 +5,7 @@
 
 Chưa thuê VPS, nên trong các buổi chơi thử (giai đoạn E/F) **máy Mac của Lym là server**. Bạn bè
 vào qua một link `https://<chữ-ngẫu-nhiên>.trycloudflare.com`: Cloudflare nhận kết nối của họ
-rồi chuyển qua một "đường hầm" (chương trình `cloudflared` chạy trên máy Lym) về server.
+rồi chuyển qua một "đường hầm" (container `tunnel` chạy `cloudflared` trong Docker) về server.
 Không cần mở cổng modem, không cần tên miền, có sẵn HTTPS.
 
 Đổi lại: **link đổi mỗi lần bật**, và máy tắt/ngủ là bàn dừng.
@@ -14,7 +14,8 @@ Mọi việc làm bằng một lệnh, chạy trong thư mục dự án:
 
 | Lệnh | Làm gì |
 |---|---|
-| `scripts/play-online.sh up` | Sao lưu, bật server và đường hầm, in link cho bạn bè |
+| ▶ ở nhóm **poker-home** trong Docker Desktop | Bật tất cả (đường hầm và sao lưu tự động có sẵn); link nằm trong Logs của **poker-home-tunnel-1**. Cần dựng lần đầu bằng `up` |
+| `scripts/play-online.sh up` | Sao lưu, bật server và đường hầm, giữ máy thức, in link và copy sẵn |
 | `scripts/play-online.sh status` | Đang chạy không, link nào |
 | `scripts/play-online.sh logs` | Xem log server (cả link xác minh email, xem dưới) |
 | `scripts/play-online.sh down` | Sao lưu cuối buổi, tắt đường hầm và server (dữ liệu vẫn giữ) |

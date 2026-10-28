@@ -135,7 +135,10 @@ INSTALLED_APPS += [
     "allauth.socialaccount.providers.google",
     "apps.accounts",
 ]
-MIDDLEWARE += ["allauth.account.middleware.AccountMiddleware"]
+MIDDLEWARE += [
+    "allauth.account.middleware.AccountMiddleware",
+    "apps.accounts.middleware.remember_origin",
+]
 CSRF_FAILURE_VIEW = "apps.accounts.views.csrf_failure"  # JSON ApiError under /api/
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
@@ -166,6 +169,9 @@ ACCOUNTS_GUESTS_PER_IP_HOUR = int(os.environ.get("GUESTS_PER_IP_HOUR", "20"))
 
 # Links in emails and the end of the Google flow point at the web app, not at Django.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+# Links in emails follow the address the player used, not FRONTEND_URL: playing from home the
+# tunnel's address changes on every start (apps/accounts/middleware.py).
+FRONTEND_URL_FROM_REQUEST = env_bool("FRONTEND_URL_FROM_REQUEST")
 if FRONTEND_URL not in CSRF_TRUSTED_ORIGINS:
     CSRF_TRUSTED_ORIGINS.append(FRONTEND_URL)
 

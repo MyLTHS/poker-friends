@@ -8,7 +8,7 @@ Máy Mac của bạn chính là server: bạn bè vào qua một link `https://�
 chuyển thẳng về máy bạn. Vì vậy **trong lúc chơi, máy phải bật, cắm sạc và có mạng**.
 
 - Phần 1 làm **một lần duy nhất** (khoảng 20–30 phút).
-- Phần 2 làm **mỗi buổi chơi** (khoảng 5 phút).
+- Phần 2 làm **mỗi buổi chơi**: chỉ cần **bấm ▶ trong Docker Desktop rồi copy link** (1 phút).
 - Phần 3 là đoạn **dán cho bạn bè**.
 
 ---
@@ -30,31 +30,10 @@ Kiểm tra: gõ lệnh dưới, thấy một con số phiên bản là được.
 docker info --format '{{.ServerVersion}}'
 ```
 
-### 1.2. Homebrew và cloudflared
+### 1.2. Không cần cài gì thêm
 
-`cloudflared` là chương trình mở "đường hầm" để bạn bè ở xa vào được máy bạn mà không phải chỉnh
-modem. Nó được cài qua Homebrew.
-
-Kiểm tra đã có Homebrew chưa:
-
-```bash
-brew --version
-```
-
-Nếu báo `command not found`: cài Homebrew theo một dòng lệnh ở <https://brew.sh>, làm theo các
-dòng "Next steps" nó in ra cuối cùng, rồi mở lại Terminal.
-
-Cài cloudflared:
-
-```bash
-brew install cloudflared
-```
-
-Kiểm tra (thấy dòng `cloudflared version …` là được):
-
-```bash
-cloudflared --version
-```
+Đường hầm Cloudflare (để bạn bè ở xa vào được máy bạn mà không phải chỉnh modem) chạy luôn trong
+Docker, nên không phải cài `cloudflared` riêng.
 
 ### 1.3. Lấy code về máy
 
@@ -87,52 +66,64 @@ cd ~/Projects/notes-2026
 Từ đây trở đi, **mọi lệnh đều chạy trong thư mục này**. Mở Terminal mới thì gõ lại
 `cd ~/Projects/notes-2026` trước.
 
----
+### 1.4. Dựng game lần đầu (bằng Terminal, chỉ một lần)
 
-## Phần 2. Mỗi buổi chơi
-
-### 2.1. Bật server (khoảng 15 phút trước giờ chơi)
-
-1. **Cắm sạc.** Mở **Docker Desktop**, đợi cá voi đứng yên.
-2. Vào thư mục dự án và bật:
-
-   ```bash
-   cd ~/Projects/notes-2026
-   ```
-
-   ```bash
-   scripts/play-online.sh up
-   ```
-
-   - Lần đầu tiên phải tải và dựng mọi thứ nên mất **5–15 phút**. Các lần sau khoảng 1 phút.
-   - Lần đầu, script tự tạo file `.env.home` chứa mật khẩu và khoá bí mật. **Không gửi file này
-     cho ai.**
-   - Chờ tới dòng **XONG** và một link dạng `https://chu-ngau-nhien.trycloudflare.com`. Đó là
-     **link của buổi hôm nay**. Mỗi lần `up` là một link mới.
-   - Nếu thay vì **XONG** script báo "Server đã chạy nhưng link chưa trả lời", không sao: link mới
-     cần thêm chút thời gian. Đợi một phút rồi mở thử.
-3. **Tự thử trước:** mở link trên điện thoại, **tắt Wi‑Fi để dùng 4G** cho giống bạn bè ở xa.
-   Thấy trang sảnh là ổn. Link mới đôi khi cần chờ 30–60 giây mới mở được.
-
-Quên link thì xem lại bằng:
+Mở Docker Desktop, đợi cá voi đứng yên, rồi chạy:
 
 ```bash
-scripts/play-online.sh status
+scripts/play-online.sh up
 ```
 
-### 2.2. Tạo tài khoản quản trị (chỉ lần đầu)
+- Lần đầu phải tải và dựng mọi thứ nên mất **5–15 phút**. Script tự tạo file `.env.home` chứa
+  mật khẩu và khoá bí mật. **Không gửi file này cho ai.**
+- Chờ tới dòng **XONG**: script in ra link và copy sẵn vào clipboard.
+- Từ giờ trong Docker Desktop, mục **Containers**, có nhóm **poker-home**: đó là cả game
+  (database, server, web, đường hầm, sao lưu tự động).
 
-Tài khoản này để xem phản hồi, lỗi và danh sách người chơi trong trang quản trị. Khi server đang
-chạy:
+Tạo luôn tài khoản quản trị (để xem phản hồi, lỗi, người chơi ở `<link>/admin/`). Tự gõ tên,
+email, mật khẩu; lúc gõ mật khẩu màn hình không hiện gì, cứ gõ rồi Enter:
 
 ```bash
 scripts/play-online.sh admin
 ```
 
-Tự gõ tên, email và mật khẩu (lúc gõ mật khẩu màn hình không hiện gì, cứ gõ rồi Enter). Trang
-quản trị là `<link của buổi>/admin/`.
+**Mỗi khi cập nhật code** (`git pull` có thay đổi), chạy lại `scripts/play-online.sh up` một lần để
+dựng bản mới. Nút ▶ trong Docker Desktop chỉ bật lại bản đã dựng.
 
-### 2.3. Tạo phòng
+### 1.5. Cho Mac không tự ngủ khi cắm sạc
+
+Bấm ▶ trong Docker Desktop thì không có gì giữ máy thức. Mở **System Settings** → **Battery** →
+**Options…** (máy bàn: **Energy**), bật **Prevent automatic sleeping on power adapter when the
+display is off**. Màn hình vẫn tự tắt được, chỉ là máy không ngủ.
+
+---
+
+## Phần 2. Mỗi buổi chơi
+
+### 2.1. Bật game và lấy link (khoảng 15 phút trước giờ chơi)
+
+1. **Cắm sạc.** Mở **Docker Desktop**, đợi cá voi đứng yên.
+2. Vào **Containers**, ở dòng nhóm **poker-home**, bấm nút **▶ (Start)**.
+3. Bấm mũi tên **›** để mở nhóm, bấm vào container **poker-home-tunnel-1**, chọn tab **Logs**.
+   Đợi vài giây sẽ thấy một khung chữ:
+
+   ```
+   Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):
+   https://chu-ngau-nhien.trycloudflare.com
+   ```
+
+   Link `https://….trycloudflare.com` đó là **link của buổi hôm nay**. Bôi đen, copy. Mỗi lần bấm
+   Start là một link mới (link cũ hết dùng được).
+4. **Tự thử trước:** mở link trên điện thoại, **tắt Wi‑Fi để dùng 4G** cho giống bạn bè ở xa.
+   Link mới đôi khi cần chờ 30–60 giây mới mở được. Thấy trang sảnh là ổn.
+
+Mỗi lần bấm Start, game **tự sao lưu** database vào thư mục `backups/` (rồi cứ 6 tiếng thêm một
+bản trong lúc chạy).
+
+Thích gõ lệnh hơn? `scripts/play-online.sh up` làm đúng những việc trên, còn giữ máy thức và copy
+sẵn link; `scripts/play-online.sh status` cho xem lại link đang dùng.
+
+### 2.2. Tạo phòng
 
 1. Mở link của buổi trên máy tính. Trang mở ra **Sảnh**.
 2. **Chủ phòng nên có tài khoản thật (email + mật khẩu), đừng dùng khách.** Tài khoản khách chỉ
@@ -155,9 +146,9 @@ quản trị là `<link của buổi>/admin/`.
 4. Bấm **Tạo phòng & lấy link mời**. Trang phòng hiện **link mời** và **mã QR**. Bấm **Chép
    link** để copy.
 
-### 2.4. Gửi bạn bè
+### 2.3. Gửi bạn bè
 
-Dán **đoạn ở Phần 3** vào nhóm chat, thay `<LINK MỜI PHÒNG>` bằng link mời ở bước 2.3. Bạn bè
+Dán **đoạn ở Phần 3** vào nhóm chat, thay `<LINK MỜI PHÒNG>` bằng link mời ở bước 2.2. Bạn bè
 **chỉ cần đúng link mời này**: mở ra là web tự tạo tài khoản khách và đưa họ vào phòng, không phải
 đăng ký hay mở link nào khác.
 
@@ -166,7 +157,7 @@ Link mời chứa link của buổi, nên **mỗi buổi phải lấy lại link
 
 Link mời có mã bí mật: chỉ gửi trong nhóm kín.
 
-### 2.5. Ngồi vào bàn và cấp chip
+### 2.4. Ngồi vào bàn và cấp chip
 
 1. Ở trang phòng, bấm **Ngồi đây** cạnh một ghế trống (hoặc **Vào bàn chơi** rồi **Ngồi vào**).
 2. Đợi bạn bè vào và **ngồi xuống ghế**. Chủ phòng chỉ cấp chip được cho người **đang ngồi**.
@@ -178,7 +169,7 @@ Link mời có mã bí mật: chỉ gửi trong nhóm kín.
 
 Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip được.
 
-### 2.6. Trong lúc chơi
+### 2.5. Trong lúc chơi
 
 - **Không gập máy.** Màn hình tự tắt thì không sao.
 - Không tắt Docker Desktop, không ngắt Wi‑Fi, không cho máy cập nhật hay khởi động lại.
@@ -198,15 +189,16 @@ Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip đ
 
 - Ai gặp lỗi lạ thì nhắc họ bấm **Gửi phản hồi** (nút có ở mọi màn), hoặc nhắn bạn kèm giờ.
 
-### 2.7. Hết buổi
+### 2.6. Hết buổi
 
-1. **Trước khi tắt**, kiểm tra sổ chip. Dòng cuối phải là `OK: …`:
+1. **Trước khi tắt**, kiểm tra sổ chip (trong Terminal). Dòng cuối phải là `OK: …`:
 
    ```bash
    docker compose -p poker-home -f docker-compose.prod.yml -f docker-compose.home.yml --env-file .env.home exec backend python manage.py check_ledger
    ```
 
-2. Tắt mọi thứ. Script tự sao lưu vào thư mục `backups/` trước khi tắt:
+2. Tắt: trong Docker Desktop bấm **■ (Stop)** ở dòng nhóm **poker-home**. Hoặc chạy lệnh dưới,
+   lệnh này sao lưu thêm một bản cuối buổi rồi mới tắt:
 
    ```bash
    scripts/play-online.sh down
@@ -215,8 +207,8 @@ Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip đ
 3. Mỗi tuần, chép thư mục `backups/` ra chỗ khác (Google Drive, ổ ngoài). Hỏng máy thì mất cả dữ
    liệu lẫn bản sao lưu nằm cùng máy.
 
-Dữ liệu (tài khoản, phòng, chip, lịch sử) vẫn giữ nguyên trong database sau `down`. Buổi sau chạy
-lại `up` là có **link mới**, và:
+Dữ liệu (tài khoản, phòng, chip, lịch sử) vẫn giữ nguyên khi tắt. Buổi sau bấm ▶ lại là có **link
+mới**, và:
 - **Tài khoản đã đăng ký** (email + mật khẩu): đăng nhập lại trên link mới là có lại hết phòng và
   chip.
 - **Tài khoản khách**: không vào lại được, vì khách chỉ sống trên link của buổi cũ. Chip của khách
@@ -255,14 +247,16 @@ Mẹo cho bạn bè:
 
 | Chuyện gì | Làm gì |
 |---|---|
+| Không thấy nhóm **poker-home** trong Docker Desktop | Chưa dựng lần đầu: làm bước 1.4 |
+| Logs của tunnel không hiện link sau một phút | Kiểm Wi‑Fi; bấm ■ rồi ▶ lại nhóm poker-home |
 | `up` báo Docker chưa chạy | Mở Docker Desktop, đợi cá voi đứng yên, chạy lại `up` |
 | `up` báo không lấy được link | Kiểm Wi‑Fi, đợi một lúc, chạy lại `up` |
 | Link mới mở chưa được | Đợi 30–60 giây rồi thử lại |
-| Bạn bè mở link cũ không vào được | Link đổi mỗi lần `up`. Chạy `scripts/play-online.sh status` lấy link hiện tại, gửi lại |
-| Lỡ gập máy, máy ngủ, mất điện | Mở máy lên, **mở Docker Desktop** và đợi cá voi đứng yên, chạy `scripts/play-online.sh down` rồi `scripts/play-online.sh up`, lấy lại link mời và gửi **link mới** |
+| Bạn bè mở link cũ không vào được | Link đổi mỗi lần Start. Lấy link hiện tại trong Logs của **poker-home-tunnel-1** (hoặc `scripts/play-online.sh status`), gửi lại |
+| Lỡ gập máy, máy ngủ, mất điện | Mở máy, mở Docker Desktop, bấm ■ rồi ▶ nhóm **poker-home**, lấy link mới trong Logs, lấy lại link mời phòng và gửi lại |
 | `up` báo đã có một server khác đang chạy | Làm đúng lệnh `docker compose -p … down` mà script in ra, rồi chạy lại `up` |
-| Bàn báo "tạm dừng" | [runbook.md](runbook.md#bàn-tạm-dừng) (thay `dc` bằng lệnh `docker compose -p poker-home …` như ở bước 2.7) |
-| Nghi chip bị sai | Chạy lệnh kiểm sổ chip ở bước 2.7, rồi xem [runbook.md](runbook.md#lệch-chip) |
+| Bàn báo "tạm dừng" | [runbook.md](runbook.md#bàn-tạm-dừng) (thay `dc` bằng lệnh `docker compose -p poker-home …` như ở bước 2.6) |
+| Nghi chip bị sai | Chạy lệnh kiểm sổ chip ở bước 2.6, rồi xem [runbook.md](runbook.md#lệch-chip) |
 
 Chi tiết hơn: [choi-online.md](choi-online.md) (cách chơi online hoạt động) và
 [beta-f.md](beta-f.md) (sổ tay buổi beta: điều kiện đạt, cách xếp phản hồi).

@@ -1,9 +1,11 @@
 # "Playing from home": the production stack on this Mac, reached through a Cloudflare quick
 # tunnel instead of a server with a domain (docs/choi-online.md). Used on top of the production
-# file, normally through scripts/play-online.sh:
+# file. The first time through scripts/play-online.sh (it creates .env.home and builds):
 #
 #   docker compose -f docker-compose.prod.yml -f docker-compose.home.yml --env-file .env.home ...
 #
+# After that the whole game is the "poker-home" group in Docker Desktop: ▶ starts everything,
+# the tunnel included, and the link for friends is in the tunnel container's log.
 # Everything else (one Daphne, migrations, healthchecks) is the production file unchanged.
 name: poker-home
 
@@ -31,3 +33,40 @@ services:
 
   tools:
     env_file: !override .env.home
+
+  # The public link: a Cloudflare quick tunnel to Caddy. It starts with everything else, so ▶ in
+  # Docker Desktop is enough; every start prints a new https://<words>.trycloudflare.com link in
+  # this container's log. The backend accepts any *.trycloudflare.com host (.env.home).
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.0
+    command: ["tunnel", "--no-autoupdate", "--url", "http://caddy:80"]
+    restart: unless-stopped
+    depends_on:
+      caddy:
+        condition: service_started
+
+  # A backup when the game starts (▶ in Docker Desktop too), then every 6 hours while it runs.
+  # An empty database (the very first start) has nothing to back up. pg_dump matches the database.
+  autobackup:
+    image: postgres:17
+    env_file: .env.home
+    working_dir: /work
+    volumes:
+      - ./scripts:/work/scripts:ro
+      - ./backups:/work/backups
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        while true; do
+          n=$$(psql "$$DATABASE_URL" -Atc "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'" 2>/dev/null || echo x)
+          case "$$n" in
+            x | "") echo "autobackup: database not reachable, trying again in a minute"; sleep 60; continue ;;
+            0) echo "autobackup: empty database, nothing to back up" ;;
+            *) scripts/backup.sh || echo "autobackup: BACKUP FAILED" ;;
+          esac
+          sleep 21600
+        done
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy

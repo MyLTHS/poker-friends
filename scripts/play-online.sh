@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Play online from this Mac: the production stack (docker-compose.prod.yml + home override)
 # behind a Cloudflare quick tunnel (https://<random>.trycloudflare.com). docs/choi-online.md.
+# The tunnel is a container of the stack (docker-compose.home.yml), so after the first "up" the
+# same game also starts from Docker Desktop: ▶ on "poker-home", link in the tunnel's log.
 #
 #   scripts/play-online.sh up       # back up, start everything, print the link for friends
 #   scripts/play-online.sh status   # running? which link?
@@ -66,14 +68,16 @@ ensure_env() {
   password=$(openssl rand -hex 24)
   cat >"$ENV_FILE" <<EOF
 # Created by scripts/play-online.sh: secrets for playing from this Mac. Never commit this file.
-# The script rewrites DJANGO_ALLOWED_HOSTS and FRONTEND_URL on every "up" (the link changes).
+# Every start of the tunnel gives a new https://<words>.trycloudflare.com address: any of them
+# is accepted, and links in emails follow the address the player used.
 SITE_ADDRESS=:80
 DJANGO_DEBUG=false
 DJANGO_SECRET_KEY=$secret
 DJANGO_BEHIND_HTTPS_PROXY=true
 TRUSTED_PROXIES=1
-DJANGO_ALLOWED_HOSTS=localhost
+DJANGO_ALLOWED_HOSTS=.trycloudflare.com,localhost,127.0.0.1
 FRONTEND_URL=http://localhost
+FRONTEND_URL_FROM_REQUEST=true
 POSTGRES_DB=poker
 POSTGRES_USER=poker
 POSTGRES_PASSWORD=$password
@@ -116,14 +120,21 @@ backup() { # fails (never silently skips) when the database cannot be asked or t
   fi
 }
 
-# The quick-tunnel link from cloudflared's banner. Only the banner counts: on a network error
-# the log also mentions https://api.trycloudflare.com, which is not our link.
+# The quick-tunnel link from cloudflared's banner in the tunnel container's log. A restart (▶ in
+# Docker Desktop) prints a new banner: the last one is the live link. Only the banner counts: on a
+# network error the log also mentions https://api.trycloudflare.com, which is not our link.
 tunnel_url() {
-  awk '/Your quick Tunnel has been created/ { banner = 1; next }
+  dc logs --no-color --no-log-prefix tunnel 2>/dev/null | awk '
+    /Your quick Tunnel has been created/ { banner = 1; next }
     banner && match($0, /https:\/\/[a-z0-9-]+\.trycloudflare\.com/) {
-      url = substr($0, RSTART, RLENGTH)
-      if (url != "https://api.trycloudflare.com") { print url; exit }
-    }' "$STATE/cloudflared.log" 2>/dev/null || true
+      found = substr($0, RSTART, RLENGTH)
+      if (found != "https://api.trycloudflare.com") { url = found; banner = 0 }
+    }
+    END { if (url) print url }' || true
+}
+
+tunnel_running() {
+  [ -f "$ENV_FILE" ] && [ -n "$(dc ps -q --status running tunnel 2>/dev/null)" ]
 }
 
 # The production file names the backend container: another stack using that name (an older
@@ -144,13 +155,9 @@ UP_DONE=0
 abort_up() {
   [ "$UP_DONE" = 1 ] && return
   say "Chưa bật xong: đang đóng đường hầm và tắt server (dữ liệu vẫn giữ)..." >&2
-  stop_pid cloudflared
   stop_pid caffeinate
-  rm -f "$STATE/url"
   dc down >/dev/null 2>&1 || true
 }
-
-public_url() { cat "$STATE/url" 2>/dev/null || true; }
 
 check_public() { # HTTP status of the page through the tunnel, or 000
   curl -s -o /dev/null -m 10 -w '%{http_code}' "$1/api/auth/config/" || true
@@ -158,51 +165,45 @@ check_public() { # HTTP status of the page through the tunnel, or 000
 
 cmd_up() {
   command -v docker >/dev/null || die "chưa có Docker."
-  command -v cloudflared >/dev/null || die "chưa có cloudflared."
   docker info >/dev/null 2>&1 || die "Docker Desktop chưa chạy: mở Docker Desktop, đợi nó báo xong rồi chạy lại."
-  if alive cloudflared; then
-    say "Đang chạy rồi. Link: $(public_url)"
+  if tunnel_running; then
+    say "Đang chạy rồi. Link: $(tunnel_url)"
     exit 0
   fi
   check_backend_name
   mkdir -p "$STATE"
   ensure_env
-  # Files made before Redis was dropped still point at a "redis" service that no longer exists.
+  # Files made by older versions of this script: Redis is gone, the host list was one fixed
+  # link, and email links followed FRONTEND_URL.
   set_env REDIS_URL ""
+  set_env DJANGO_ALLOWED_HOSTS ".trycloudflare.com,localhost,127.0.0.1"
+  set_env FRONTEND_URL_FROM_REQUEST true
   trap abort_up EXIT
   trap 'exit 130' INT TERM
 
-  say "1/5 Bật database..."
+  say "1/4 Bật database..."
   dc up -d --wait db
-  say "2/5 Sao lưu trước khi chơi..."
+  say "2/4 Sao lưu trước khi chơi..."
   backup || die "không sao lưu được nên không bật (tránh mất dữ liệu). Thử lại sau một phút."
 
-  say "3/5 Mở đường hầm Cloudflare..."
-  nohup cloudflared tunnel --no-autoupdate --url "http://127.0.0.1:$HOME_PORT" \
-    >"$STATE/cloudflared.log" 2>&1 &
-  echo $! >"$STATE/cloudflared.pid"
+  say "3/4 Bật server và đường hầm Cloudflare (lần đầu build mất vài phút)..."
+  dc up -d --build --wait --wait-timeout 600
   local url=""
   for _ in $(seq 1 60); do
     url=$(tunnel_url)
     [ -n "$url" ] && break
-    alive cloudflared || die "cloudflared đã thoát (mất mạng?). Xem $STATE/cloudflared.log"
+    tunnel_running || die "đường hầm đã dừng (mất mạng?). Xem: docker compose -p $PROJECT logs tunnel"
     sleep 1
   done
-  [ -n "$url" ] || die "không lấy được link sau 60 giây (mạng?). Xem $STATE/cloudflared.log"
-  echo "$url" >"$STATE/url"
-  set_env DJANGO_ALLOWED_HOSTS "${url#https://},localhost,127.0.0.1"
-  set_env FRONTEND_URL "$url"
-
-  say "4/5 Bật server (lần đầu build mất vài phút)..."
-  dc up -d --build --wait --wait-timeout 600
+  [ -n "$url" ] || die "không lấy được link sau 60 giây (mạng?). Xem: docker compose -p $PROJECT logs tunnel"
 
   if command -v caffeinate >/dev/null; then
-    # Keeps the Mac awake while the tunnel runs; ends by itself when the tunnel stops.
-    nohup caffeinate -ims -w "$(cat "$STATE/cloudflared.pid")" >/dev/null 2>&1 &
+    # Keeps the Mac awake until "down" (started from Docker Desktop, nothing does: see the guide).
+    nohup caffeinate -ims >/dev/null 2>&1 &
     echo $! >"$STATE/caffeinate.pid"
   fi
 
-  say "5/5 Thử link từ ngoài..."
+  say "4/4 Thử link từ ngoài..."
   local code=000
   for _ in $(seq 1 45); do
     code=$(check_public "$url")
@@ -220,6 +221,9 @@ cmd_up() {
   say ""
   say "    $url"
   say ""
+  if command -v pbcopy >/dev/null; then
+    printf '%s' "$url" | pbcopy && say "(Link đã được copy sẵn: chỉ cần dán.)"
+  fi
   say "Cắm sạc, đừng gập máy. Hết buổi chạy: scripts/play-online.sh down"
 }
 
@@ -235,21 +239,18 @@ cmd_down() {
       say "" >&2
     fi
   fi
-  say "Đóng đường hầm..."
-  stop_pid cloudflared
   stop_pid caffeinate
-  rm -f "$STATE/url"
   if [ -f "$ENV_FILE" ]; then
-    say "Tắt server (dữ liệu vẫn giữ)..."
+    say "Tắt server và đường hầm (dữ liệu vẫn giữ)..."
     dc down
   fi
   say "Đã tắt."
 }
 
 cmd_status() {
-  if alive cloudflared; then
+  if tunnel_running; then
     local url
-    url=$(public_url)
+    url=$(tunnel_url)
     say "Đường hầm: đang mở, link $url (trả lời: $(check_public "$url"))"
   else
     say "Đường hầm: đang tắt"
