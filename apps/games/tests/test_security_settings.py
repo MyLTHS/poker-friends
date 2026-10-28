@@ -13,6 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 STRONG_SECRET = "x" * 50
+HSTS_WARNINGS = ("security.W004", "security.W008", "security.W012", "security.W016")
 
 
 def run(args: list[str], **env: str) -> subprocess.CompletedProcess:
@@ -50,3 +51,18 @@ class TestDebugIsOffUnlessAskedFor:
         result = run(["manage.py", "shell", "-v", "0", "-c", code], **env)
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip().splitlines()[-1] == expected
+
+
+class TestHttpsBehindTheProxy:
+    def test_hsts_redirect_and_secure_cookies_are_on(self):
+        env = {"DJANGO_SECRET_KEY": STRONG_SECRET, "DJANGO_BEHIND_HTTPS_PROXY": "true"}
+        assert int(settings_value("SECURE_HSTS_SECONDS", **env)) >= 30 * 24 * 3600
+        assert settings_value("SECURE_SSL_REDIRECT", **env) == "True"
+        result = run(["manage.py", "check", "--deploy"], DJANGO_ALLOWED_HOSTS="example.com", **env)
+        report = result.stdout + result.stderr
+        assert not [code for code in HSTS_WARNINGS if code in report], report
+
+    def test_plain_http_development_has_none_of_it(self):
+        env = {"DJANGO_DEBUG": "true"}
+        assert settings_value("SECURE_HSTS_SECONDS", **env) == "0"
+        assert settings_value("SECURE_SSL_REDIRECT", **env) == "False"
