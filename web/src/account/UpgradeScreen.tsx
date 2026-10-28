@@ -5,14 +5,14 @@
 import { useState } from "react";
 import { ArrowDown, BadgeCheck, Mail, ShieldCheck, UserRound } from "lucide-react";
 
-import { Badge, Button, ChipStack, Skeleton, Strength, TextField, fmt } from "@/ui";
+import { Badge, Button, ChipStack, Skeleton, fmt } from "@/ui";
 
 import type { AuthApi, Me } from "./api";
-import { AuthFrame, GoogleButton, NoticeAlert, Or, PasswordField, StepLabel } from "./frame";
+import { AuthFrame, Field, GoogleButton, NoticeAlert, Or, PasswordField, StepLabel, StrengthBar, USERNAME_PATTERN, USERNAME_RULE } from "./frame";
 import { LogoutButton } from "./LogoutButton";
 import type { Notice } from "./messages";
 import type { MyRooms } from "./myRooms";
-import { passwordLevel } from "./password";
+
 import { formValues, useSubmit } from "./ui";
 
 type Done = (me: Me | null, text?: string) => void;
@@ -79,7 +79,7 @@ export function UpgradeScreen({
         <div className="auth-card is-plain">
           <h2 className="auth-title">Trở thành thành viên</h2>
           <p className="auth-sub">Chọn một cách đăng nhập cho lần sau.</p>
-          <UpgradeForm api={api} googleEnabled={googleEnabled} notice={notice} onEmail={setEmail} onDone={onDone} />
+          <UpgradeForm api={api} name={me.username} googleEnabled={googleEnabled} notice={notice} onEmail={setEmail} onDone={onDone} />
         </div>
         <p className="auth-legal only-desktop">Khách chỉ lưu trên trình duyệt này — xoá dữ liệu trình duyệt là mất chỗ.</p>
         <div className="auth-legal">
@@ -142,12 +142,15 @@ function KeepRibbon({ rooms }: { rooms: number }) {
 
 function UpgradeForm({
   api,
+  name,
   googleEnabled,
   notice,
   onEmail,
   onDone,
 }: {
   api: AuthApi;
+  /** the guest's name now, kept unless a new one is typed */
+  name: string;
   googleEnabled: boolean;
   notice: Notice | null;
   onEmail: (email: string) => void;
@@ -155,6 +158,10 @@ function UpgradeForm({
 }) {
   const submit = useSubmit();
   const [password, setPassword] = useState("");
+  // the server compares the password with the account's email and name
+  const [email, setEmail] = useState("");
+  const [rename, setRename] = useState("");
+  const account = { email, username: rename || name };
   return (
     <div className="form-stack">
       <NoticeAlert notice={submit.notice ?? notice} />
@@ -175,14 +182,17 @@ function UpgradeForm({
           if (result.ok) onDone(result.data, `Đã nâng cấp. Mở email ${result.data.email} và bấm link để xác minh.`);
         }}
       >
-        <TextField
+        <Field
           label="Email"
           name="email"
           type="email"
           autoComplete="email"
           required
           icon={<Mail size={17} strokeWidth={1.8} />}
-          onChange={(e) => onEmail(e.target.value)}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            onEmail(e.target.value);
+          }}
           error={submit.fieldError("email")}
         />
         <div className="field-group">
@@ -196,14 +206,20 @@ function UpgradeForm({
             onChange={(e) => setPassword(e.target.value)}
             error={submit.fieldError("password")}
           />
-          {password && <Strength level={passwordLevel(password)} />}
+          {password && <StrengthBar password={password} account={account} />}
         </div>
-        <TextField
+        <Field
           label="Đổi tên ở bàn"
           labelNote="không bắt buộc"
           name="username"
           autoComplete="nickname"
+          minLength={2}
+          maxLength={30}
+          pattern={USERNAME_PATTERN}
+          title={USERNAME_RULE}
           icon={<UserRound size={17} strokeWidth={1.8} />}
+          onChange={(e) => setRename(e.target.value)}
+          hint="2–30 ký tự, không dấu cách"
           error={submit.fieldError("username")}
         />
         <Button type="submit" kind="primary" size="lg" block busy={submit.busy}>

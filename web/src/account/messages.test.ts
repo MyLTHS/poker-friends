@@ -60,16 +60,18 @@ describe("googleResult", () => {
 
 describe("invalidText", () => {
   const input = (validity: Partial<ValidityState>, extra: Partial<HTMLInputElement> = {}) =>
-    ({ validity: validity as ValidityState, type: "text", minLength: -1, maxLength: -1, validationMessage: "Browser text", ...extra }) as HTMLInputElement;
+    ({ validity: validity as ValidityState, type: "text", minLength: -1, maxLength: -1, title: "", validationMessage: "Browser text", ...extra }) as HTMLInputElement;
 
   it("says in Vietnamese what the browser's own checks found", () => {
     expect(invalidText(input({ valueMissing: true }))).toBe("Chưa điền ô này.");
     expect(invalidText(input({ typeMismatch: true }, { type: "email" }))).toContain("Email chưa đúng dạng");
     expect(invalidText(input({ tooShort: true }, { minLength: 2 }))).toBe("Cần ít nhất 2 ký tự.");
     expect(invalidText(input({ tooLong: true }, { maxLength: 30 }))).toBe("Tối đa 30 ký tự.");
+    expect(invalidText(input({ patternMismatch: true }, { title: "Không dấu cách." }))).toBe("Không dấu cách.");
   });
 
-  it("falls back to the browser's message for a check it does not know", () => {
+  it("falls back to the box's validationMessage (setCustomValidity, or the browser's own)", () => {
+    expect(invalidText(input({ customError: true }, { validationMessage: "Hai mật khẩu chưa khớp" }))).toBe("Hai mật khẩu chưa khớp");
     expect(invalidText(input({ patternMismatch: true }))).toBe("Browser text");
   });
 });

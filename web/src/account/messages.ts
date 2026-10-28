@@ -53,7 +53,7 @@ export function errorText(error: Pick<ClientError, "code">, retryAfter?: number)
 /** The ApiError codes that are about one box of the form: the answer goes under that box. */
 export const FIELD_OF_CODE: Record<string, string> = { email_taken: "email", username_taken: "username" };
 
-type Checked = Pick<HTMLInputElement, "validity" | "type" | "minLength" | "maxLength" | "validationMessage">;
+type Checked = Pick<HTMLInputElement, "validity" | "type" | "minLength" | "maxLength" | "title" | "validationMessage">;
 
 /** What the browser's own checks (required, type=email, minLength…) found, in Vietnamese: the
  *  browser would say it in its own language, in a bubble outside the page. */
@@ -63,7 +63,8 @@ export function invalidText(input: Checked): string {
   if (validity.typeMismatch && input.type === "email") return "Email chưa đúng dạng, ví dụ ten@gmail.com.";
   if (validity.tooShort) return `Cần ít nhất ${input.minLength} ký tự.`;
   if (validity.tooLong) return `Tối đa ${input.maxLength} ký tự.`;
-  return input.validationMessage;
+  if (validity.patternMismatch && input.title) return input.title; // the box's own rule, e.g. the name's
+  return input.validationMessage; // setCustomValidity's text, or the browser's
 }
 
 export type Notice = { kind: "ok" | "error"; text: string };

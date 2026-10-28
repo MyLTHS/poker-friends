@@ -1,7 +1,9 @@
 "use client";
 
 // Client roots of /account/signup and /account/forgot: they need the auth config (Google on or
-// off, and the csrftoken cookie it sets) and send a logged-in member to the profile instead.
+// off, and the csrftoken cookie every POST needs), so their forms wait for it (`ready`). Anyone
+// logged in leaves the signup for /account: a member sees the profile, a guest the upgrade (a new
+// account would leave the guest's chips behind).
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
@@ -13,19 +15,19 @@ import { useAuthBoot } from "./useAuthBoot";
 export function SignupPage() {
   const api = useMemo(() => createAuthApi(), []);
   const [boot] = useAuthBoot(api);
-  useMembersToProfile(boot.me !== null && !boot.me.is_guest);
-  return <SignupScreen api={api} googleEnabled={boot.config?.google_enabled ?? false} />;
+  useLoggedInToAccount(boot.me !== null);
+  return <SignupScreen api={api} googleEnabled={boot.config?.google_enabled ?? false} ready={boot.loaded} />;
 }
 
 export function ForgotPage() {
   const api = useMemo(() => createAuthApi(), []);
-  useAuthBoot(api);
-  return <ForgotScreen api={api} />;
+  const [boot] = useAuthBoot(api);
+  return <ForgotScreen api={api} ready={boot.loaded} />;
 }
 
-function useMembersToProfile(member: boolean) {
+function useLoggedInToAccount(loggedIn: boolean) {
   const router = useRouter();
   useEffect(() => {
-    if (member) router.replace("/account");
-  }, [member, router]);
+    if (loggedIn) router.replace("/account");
+  }, [loggedIn, router]);
 }

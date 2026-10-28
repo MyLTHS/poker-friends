@@ -7,10 +7,11 @@ import Link from "next/link";
 import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { ChevronLeft, Eye, EyeOff, Lock } from "lucide-react";
 
-import { Alert, ChipStack, D1Root, PlayingCard, TextField, Wordmark } from "@/ui";
+import { Alert, ChipStack, D1Root, PlayingCard, Strength, TextField, Wordmark } from "@/ui";
 
 import { csrfTokenFrom } from "./api";
 import type { Notice } from "./messages";
+import { passwordLevel, passwordProblem, type PasswordContext } from "./password";
 
 type Bar = { kind: "bar"; title: ReactNode; sub?: ReactNode; back?: string; right?: ReactNode };
 type PhoneHero = { kind: "hero"; title: ReactNode; sub?: ReactNode };
@@ -209,11 +210,21 @@ export function GoogleButton({ process, children }: { process: "login" | "connec
   );
 }
 
+/** A box of an account form. Its error is read when useSubmit moves the focus to it, not announced
+ *  by itself: an empty form would read every box's error at once. */
+export function Field(props: ComponentProps<typeof TextField>) {
+  return <TextField announceError={false} {...props} />;
+}
+
+/** What the server accepts as a name (Django's UnicodeUsernameValidator): letters, digits, . @ + - _ */
+export const USERNAME_PATTERN = "[\\p{L}\\p{M}\\p{N}_.@+\\-]+";
+export const USERNAME_RULE = "Chỉ chữ, số và . @ + - _, không dấu cách.";
+
 /** A password box with the eye button of the design (show / hide what was typed). */
 export function PasswordField(props: Omit<ComponentProps<typeof TextField>, "type" | "icon" | "trailing">) {
   const [shown, setShown] = useState(false);
   return (
-    <TextField
+    <Field
       {...props}
       type={shown ? "text" : "password"}
       icon={<Lock size={17} strokeWidth={1.8} />}
@@ -224,6 +235,13 @@ export function PasswordField(props: Omit<ComponentProps<typeof TextField>, "typ
       }
     />
   );
+}
+
+/** The strength bar of a new password, saying why when the server will refuse it. Without the
+ *  account's name and email (reset) it never says "Rất mạnh" (password.ts). */
+export function StrengthBar({ password, account }: { password: string; account?: PasswordContext }) {
+  const problem = passwordProblem(password, account);
+  return <Strength level={passwordLevel(password, account)} label={problem ? `Yếu: ${problem}` : undefined} />;
 }
 
 /** A notice (Google result, "logged out", a server error) as the D1 alert. An error can take the

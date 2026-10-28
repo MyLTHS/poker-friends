@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 
 import { csrfTokenFrom, type ClientError, type Result } from "./api";
 import { FIELD_OF_CODE, errorText, invalidText, type Notice } from "./messages";
@@ -88,10 +88,11 @@ export function Field({ label, name, type = "text", autoComplete, required = tru
  * Submitting state and the last error of one form. Spread `form` on the <form> and give each box
  * `error={submit.fieldError(name)}`: the browser's own checks (required, type=email, length) are
  * then said in Vietnamese under the box instead of in its bubble, and so are the server's answers
- * about one box. After a failed try the first box in error takes the focus, or the form's error
- * notice (NoticeAlert) when no box is to blame.
+ * about one box. After a failed try the first box in error takes the focus, or the error notice
+ * (NoticeAlert) when no box is to blame: the one inside `scope` if given (an action without a
+ * form, like "play as a guest"), else the one around the <form>.
  */
-export function useSubmit() {
+export function useSubmit({ scope }: { scope?: RefObject<HTMLElement | null> } = {}) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<{ error: ClientError; retryAfter?: number } | null>(null);
   const [checks, setChecks] = useState<Record<string, string>>({});
@@ -99,12 +100,13 @@ export function useSubmit() {
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
+    if (tries === 0) return;
     const form = formRef.current;
-    if (tries === 0 || !form) return;
     // The notice may sit just above the <form> (login, upgrade): look in its parent.
-    const target = form.querySelector<HTMLElement>("[aria-invalid='true']") ?? form.parentElement?.querySelector<HTMLElement>("[data-form-notice='error']");
+    const area = scope?.current ?? form?.parentElement;
+    const target = form?.querySelector<HTMLElement>("[aria-invalid='true']") ?? area?.querySelector<HTMLElement>("[data-form-notice='error']");
     target?.focus();
-  }, [tries]);
+  }, [tries, scope]);
 
   async function run<T>(action: () => Promise<Result<T>>): Promise<Result<T>> {
     setBusy(true);
@@ -140,8 +142,10 @@ export function useSubmit() {
         setChecks((current) => ({ ...current, [input.name]: invalidText(input) }));
         setTries((n) => n + 1);
       },
-      // typing in a box clears what was said about that box only
-      onInputCapture: (event: FormEvent<HTMLFormElement>) => {
+      // Typing in a box clears what was said about that box only. Bubble phase, not capture: in
+      // the capture phase this update renders before the box's own onChange, and a controlled
+      // box (the passwords) would be put back to its old value, losing the keystroke.
+      onInput: (event: FormEvent<HTMLFormElement>) => {
         const name = (event.target as HTMLInputElement).name;
         setChecks((current) => {
           if (!(name in current)) return current;

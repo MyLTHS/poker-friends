@@ -3,14 +3,13 @@
 // Forgot / reset password (design: screens-account.tsx Forgot). The design draws both steps side by
 // side; for real, step 2 only works from the email link, so /account/forgot shows step 2 as "what
 // comes next" and /account/reset (the link) marks step 1 done.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, KeyRound, Mail, MailCheck, ShieldCheck } from "lucide-react";
 
-import { Alert, Button, ButtonLink, Strength, TextField } from "@/ui";
+import { Alert, Button, ButtonLink } from "@/ui";
 
 import type { AuthApi } from "./api";
-import { AuthFrame, NoticeAlert, PasswordField, StepLabel, maskEmail } from "./frame";
-import { passwordLevel } from "./password";
+import { AuthFrame, Field, NoticeAlert, PasswordField, StepLabel, StrengthBar, maskEmail } from "./frame";
 import { formValues, useSubmit } from "./ui";
 
 const HERO = {
@@ -34,13 +33,14 @@ function FlowArrow() {
   );
 }
 
-export function ForgotScreen({ api }: { api: AuthApi }) {
+/** `ready`: the auth config has loaded, so the csrftoken cookie the POST needs is set. */
+export function ForgotScreen({ api, ready }: { api: AuthApi; ready: boolean }) {
   return (
     <AuthFrame hero={HERO} phone={PHONE} layout="forgot">
       <div className="auth-col">
         <StepLabel n={1}>Xin link đặt lại</StepLabel>
         <div className="auth-card">
-          <ForgotRequest api={api} />
+          <ForgotRequest api={api} ready={ready} />
         </div>
       </div>
       <FlowArrow />
@@ -54,7 +54,7 @@ export function ForgotScreen({ api }: { api: AuthApi }) {
   );
 }
 
-function ForgotRequest({ api }: { api: AuthApi }) {
+function ForgotRequest({ api, ready }: { api: AuthApi; ready: boolean }) {
   const submit = useSubmit();
   const [sentTo, setSentTo] = useState<string | null>(null);
   return (
@@ -77,8 +77,8 @@ function ForgotRequest({ api }: { api: AuthApi }) {
         </span>
       </div>
       <NoticeAlert notice={submit.notice} />
-      <TextField label="Email" name="email" type="email" autoComplete="email" required icon={<Mail size={17} strokeWidth={1.8} />} error={submit.fieldError("email")} />
-      <Button type="submit" kind="primary" size="lg" block busy={submit.busy}>
+      <Field label="Email" name="email" type="email" autoComplete="email" required icon={<Mail size={17} strokeWidth={1.8} />} error={submit.fieldError("email")} />
+      <Button type="submit" kind="primary" size="lg" block busy={submit.busy || !ready}>
         {sentTo ? "Gửi lại link" : "Gửi link đặt lại"}
       </Button>
       {sentTo && (
@@ -90,8 +90,8 @@ function ForgotRequest({ api }: { api: AuthApi }) {
   );
 }
 
-/** /account/reset?uid=…&token=…: the link in the password-reset email. */
-export function ResetScreen({ api, uid, token }: { api: AuthApi; uid: string; token: string }) {
+/** /account/reset?uid=…&token=…: the link in the password-reset email. `ready` as above. */
+export function ResetScreen({ api, uid, token, ready }: { api: AuthApi; uid: string; token: string; ready: boolean }) {
   return (
     <AuthFrame hero={HERO} phone={PHONE} layout="forgot">
       <div className="auth-col only-desktop">
@@ -114,20 +114,41 @@ export function ResetScreen({ api, uid, token }: { api: AuthApi; uid: string; to
       <div className="auth-col">
         <StepLabel n={2}>Mở từ link</StepLabel>
         <div className="auth-card">
-          <ResetForm api={api} uid={uid} token={token} />
+          <ResetForm api={api} uid={uid} token={token} ready={ready} />
         </div>
       </div>
     </AuthFrame>
   );
 }
 
-function ResetForm({ api, uid = "", token = "", preview = false }: { api?: AuthApi; uid?: string; token?: string; preview?: boolean }) {
+const MISMATCH = "Hai mật khẩu chưa khớp";
+
+function ResetForm({
+  api,
+  uid = "",
+  token = "",
+  ready = true,
+  preview = false,
+}: {
+  api?: AuthApi;
+  uid?: string;
+  token?: string;
+  ready?: boolean;
+  preview?: boolean;
+}) {
   const submit = useSubmit();
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
   const [done, setDone] = useState(false);
   const matches = again.length > 0 && again === password;
+  // said while typing only once "again" stops being the start of the password
   const mismatch = again.length > 0 && !password.startsWith(again) && again !== password;
+  // "Lưu" stays pressable and says why it cannot save: the browser's own check refuses the form
+  // and useSubmit puts this text under "Nhập lại" and moves the focus there.
+  const againBox = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    againBox.current?.setCustomValidity(again && again !== password ? MISMATCH : "");
+  }, [again, password]);
   if (done) {
     return (
       <div className="form-stack">
@@ -146,7 +167,7 @@ function ResetForm({ api, uid = "", token = "", preview = false }: { api?: AuthA
       className="form-stack"
       onSubmit={async (event) => {
         event.preventDefault();
-        if (!api || password !== again) return;
+        if (!api || password !== again) return; // the browser's check already said why
         const result = await submit.run(() => api.resetPassword({ uid, token, password }));
         if (result.ok) setDone(true);
       }}
@@ -172,7 +193,7 @@ function ResetForm({ api, uid = "", token = "", preview = false }: { api?: AuthA
             onChange={(e) => setPassword(e.target.value)}
             error={submit.fieldError("password")}
           />
-          {password && <Strength level={passwordLevel(password)} />}
+          {password && <StrengthBar password={password} />}
         </div>
         <PasswordField
           label="Nhập lại"
@@ -181,11 +202,12 @@ function ResetForm({ api, uid = "", token = "", preview = false }: { api?: AuthA
           required
           value={again}
           onChange={(e) => setAgain(e.target.value)}
+          ref={againBox}
           ok={matches}
           hint={matches ? "Hai mật khẩu khớp nhau" : undefined}
-          error={mismatch ? "Hai mật khẩu chưa khớp" : undefined}
+          error={submit.fieldError("password_again") ?? (mismatch ? MISMATCH : undefined)}
         />
-        <Button type="submit" kind="primary" size="lg" block busy={submit.busy} disabled={!matches}>
+        <Button type="submit" kind="primary" size="lg" block busy={submit.busy || !ready}>
           Lưu mật khẩu mới
         </Button>
       </fieldset>

@@ -1,6 +1,8 @@
 "use client";
 
 // The two pages opened from an email link: /account/verify?token=… and /account/reset?uid=…&token=….
+// Once read, the token leaves the address bar and the history (a screenshot, a shared tab or the
+// back button would show it); a reload then needs the link again.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BadgeCheck, MailWarning } from "lucide-react";
 
@@ -22,6 +24,7 @@ export function VerifyScreen({ token }: { token: string }) {
   const sent = useRef<{ token: string; result: ReturnType<typeof api.verifyEmail> } | null>(null);
 
   useEffect(() => {
+    window.history.replaceState(null, "", "/account/verify");
     let cancelled = false;
     if (sent.current?.token !== token) {
       const result = api.config().then(() => api.verifyEmail({ token })); // config sets the csrftoken cookie
@@ -94,8 +97,16 @@ export function VerifyScreen({ token }: { token: string }) {
 /** /account/reset?uid=…&token=… — the link in the password-reset email. */
 export function ResetScreen({ uid, token }: { uid: string; token: string }) {
   const api = useMemo(() => createAuthApi(), []);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    void api.config(); // sets the csrftoken cookie the POST needs
+    window.history.replaceState(null, "", "/account/reset");
+    let cancelled = false;
+    void api.config().then(() => {
+      if (!cancelled) setReady(true); // the csrftoken cookie the POST needs is set
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [api]);
-  return <D1ResetScreen api={api} uid={uid} token={token} />;
+  return <D1ResetScreen api={api} uid={uid} token={token} ready={ready} />;
 }

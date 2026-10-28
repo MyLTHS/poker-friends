@@ -2,13 +2,13 @@
 
 // Login (design: screens-account.tsx Login): email + password, Google, play as a guest.
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Mail, UserRound } from "lucide-react";
 
-import { Button, TextField } from "@/ui";
+import { Button } from "@/ui";
 
 import type { AuthApi, Me } from "./api";
-import { AuthFrame, GoogleButton, NoticeAlert, Or, PasswordField, mmss, useCooldown } from "./frame";
+import { AuthFrame, Field, GoogleButton, NoticeAlert, Or, PasswordField, mmss, useCooldown } from "./frame";
 import type { Notice } from "./messages";
 import { formValues, useSubmit } from "./ui";
 
@@ -41,24 +41,30 @@ export function LoginScreen({ api, googleEnabled, notice, onDone }: { api: AuthA
 }
 
 function LoginForm({ api, googleEnabled, notice, onDone }: { api: AuthApi; googleEnabled: boolean; notice: Notice | null; onDone: Done }) {
-  const login = useSubmit();
-  const guest = useSubmit();
+  const area = useRef<HTMLDivElement>(null);
+  const login = useSubmit({ scope: area });
+  const guest = useSubmit({ scope: area });
+  // Only the last action speaks: a wrong password tried before must not hide why "play as a
+  // guest" failed just now, and the page's notice (Google, logged out) goes once anything is tried.
+  const [last, setLast] = useState<"login" | "guest" | null>(null);
+  const shown = last === "login" ? login.notice : last === "guest" ? guest.notice : notice;
   const [email, setEmail] = useState("");
   return (
-    <div className="form-stack">
-      <NoticeAlert notice={login.notice ?? guest.notice ?? notice} />
-      {login.error?.code === "email_not_verified" && <ResendVerification api={api} email={email} />}
+    <div className="form-stack" ref={area}>
+      <NoticeAlert notice={shown} />
+      {last === "login" && login.error?.code === "email_not_verified" && <ResendVerification api={api} email={email} />}
       <form
         {...login.form}
         className="form-stack"
         onSubmit={async (event) => {
           const values = formValues(event);
+          setLast("login");
           setEmail(values.email);
           const result = await login.run(() => api.login({ email: values.email, password: values.password }));
           if (result.ok) onDone(result.data, "Đã đăng nhập.");
         }}
       >
-        <TextField
+        <Field
           label="Email"
           name="email"
           type="email"
@@ -88,6 +94,7 @@ function LoginForm({ api, googleEnabled, notice, onDone }: { api: AuthApi; googl
           busy={guest.busy}
           icon={<UserRound size={18} strokeWidth={1.8} />}
           onClick={async () => {
+            setLast("guest");
             const result = await guest.run(() => api.createGuest());
             if (result.ok) onDone(result.data, "Đã tạo tài khoản khách.");
           }}

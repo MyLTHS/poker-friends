@@ -6,15 +6,16 @@ import Link from "next/link";
 import { useState } from "react";
 import { Check, Circle, Mail, MailCheck, UserRound } from "lucide-react";
 
-import { Button, Strength, TextField } from "@/ui";
+import { Button } from "@/ui";
 
 import type { AuthApi } from "./api";
-import { AuthFrame, GoogleButton, NoticeAlert, Or, PasswordField, StepLabel } from "./frame";
+import { AuthFrame, Field, GoogleButton, NoticeAlert, Or, PasswordField, StepLabel, StrengthBar, USERNAME_PATTERN, USERNAME_RULE } from "./frame";
 import { ResendVerification } from "./LoginScreen";
-import { passwordLevel, passwordRules } from "./password";
+import { passwordRules } from "./password";
 import { formValues, useSubmit } from "./ui";
 
-export function SignupScreen({ api, googleEnabled }: { api: AuthApi; googleEnabled: boolean }) {
+/** `ready`: the auth config has loaded, so the csrftoken cookie the POST needs is set. */
+export function SignupScreen({ api, googleEnabled, ready }: { api: AuthApi; googleEnabled: boolean; ready: boolean }) {
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
   return (
@@ -52,7 +53,7 @@ export function SignupScreen({ api, googleEnabled }: { api: AuthApi; googleEnabl
         <div className="auth-card is-plain">
           <h2 className="auth-title">Tạo tài khoản</h2>
           <p className="auth-sub">Chỉ mất một phút.</p>
-          <SignupForm key={formKey} api={api} sentTo={sentTo} onSent={setSentTo} />
+          <SignupForm key={formKey} api={api} ready={ready} sentTo={sentTo} onSent={setSentTo} />
           {googleEnabled && (
             <div className="form-stack only-desktop">
               <Or />
@@ -86,10 +87,12 @@ export function SignupScreen({ api, googleEnabled }: { api: AuthApi; googleEnabl
   );
 }
 
-function SignupForm({ api, sentTo, onSent }: { api: AuthApi; sentTo: string | null; onSent: (email: string) => void }) {
+function SignupForm({ api, ready, sentTo, onSent }: { api: AuthApi; ready: boolean; sentTo: string | null; onSent: (email: string) => void }) {
   const submit = useSubmit();
   const [password, setPassword] = useState("");
-  const rules = passwordRules(password);
+  // the server compares the password with these two
+  const [account, setAccount] = useState({ email: "", username: "" });
+  const rules = passwordRules(password, account);
   return (
     <form
       {...submit.form}
@@ -103,24 +106,28 @@ function SignupForm({ api, sentTo, onSent }: { api: AuthApi; sentTo: string | nu
       <NoticeAlert notice={sentTo ? { kind: "ok", text: "Đã tạo tài khoản. Mở email để xác minh." } : submit.notice} />
       <fieldset disabled={sentTo !== null}>
         <div className="form-pair">
-          <TextField
+          <Field
             label="Email"
             name="email"
             type="email"
             autoComplete="email"
             required
             icon={<Mail size={17} strokeWidth={1.8} />}
+            onChange={(e) => setAccount((a) => ({ ...a, email: e.target.value }))}
             error={submit.fieldError("email")}
           />
-          <TextField
+          <Field
             label="Tên ở bàn"
             name="username"
             autoComplete="nickname"
             required
             minLength={2}
             maxLength={30}
+            pattern={USERNAME_PATTERN}
+            title={USERNAME_RULE}
             icon={<UserRound size={17} strokeWidth={1.8} />}
-            hint="Bạn bè thấy tên này · 2–30 ký tự"
+            onChange={(e) => setAccount((a) => ({ ...a, username: e.target.value }))}
+            hint="Bạn bè thấy tên này · 2–30 ký tự, không dấu cách"
             error={submit.fieldError("username")}
           />
         </div>
@@ -134,7 +141,7 @@ function SignupForm({ api, sentTo, onSent }: { api: AuthApi; sentTo: string | nu
             onChange={(e) => setPassword(e.target.value)}
             error={submit.fieldError("password")}
           />
-          {password && <Strength level={passwordLevel(password)} />}
+          {password && <StrengthBar password={password} account={account} />}
           <ul className="pw-rules">
             {rules.map((rule) => (
               <li key={rule.text} className={rule.ok ? "is-ok" : ""}>
@@ -145,7 +152,7 @@ function SignupForm({ api, sentTo, onSent }: { api: AuthApi; sentTo: string | nu
             ))}
           </ul>
         </div>
-        <Button type="submit" kind="primary" size="lg" block busy={submit.busy}>
+        <Button type="submit" kind="primary" size="lg" block busy={submit.busy || !ready}>
           Tạo tài khoản
         </Button>
       </fieldset>
