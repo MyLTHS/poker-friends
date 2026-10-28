@@ -24,6 +24,9 @@ def env_list(name: str, default: str = "") -> list[str]:
 # Development turns it on with DJANGO_DEBUG=true (.env.example); manage.py does that by itself
 # when no DJANGO_SECRET_KEY is set, and pytest through config/settings_test.py.
 DEBUG = env_bool("DJANGO_DEBUG", False)
+# Guests: play without an account (B6). Off unless asked for, outside development: then only
+# verified accounts reach the rooms (apps/accounts/middleware.py members_only).
+GUESTS_ALLOWED = env_bool("GUESTS_ALLOWED", DEBUG)
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-insecure-key")
 WEAK_SECRET_KEYS = {"dev-only-insecure-key", "change-me"}
 if not DEBUG and (SECRET_KEY in WEAK_SECRET_KEYS or len(SECRET_KEY) < 32):
@@ -138,6 +141,7 @@ INSTALLED_APPS += [
 MIDDLEWARE += [
     "allauth.account.middleware.AccountMiddleware",
     "apps.accounts.middleware.remember_origin",
+    "apps.accounts.middleware.members_only",
 ]
 CSRF_FAILURE_VIEW = "apps.accounts.views.csrf_failure"  # JSON ApiError under /api/
 AUTHENTICATION_BACKENDS = [

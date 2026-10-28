@@ -178,15 +178,18 @@ def signup(email: str, username: str, password: str) -> User:
 def create_player(email: str, username: str, password: str) -> User:
     """A player's account made by staff (Django admin): ready to log in at once.
 
-    Staff vouch for the address, so it is verified now and no email is sent; the player can
-    change the password later with "Quên mật khẩu".
+    Staff vouch for the address and the person, so the email is verified and the account
+    approved now (members only) and no email is sent; the player can change the password later
+    with "Quên mật khẩu".
     """
     email = normalize_email(email)
     try:
         with transaction.atomic():
             lock_email(email)
             _check_unique(email, username)
-            user = User.objects.create_user(username=username, email=email, password=password)
+            user = User.objects.create_user(
+                username=username, email=email, password=password, approved=True
+            )
             mark_email_verified(user)
     except IntegrityError as error:  # lost a race on the unique username
         raise AccountError("username_taken", "This name is already used.") from error
@@ -212,6 +215,8 @@ def login_with_password(request, email: str, password: str, ip: str) -> User:
         raise AccountError("invalid_credentials", "Wrong email or password.")
     if not is_email_verified(user):
         raise AccountError("email_not_verified", "Verify the email address first.")
+    if not settings.GUESTS_ALLOWED and not (user.approved or user.is_staff):
+        raise AccountError("not_approved", "The owner has not let this account in yet.")
 
     ratelimit.LOGIN_FAILURES_PER_EMAIL_AND_IP.reset(_email_and_ip(email, ip))
     login(request, user, backend=MODEL_BACKEND)

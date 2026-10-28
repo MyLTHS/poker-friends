@@ -20,16 +20,33 @@ def make(username, email, active=True):
     return user
 
 
-def run(email):
+def run(email, *flags):
     out = StringIO()
-    call_command("verify_email", email, stdout=out)
+    call_command("verify_email", *flags, email, stdout=out)
     return out.getvalue()
 
 
-def test_marks_the_account_verified_whatever_case_the_owner_types():
+def test_approves_the_account_whatever_case_the_owner_types():
     user = make("an", "an@example.com")  # signup always stores the address in lower case
-    assert "Đã xác minh" in run(" An@Example.com ")
-    assert is_email_verified(user)
+    assert "Đã duyệt" in run(" An@Example.com ")
+    user.refresh_from_db()
+    assert user.approved and is_email_verified(user)
+
+
+def test_show_names_the_account_and_changes_nothing():
+    user = make("an", "an@example.com")
+    shown = run("an@example.com", "--show")
+    assert "an (an@example.com, đăng ký" in shown and "chưa duyệt" in shown
+    user.refresh_from_db()
+    assert not user.approved and not is_email_verified(user)
+
+
+def test_a_self_verified_email_still_needs_the_owner():
+    user = make("an", "an@example.com")
+    EmailAddress.objects.filter(user=user).update(verified=True)  # Gmail or Google did this
+    assert "Đã duyệt" in run("an@example.com")
+    user.refresh_from_db()
+    assert user.approved
 
 
 def test_running_twice_is_harmless():

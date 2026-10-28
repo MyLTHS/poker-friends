@@ -74,6 +74,7 @@ class MeSerializer(serializers.ModelSerializer):
     email_verified = serializers.SerializerMethodField()
     has_password = serializers.SerializerMethodField()
     google_connected = serializers.SerializerMethodField()
+    member = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -85,6 +86,7 @@ class MeSerializer(serializers.ModelSerializer):
             "email_verified",
             "has_password",
             "google_connected",
+            "member",
         ]
 
     def get_email(self, user) -> str | None:
@@ -95,6 +97,14 @@ class MeSerializer(serializers.ModelSerializer):
 
     def get_has_password(self, user) -> bool:
         return user.has_usable_password()
+
+    def get_member(self, user) -> bool:
+        """May reach the rooms: always where guests may play, else approved by the owner."""
+        from django.conf import settings
+
+        from .middleware import is_member
+
+        return settings.GUESTS_ALLOWED or is_member(user)
 
     def get_google_connected(self, user) -> bool:
         return SocialAccount.objects.filter(user=user, provider="google").exists()

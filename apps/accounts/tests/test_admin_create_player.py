@@ -51,6 +51,15 @@ class TestCreatePlayerService:
         assert mail.outbox == []
         assert login(client, "an@example.com").status_code == 200
 
+    def test_members_only_a_player_made_by_staff_is_already_approved(self, client, settings):
+        settings.GUESTS_ALLOWED = False  # playing from home: only approved accounts get in
+        user = services.create_player("chi@example.com", "Chi", PASSWORD)
+        assert user.approved
+        response = login(client, "chi@example.com")
+        assert response.status_code == 200
+        assert response.json()["member"] is True
+        assert client.get("/api/rooms/").status_code == 200
+
     @pytest.mark.parametrize(
         ("email", "username", "code"),
         [("AN@example.com", "Binh", "email_taken"), ("binh@example.com", "an", "username_taken")],
