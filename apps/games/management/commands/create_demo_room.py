@@ -44,16 +44,26 @@ class Command(BaseCommand):
             raise CommandError("--players needs a new room; pass another --name.")
         if not 2 <= players <= room.max_seats:
             raise CommandError(f"--players must be between 2 and {room.max_seats}.")
-        for seat in range(1, players + 1):
-            user = User.objects.create_user(username=f"demo-{room.pk}-{seat}", is_guest=True)
-            RoomSeat.objects.create(room=room, user=user, seat=seat)
-            LedgerEntry.objects.create(
-                room=room, user=user, kind=LedgerKind.GRANT, amount=options["chips"]
-            )
-            session = SessionStore()
-            # A Django-auth login session, the same as POST /api/auth/guest/ would create.
-            session[SESSION_KEY] = str(user.pk)
-            session[BACKEND_SESSION_KEY] = MODEL_BACKEND
-            session[HASH_SESSION_KEY] = user.get_session_auth_hash()
-            session.create()
-            self.stdout.write(f"seat {seat}: player {user.pk} sessionid={session.session_key}")
+        seated = seat_guest_players(room, players, options["chips"])
+        for seat, (user, session_key) in enumerate(seated, start=1):
+            self.stdout.write(f"seat {seat}: player {user.pk} sessionid={session_key}")
+
+
+def seat_guest_players(room: Room, players: int, chips: int) -> list[tuple[User, str]]:
+    """Seat ``players`` new guests in seats 1..players with ``chips`` each, logged in.
+
+    Returns each guest with a ``sessionid`` cookie value a WebSocket client can connect with.
+    """
+    seated = []
+    for seat in range(1, players + 1):
+        user = User.objects.create_user(username=f"demo-{room.pk}-{seat}", is_guest=True)
+        RoomSeat.objects.create(room=room, user=user, seat=seat)
+        LedgerEntry.objects.create(room=room, user=user, kind=LedgerKind.GRANT, amount=chips)
+        session = SessionStore()
+        # A Django-auth login session, the same as POST /api/auth/guest/ would create.
+        session[SESSION_KEY] = str(user.pk)
+        session[BACKEND_SESSION_KEY] = MODEL_BACKEND
+        session[HASH_SESSION_KEY] = user.get_session_auth_hash()
+        session.create()
+        seated.append((user, session.session_key))
+    return seated
