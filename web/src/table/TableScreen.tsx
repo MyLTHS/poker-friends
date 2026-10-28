@@ -69,6 +69,8 @@ export type TableScreenProps = {
   onLeaveSeat?: () => Promise<string | null>;
   /** Room owner: renders the owner's sheet (rooms/OwnerPanel) over the table. */
   owner?: (slot: OwnerSlot) => ReactNode;
+  /** "Mời bạn" in the top bar: renders the invite dialog (rooms/LiveTableScreen) over the table. */
+  invite?: (slot: InviteSlot) => ReactNode;
   /** Replay of a finished hand. */
   replayHref?: (handId: number) => string;
 };
@@ -76,14 +78,17 @@ export type TableScreenProps = {
 /** What the owner's sheet gets from the table. */
 export type OwnerSlot = { open: boolean; onClose: () => void; seats: SeatOccupant[]; inHand: (playerId: string) => boolean };
 
-export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = MOCK_HELP, loadChat, onTakeSeat, onLeaveSeat, owner, replayHref }: TableScreenProps) {
+/** What the invite dialog gets from the table. */
+export type InviteSlot = { open: boolean; onClose: () => void };
+
+export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = MOCK_HELP, loadChat, onTakeSeat, onLeaveSeat, owner, invite, replayHref }: TableScreenProps) {
   const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
   const device = useDevice();
   const [tab, setTab] = useState<SideTab>("chat");
   const [drawer, setDrawer] = useState(false);
   const [seen, setSeen] = useState(0);
   const [seatError, setSeatError] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<"owner" | "settings" | "help" | "feedback" | null>(null);
+  const [dialog, setDialog] = useState<"owner" | "invite" | "settings" | "help" | "feedback" | null>(null);
   const sound = useTableSound();
   const [keysOn, setKeysOn] = useKeysPref();
   const { table } = model;
@@ -283,6 +288,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const dialogs = (
     <>
       {owner?.({ open: dialog === "owner", onClose: closeDialog, seats: table.seats, inHand })}
+      {invite?.({ open: dialog === "invite", onClose: closeDialog })}
       <SettingsModal
         open={dialog === "settings"}
         onClose={closeDialog}
@@ -391,7 +397,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
                   Mất kết nối · đang thử lại
                 </span>
               ) : (
-                <MobileTools watchers={model.spectators.length} unread={unread} onChat={() => openDrawer(true)} owner={owner ? () => setDialog("owner") : undefined} onMore={() => setDialog("settings")} />
+                <MobileTools watchers={model.spectators.length} unread={unread} onChat={() => openDrawer(true)} owner={owner ? () => setDialog("owner") : undefined} onInvite={invite ? () => setDialog("invite") : undefined} onMore={() => setDialog("settings")} />
               )
             }
           />
@@ -490,6 +496,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
             online={online}
             onSitToggle={toggleSit}
             owner={owner ? { open: dialog === "owner", onOpen: () => setDialog("owner") } : undefined}
+            onInvite={invite ? () => setDialog("invite") : undefined}
             onSettings={() => setDialog("settings")}
             leave={isSeated ? leave : undefined}
           />

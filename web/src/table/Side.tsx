@@ -5,7 +5,7 @@
 // who is watching. Chat goes through the table's own socket (chat.send → chat.message).
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ChevronLeft, Coffee, Crown, Ellipsis, Eye, LogOut, MessageCircle, Send, Settings, Smile, X } from "lucide-react";
+import { ChevronLeft, Coffee, Crown, Ellipsis, Eye, LogOut, MessageCircle, Send, Settings, Smile, UserPlus, X } from "lucide-react";
 
 import type { ChatMessage, Spectator } from "@/api/protocol";
 import { Avatar, IconButton, fmt } from "@/ui";
@@ -57,6 +57,7 @@ export function TableTools({
   online,
   onSitToggle,
   owner,
+  onInvite,
   onSettings,
   leave,
 }: {
@@ -67,6 +68,8 @@ export function TableTools({
   onSitToggle: () => void;
   /** room owner: the crown opens the owner's sheet */
   owner?: { open: boolean; onOpen: () => void };
+  /** opens the invite dialog (link of this room for friends) */
+  onInvite?: () => void;
   onSettings: () => void;
   leave?: { onLeave: () => void; label: string };
 }) {
@@ -80,6 +83,12 @@ export function TableTools({
         <button type="button" className={`tbar-btn${sittingOut ? " is-on" : ""}`} aria-pressed={sittingOut} onClick={onSitToggle} disabled={!online}>
           <Coffee size={15} strokeWidth={1.9} aria-hidden />
           {sittingOut ? "Đang nghỉ · quay lại" : "Nghỉ ván sau"}
+        </button>
+      )}
+      {onInvite && (
+        <button type="button" className="tbar-btn" aria-haspopup="dialog" onClick={onInvite}>
+          <UserPlus size={15} strokeWidth={1.9} aria-hidden />
+          Mời bạn
         </button>
       )}
       {owner && (
@@ -117,7 +126,21 @@ export function MobileTableBar({ backHref, title, sub, right }: { backHref: stri
   );
 }
 
-export function MobileTools({ watchers, unread, onChat, owner, onMore }: { watchers: number; unread: number; onChat: () => void; owner?: () => void; onMore: () => void }) {
+export function MobileTools({
+  watchers,
+  unread,
+  onChat,
+  owner,
+  onInvite,
+  onMore,
+}: {
+  watchers: number;
+  unread: number;
+  onChat: () => void;
+  owner?: () => void;
+  onInvite?: () => void;
+  onMore: () => void;
+}) {
   // id: the chat drawer gives focus back to this button when it closes
   return (
     <>
@@ -128,6 +151,11 @@ export function MobileTools({ watchers, unread, onChat, owner, onMore }: { watch
       <IconButton id="tbl-chat-btn" label="Chat" badge={unread > 0 ? unread : undefined} onClick={onChat}>
         <MessageCircle size={20} strokeWidth={1.9} aria-hidden />
       </IconButton>
+      {onInvite && (
+        <IconButton label="Mời bạn" aria-haspopup="dialog" onClick={onInvite}>
+          <UserPlus size={19} strokeWidth={1.9} aria-hidden />
+        </IconButton>
+      )}
       {owner && (
         <IconButton label="Bảng chủ phòng" aria-haspopup="dialog" onClick={owner}>
           <Crown size={19} strokeWidth={1.9} aria-hidden />
