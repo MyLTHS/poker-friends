@@ -1,5 +1,8 @@
 # Chơi online từ máy Mac của Lym
 
+> Lần đầu làm? Đọc [hướng dẫn từ đầu](huong-dan-tu-dau.md): cài đặt, mỗi buổi chơi, đoạn gửi bạn
+> bè. Trang này giải thích cách chơi online hoạt động và các lệnh chi tiết.
+
 Chưa thuê VPS, nên trong các buổi chơi thử (giai đoạn E/F) **máy Mac của Lym là server**. Bạn bè
 vào qua một link `https://<chữ-ngẫu-nhiên>.trycloudflare.com`: Cloudflare nhận kết nối của họ
 rồi chuyển qua một "đường hầm" (chương trình `cloudflared` chạy trên máy Lym) về server.
