@@ -12,6 +12,8 @@
    cũ rồi mới chạy bản mới; bàn đang chơi tự khôi phục từ DB khi bản mới lên).
 2. **Biến môi trường** (mẫu ở `.env.example`):
    - `DJANGO_DEBUG=false`, `DJANGO_SECRET_KEY` dài 32+ ký tự ngẫu nhiên (server không chạy nếu yếu).
+     Quên đặt `DJANGO_DEBUG` thì mặc định đã là tắt; quên `DJANGO_SECRET_KEY` thì Daphne không chạy.
+     Riêng `manage.py` tự bật debug khi **không** có `DJANGO_SECRET_KEY` (coi là máy dev).
    - `DJANGO_ALLOWED_HOSTS=<tên-miền>`, `FRONTEND_URL=https://<tên-miền>`.
    - `DJANGO_BEHIND_HTTPS_PROXY=true`: Django tin header `X-Forwarded-Proto` của Caddy, nên link
      callback Google là `https://...`, cookie phiên và CSRF chỉ gửi qua HTTPS.

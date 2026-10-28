@@ -20,11 +20,17 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
 
 
-DEBUG = env_bool("DJANGO_DEBUG", True)
+# Off unless asked for: a server started without its configuration must never show debug pages.
+# Development turns it on with DJANGO_DEBUG=true (.env.example); manage.py does that by itself
+# when no DJANGO_SECRET_KEY is set, and pytest through config/settings_test.py.
+DEBUG = env_bool("DJANGO_DEBUG", False)
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-insecure-key")
 WEAK_SECRET_KEYS = {"dev-only-insecure-key", "change-me"}
 if not DEBUG and (SECRET_KEY in WEAK_SECRET_KEYS or len(SECRET_KEY) < 32):
-    raise RuntimeError("Set a strong DJANGO_SECRET_KEY (32+ chars) when DJANGO_DEBUG is off.")
+    raise RuntimeError(
+        "Set a strong DJANGO_SECRET_KEY (32+ chars) when DJANGO_DEBUG is off. "
+        "For local development set DJANGO_DEBUG=true (see .env.example)."
+    )
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
