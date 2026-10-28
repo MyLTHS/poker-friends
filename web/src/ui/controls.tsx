@@ -78,12 +78,15 @@ export function IconButton({
 
 /** Label, input box (with optional icon / trailing slot), and a hint or error under it. `error`
  *  replaces the hint, marks the box red and is announced (aria-invalid + aria-describedby, added
- *  to any aria-describedby of the caller). Every <input> prop passes through, `ref` included. */
+ *  to any aria-describedby of the caller). `announceError={false}` drops the role="alert" for a
+ *  form that moves the focus to its first error instead, so several errors are not read at once.
+ *  Every <input> prop passes through, `ref` included. */
 export function TextField({
   label,
   labelNote,
   hint,
   error,
+  announceError = true,
   ok = false,
   icon,
   trailing,
@@ -97,6 +100,7 @@ export function TextField({
   labelNote?: ReactNode;
   hint?: ReactNode;
   error?: ReactNode;
+  announceError?: boolean;
   ok?: boolean;
   icon?: ReactNode;
   trailing?: ReactNode;
@@ -121,7 +125,7 @@ export function TextField({
         {trailing && <span className="input-trailing">{trailing}</span>}
       </span>
       {message && (
-        <span id={hintId} className={`field-hint${error ? " is-error" : ok ? " is-ok" : ""}`} role={error ? "alert" : undefined}>
+        <span id={hintId} className={`field-hint${error ? " is-error" : ok ? " is-ok" : ""}`} role={error && announceError ? "alert" : undefined}>
           {message}
         </span>
       )}

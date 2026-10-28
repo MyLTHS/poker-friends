@@ -2,6 +2,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
 
+import { MAIL_LOG } from "./e2e/mailbox";
+
 // End-to-end tests (B4b): real Django + Channels and the real web app, several browsers.
 // Run with `npm run e2e`. Locally the Chromium Playwright needs must already be installed
 // (never run `playwright install` here without asking); CI installs it (.github/workflows/ci.yml).
@@ -34,7 +36,8 @@ export default defineConfig({
   use: { baseURL: WEB, browserName: "chromium", trace: "retain-on-failure" },
   webServer: [
     {
-      command: `rm -f "${E2E_DB}" && uv run python manage.py migrate --noinput -v0 && uv run python manage.py runserver 127.0.0.1:${API_PORT} --noreload`,
+      // stdout holds only the emails (request logs go to stderr): the tests read links from it.
+      command: `rm -f "${E2E_DB}" "${MAIL_LOG}" && uv run python manage.py migrate --noinput -v0 && uv run python manage.py runserver 127.0.0.1:${API_PORT} --noreload > "${MAIL_LOG}"`,
       cwd: ROOT,
       env: djangoEnv,
       url: `http://127.0.0.1:${API_PORT}/api/auth/config/`,
