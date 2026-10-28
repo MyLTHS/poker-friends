@@ -55,18 +55,22 @@ export function AccountScreen({ initialNotice }: { initialNotice: Notice | null 
   return <ProfileScreen api={api} me={boot.me} rooms={rooms} notice={shown} onDone={done} />;
 }
 
-/** undefined while loading (or logged out), null when it failed. */
+/** undefined while loading (or logged out), null when it failed. Loaded once per player: the
+ *  lobby plus one summary per room is many requests, and a new `me` for the same player (the
+ *  upgrade, a notice) changes none of it. A new name only changes "bàn làm chủ". */
 function useMyRooms(me: Me | null): MyRooms | null | undefined {
   const [state, setState] = useState<{ forId: number; rooms: MyRooms | null } | null>(null);
+  const id = me?.id;
+  const username = me?.username;
   useEffect(() => {
-    if (!me) return;
+    if (id === undefined || username === undefined) return;
     let cancelled = false;
-    void loadMyRooms(me).then((result) => {
-      if (!cancelled) setState({ forId: me.id, rooms: result.ok ? result.data : null });
+    void loadMyRooms({ id, username }).then((result) => {
+      if (!cancelled) setState({ forId: id, rooms: result.ok ? result.data : null });
     });
     return () => {
       cancelled = true;
     };
-  }, [me]);
+  }, [id, username]);
   return me && state?.forId === me.id ? state.rooms : undefined;
 }

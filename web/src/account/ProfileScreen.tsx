@@ -173,7 +173,8 @@ function SignInMethods({ api, me }: { api: AuthApi; me: Me }) {
         </span>
         <span>
           <b>Google</b>
-          <small>{me.google_connected ? `Đã liên kết với ${me.email}` : "Chưa liên kết"}</small>
+          {/* the Google account's own address may differ from the account's email: not shown */}
+          <small>{me.google_connected ? "Đăng nhập được bằng tài khoản Google đã liên kết" : "Chưa liên kết"}</small>
         </span>
         {me.google_connected ? (
           <Badge kind="gain" icon={<Check size={12} strokeWidth={3} aria-hidden />}>
