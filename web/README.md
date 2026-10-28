@@ -60,20 +60,23 @@ Google và cấu hình gửi email thật: [docs/huong-dan-google-smtp.md](../do
 | `npm test` | Unit test bằng Vitest (CI chạy) |
 | `npm run api:gen` | Sinh lại `src/api/*.ts` từ `docs/api/` |
 | `npm run api:check` | CI chạy: báo lỗi nếu type lệch schema hoặc fixture không khớp type |
-| `npm run e2e` | Playwright (B4b): tự chạy Django (DB riêng `e2e.sqlite3`, tạo lại mỗi lần) và web ở cổng 3100, 3 trình duyệt chơi một ván. Cần Chromium của Playwright 1.64.1 đã có trên máy; **đừng tự chạy `npx playwright install`** khi chưa hỏi. CI tự cài |
+| `npm run e2e` | Playwright (B4b, làm lại cho D1 ở C3): tự chạy Django (DB riêng `e2e.sqlite3`, tạo lại mỗi lần) và web ở cổng 3100, 3 trình duyệt chơi một ván (một người trên điện thoại ngang có "giảm chuyển động"), chat, rớt mạng rồi nối lại, mở bản xem lại. Cần Chromium của Playwright 1.64.1 đã có trên máy; **đừng tự chạy `npx playwright install`** khi chưa hỏi. CI tự cài |
 
 ## Cấu trúc
 
 | Thư mục | Nội dung |
 |---|---|
 | `src/app/` | Trang: `/` chọn người chơi, `/table?player=<id>` bàn chơi, `/account` tài khoản (+ `/account/verify`, `/account/reset` mở từ link trong email), `/rooms` lobby và phòng (B7) |
-| `src/rooms/LiveTableScreen.tsx` | B4b: `/rooms/<id>/table`, cùng màn bàn chơi với mock nhưng nối WebSocket của Django |
+| `src/rooms/LiveTableScreen.tsx` | `/rooms/<id>/table`: cùng màn bàn chơi với mock nhưng nối WebSocket của Django, thêm lịch sử chat, ngồi/rời ghế, link chủ phòng |
+| `src/rooms/ReplayScreen.tsx` | `/hands/<id>`: xem lại ván trên cùng bàn D1, bước tới có chuyển động |
 | `src/rooms/` | Trang thử B7/B8: lobby, trang phòng + bảng chủ phòng + chat/người xem (WebSocket tới `NEXT_PUBLIC_DJANGO_WS`, mặc định `ws://localhost:8000`), mở link mời, lịch sử + bảng lời/lỗ, xem lại ván; `api.ts`, `live.ts`, `replay.ts` có test |
 | `src/account/` | Màn tài khoản (B6): `api.ts` gọi `/api/auth/` kèm CSRF, `messages.ts` câu thông báo theo mã lỗi; có test |
-| `src/club/` | Component hướng A (bàn, ghế, lá bài, chip, thanh hành động) và `club.css`, **chép** từ `design/mockups/src/` (không import chéo thư mục). Sửa mockup thì chép lại tay |
-| `src/table/reducer.ts` | Trạng thái bàn: snapshot + áp sự kiện theo `version`, hụt thì xin resync, lệnh chờ ack. Hàm thuần, có test |
+| `src/club/club.css` | CSS hướng A còn lại cho trang chủ và `account/ui.tsx` (bàn chơi đã chuyển sang D1) |
+| `src/table/` | Bàn chơi D1 (C3): `TableScreen.tsx` ráp màn, `Stage.tsx` bàn + ghế, `ActionBar.tsx` nút và mức cược, `Side.tsx` thanh trên + chat + ngăn chat điện thoại, `Overlays.tsx` mất kết nối / tạm dừng, `SevenDeuce.tsx`, `table.css` (port từ `design/c1`) |
+| `src/table/reducer.ts` | Trạng thái bàn: snapshot + áp sự kiện theo `version`, hụt thì xin resync, lệnh chờ ack, chat, nhật ký, tín hiệu chuyển động. Hàm thuần, có test |
 | `src/table/useTableSocket.ts` | Giữ một WebSocket, tự nối lại khi mất, gửi những gì reducer xếp vào `outbox` |
-| `src/table/view.ts` | Đổi dữ liệu server sang props của `<Table>` (lá `Th` → `10♥`, ghế, blind, pot) |
+| `src/table/seatView.ts`, `geometry.ts` | Đổi dữ liệu server sang từng ghế (trạng thái, bài, cược) và toạ độ ghế cho bàn 2–9 người; có test |
+| `src/table/cues.ts`, `TableFx.tsx` | Chuyển động: sự kiện nào làm gì bay đi đâu (không bao giờ từ snapshot), rồi phát bằng `ui/motion.ts`; có test |
 | `src/api/` | Type sinh từ hợp đồng API, **không sửa tay** |
 
 Trang không tự tính luật: nút nào bật, tố tối thiểu/tối đa bao nhiêu đều lấy từ `legal_actions`

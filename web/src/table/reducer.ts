@@ -4,6 +4,7 @@
 
 import type {
   ActCommandMessage,
+  ChatMessage,
   ActionAppliedMessage,
   AppliedAction,
   ClientMessage,
@@ -16,9 +17,14 @@ import type {
   SeatUpdatedMessage,
   ServerMessage,
   SevenDeuceAward,
+  Spectator,
   TableState,
   TurnDeadlineMessage,
 } from "@/api/protocol";
+import { mergeChat } from "@/rooms/live";
+
+import { cuesFor, type Cue } from "./cues";
+import { LOG_KEPT, logFor, type LogEntry } from "./log";
 
 export type StateEvent =
   | HandStartedMessage
@@ -65,7 +71,28 @@ export type TableModel = {
   pending: PendingCommand | null;
   outbox: ClientMessage[];
   notice: Notice | null;
+  chat: ChatMessage[];
+  spectators: Spectator[];
+  /** Last action of each seat in the running hand (labels under the seats). */
+  lastActions: Record<number, AppliedAction>;
+  /** Animation cues of the last state events, newest last (cues.ts). */
+  fx: Cue[];
+  /** Bumped by every snapshot: animations still running finish at once. */
+  fxEpoch: number;
+  /** The celebration came from an event re-applied after a snapshot: show it without the moment. */
+  celebrationQuiet: boolean;
+  /** Side panel log since this page joined (log.ts). */
+  log: LogEntry[];
+  /** My hole cards in the hand on the table (kept when the completed hand drops them). */
+  myCards: string[];
+  /** Local time the room.suspended notice arrived: the turn clock shows where it stopped. */
+  suspendedAt: number | null;
+  /** Local time the 7-2 moment started: a remount (phone ↔ desktop) does not play it again. */
+  celebrationAt: number | null;
 };
+
+/** Cues kept: the player only ever needs the ones not played yet. */
+const FX_KEPT = 12;
 
 export type TableAction =
   | { type: "socket.open" }
@@ -75,7 +102,10 @@ export type TableAction =
   | { type: "outbox.sent"; count: number; now: number }
   | { type: "tick"; now: number }
   | { type: "dismiss.celebration" }
-  | { type: "dismiss.notice" };
+  | { type: "dismiss.notice" }
+  | { type: "chat.history"; messages: ChatMessage[] }
+  | { type: "chat.send"; text: string }
+  | { type: "sit"; out: boolean; commandId: string };
 
 export const initialModel = (): TableModel => ({
   status: "connecting",
@@ -90,6 +120,16 @@ export const initialModel = (): TableModel => ({
   pending: null,
   outbox: [],
   notice: null,
+  chat: [],
+  spectators: [],
+  lastActions: {},
+  fx: [],
+  fxEpoch: 0,
+  celebrationQuiet: false,
+  log: [],
+  myCards: [],
+  suspendedAt: null,
+  celebrationAt: null,
 });
 
 const REJECT_TEXT: Partial<Record<RejectCode, string>> = {
@@ -122,8 +162,13 @@ export function reduce(model: TableModel, action: TableAction): TableModel {
         outbox: [],
         pending: model.pending && { ...model.pending, sentAt: null },
       };
-    case "server":
-      return onServer({ ...model, clockOffsetMs: Date.parse(action.message.server_time) - action.receivedAt }, action.message);
+    case "server": {
+      const next = onServer({ ...model, clockOffsetMs: Date.parse(action.message.server_time) - action.receivedAt }, action.message);
+      const suspended = next.table?.room.status === "suspended";
+      const suspendedAt = suspended ? (model.table?.room.status === "suspended" ? model.suspendedAt : action.receivedAt) : null;
+      const celebrationAt = next.celebration ? (next.celebration === model.celebration ? model.celebrationAt : action.receivedAt) : null;
+      return suspendedAt === next.suspendedAt && celebrationAt === next.celebrationAt ? next : { ...next, suspendedAt, celebrationAt };
+    }
     case "act":
       return onIntent(model, action);
     case "outbox.sent": {
@@ -146,6 +191,28 @@ export function reduce(model: TableModel, action: TableAction): TableModel {
       return { ...model, celebration: null };
     case "dismiss.notice":
       return { ...model, notice: null };
+    case "chat.history":
+      return { ...model, chat: mergeChat(model.chat, action.messages) };
+    case "chat.send": {
+      const text = action.text.trim();
+      if (!text || !model.table) return model;
+      // The outbox is dropped when the socket opens again: never queue while offline.
+      if (model.status !== "open") return { ...model, notice: notice(model, "Mất kết nối — tin nhắn chưa gửi được.") };
+      const message: ClientMessage = { protocol_version: 1, type: "chat.send", room_id: model.table.room.room_id, payload: { text } };
+      return { ...model, outbox: [...model.outbox, message] };
+    }
+    case "sit": {
+      if (!model.table) return model;
+      if (model.status !== "open") return { ...model, notice: notice(model, "Mất kết nối — thử lại khi đã nối lại.") };
+      const message: ClientMessage = {
+        protocol_version: 1,
+        type: action.out ? "command.sit_out" : "command.sit_in",
+        room_id: model.table.room.room_id,
+        command_id: action.commandId,
+        payload: {},
+      };
+      return { ...model, outbox: [...model.outbox, message] };
+    }
   }
 }
 
@@ -191,6 +258,10 @@ function onServer(model: TableModel, message: ServerMessage): TableModel {
     }
     case "protocol.error":
       return { ...model, notice: notice(model, "Server không đọc được message vừa gửi.") };
+    case "chat.message":
+      return { ...model, chat: mergeChat(model.chat, [message.payload.message]) };
+    case "audience.updated":
+      return { ...model, spectators: message.payload.spectators };
     default:
       if (STATE_EVENTS.has(message.type)) return onStateEvent(model, message as StateEvent);
       return model;
@@ -198,10 +269,21 @@ function onServer(model: TableModel, message: ServerMessage): TableModel {
 }
 
 function onSnapshot(model: TableModel, table: TableState, version: number): TableModel {
-  let next: TableModel = { ...model, table, lastVersion: version, awaitingSnapshot: false };
+  // A snapshot is the truth as it is now: no animation for anything it already contains, nor for
+  // the events kept while waiting for it (docs/c2-chuyen-dong.md principle 5).
+  const sameHand = model.table?.hand?.hand_id === table.hand?.hand_id;
+  let next: TableModel = {
+    ...model,
+    table,
+    lastVersion: version,
+    awaitingSnapshot: false,
+    fxEpoch: model.fxEpoch + 1,
+    lastActions: sameHand ? model.lastActions : {},
+    myCards: myCards(table, sameHand ? model.myCards : []),
+  };
   const buffered = model.buffered.filter((e) => e.version > version).sort((a, b) => a.version - b.version);
   next = { ...next, buffered: [] };
-  for (const event of buffered) next = onStateEvent(next, event);
+  for (const event of buffered) next = onStateEvent(next, event, true);
 
   // A command sent before a reconnect is resent unchanged, while its hand is still running.
   const pending = next.pending;
@@ -216,7 +298,7 @@ function onSnapshot(model: TableModel, table: TableState, version: number): Tabl
   return next;
 }
 
-function onStateEvent(model: TableModel, event: StateEvent): TableModel {
+function onStateEvent(model: TableModel, event: StateEvent, quiet = false): TableModel {
   if (model.awaitingSnapshot || model.lastVersion === null) {
     return { ...model, buffered: [...model.buffered, event] };
   }
@@ -233,22 +315,55 @@ function onStateEvent(model: TableModel, event: StateEvent): TableModel {
       ],
     };
   }
-  const applied = { ...applyEvent(model, event), lastVersion: event.version };
+  const applied = { ...applyEvent(model, event, quiet), lastVersion: event.version };
   // Events buffered while waiting may now be next in line.
   const next = applied.buffered.find((e) => e.version === event.version + 1);
   if (!next) return applied;
-  return onStateEvent({ ...applied, buffered: applied.buffered.filter((e) => e !== next) }, next);
+  return onStateEvent({ ...applied, buffered: applied.buffered.filter((e) => e !== next) }, next, quiet);
 }
 
-function applyEvent(model: TableModel, event: StateEvent): TableModel {
+function applyEvent(model: TableModel, event: StateEvent, quiet: boolean): TableModel {
+  const entries = logFor(model.table!, event);
+  const applied = applyState(model, event);
+  const logged = entries.length ? { ...applied, log: [...model.log, ...entries].slice(-LOG_KEPT) } : applied;
+  const next = { ...logged, myCards: myCards(logged.table, event.type === "hand.started" ? [] : model.myCards) };
+  if (quiet) return { ...next, celebrationQuiet: next.celebration !== model.celebration ? true : next.celebrationQuiet };
+  const bodies = cuesFor(model.table!, event);
+  if (bodies.length === 0) return next.celebration !== model.celebration ? { ...next, celebrationQuiet: false } : next;
+  let id = model.fx.at(-1)?.id ?? 0;
+  const cues = bodies.map((body) => ({ ...body, id: ++id }) as Cue);
+  return { ...next, fx: [...model.fx, ...cues].slice(-FX_KEPT), celebrationQuiet: false };
+}
+
+/** My visible hole cards in the table's hand, or what was kept so far. */
+function myCards(table: TableState | null, kept: string[]): string[] {
+  const mine = table?.hand?.players.find((p) => p.player_id === table.you.player_id)?.cards ?? [];
+  return mine.length && mine.every((c) => c !== "??") ? mine : kept;
+}
+
+function applyState(model: TableModel, event: StateEvent): TableModel {
   const table = model.table!;
   switch (event.type) {
     case "hand.started":
-      return { ...model, table: { ...table, hand: event.payload.hand, turn: null }, lastAction: null, results: null };
+      return {
+        ...model,
+        table: { ...table, hand: event.payload.hand, turn: null },
+        lastAction: null,
+        results: null,
+        lastActions: {},
+        celebration: null,
+      };
     case "action.applied": {
       const hand = event.payload.hand;
       const turn = table.turn && table.turn.player_id === hand.actor ? table.turn : null;
-      return { ...model, table: { ...table, hand, turn }, lastAction: event.payload.action };
+      // A new street clears the labels, except who folded.
+      const street = hand.board.length > (table.hand?.board.length ?? 0);
+      const kept = street
+        ? Object.fromEntries(Object.entries(model.lastActions).filter(([, a]) => a.kind === "fold"))
+        : model.lastActions;
+      const action = event.payload.action;
+      const lastActions = street && action.kind !== "fold" ? kept : { ...kept, [action.seat]: action };
+      return { ...model, table: { ...table, hand, turn }, lastAction: action, lastActions };
     }
     case "turn.deadline":
       return { ...model, table: { ...table, turn: event.payload.turn } };
@@ -267,14 +382,21 @@ function applyEvent(model: TableModel, event: StateEvent): TableModel {
       };
     }
     case "seat.updated": {
-      const others = table.seats.filter((s) => s.seat !== event.payload.seat);
-      const seats = event.payload.occupant ? [...others, event.payload.occupant] : others;
-      return { ...model, table: { ...table, seats: seats.sort((a, b) => a.seat - b.seat) } };
+      const { seat, occupant } = event.payload;
+      const others = table.seats.filter((s) => s.seat !== seat);
+      const seats = occupant ? [...others, occupant] : others;
+      // Taking or leaving a seat only comes as seat.updated: `you.seat` follows it, or the page
+      // would still draw me as a spectator (and rotate the table around the wrong seat).
+      let you = table.you;
+      if (occupant?.player_id === you.player_id) you = { ...you, seat };
+      else if (you.seat === seat) you = { ...you, seat: null };
+      return { ...model, table: { ...table, you, seats: seats.sort((a, b) => a.seat - b.seat) } };
     }
     case "room.suspended":
       return {
         ...model,
-        table: { ...table, room: { ...table.room, status: "suspended" }, turn: null },
+        // The turn stays: its clock is drawn stopped where the room paused.
+        table: { ...table, room: { ...table.room, status: "suspended" } },
         notice: notice(model, "Bàn tạm dừng để khôi phục. Chờ một chút rồi trang sẽ tự nối lại."),
       };
     case "room.updated": {

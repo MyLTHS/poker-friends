@@ -11,7 +11,7 @@ lại khi chủ dự án yêu cầu rõ. Lộ trình: [docs/roadmap.md](docs/roa
 
 ```bash
 cp .env.example .env
-docker compose up            # Django :8000, Postgres :5433, Redis :6380 (cổng trên máy)
+docker compose up            # Django :8000, Postgres :5433 (cổng trên máy)
 ```
 
 Không dùng Docker:

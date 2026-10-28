@@ -88,6 +88,8 @@ DATABASES = {
     )
 }
 
+# Empty in production: one Daphne process, so the in-memory layer is enough and does not drop
+# messages when a socket closes (ADR-001, "Bỏ Redis"). Kept for a multi-process setup.
 REDIS_URL = os.environ.get("REDIS_URL")
 # redis-py times a read out after 5 seconds by default, exactly how long channels_redis blocks
 # waiting for a message, so every socket quiet for 5 seconds died with 1011. Any longer read

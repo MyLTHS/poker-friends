@@ -60,8 +60,7 @@ Dấu hiệu: trang web không vào được, hoặc vào được nhưng bàn b
      Đọc dòng lỗi cuối trong log. Nếu vừa đổi bản thì [quay về bản trước](#quay-về-bản-trước).
 2. Ổ đĩa đầy (`df -h` báo 100%): Postgres sẽ dừng ghi. Xoá bớt backup cũ trong `backups/` (sau
    khi đã chép ra ngoài) hoặc `docker image prune` để bỏ image cũ không dùng, rồi `dc up -d`.
-3. Chỉ `redis` hỏng: Redis chỉ là kênh phát tin, không giữ dữ liệu. `dc restart redis backend`.
-4. Tất cả đều `Up` mà vẫn không vào được: kiểm tên miền còn trỏ đúng IP server không, và
+3. Tất cả đều `Up` mà vẫn không vào được: kiểm tên miền còn trỏ đúng IP server không, và
    `dc logs --tail 100 caddy` (lỗi chứng chỉ HTTPS hiện ở đây).
 
 Sau khi server lên lại: bàn đang chơi **tự dựng lại** từ database lúc có người mở trang bàn đó

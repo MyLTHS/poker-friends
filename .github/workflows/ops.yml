@@ -124,7 +124,8 @@ jobs:
                   first = json.loads(await asyncio.wait_for(ws.recv(), 10))
                   print("first message:", first["type"])
                   # A quiet socket must stay open: with Redis, a read timeout at or under
-                  # Channels' 5 s blocking read closed it with 1011 (REDIS_URL socket_timeout).
+                  # Channels' 5 s blocking read closed it with 1011. Production no longer uses
+                  # Redis (ADR-001), but the check stays: no layer may close an idle socket.
                   try:
                       while True:
                           await asyncio.wait_for(ws.recv(), 12)

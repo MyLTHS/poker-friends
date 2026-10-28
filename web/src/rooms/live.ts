@@ -30,7 +30,7 @@ export type LiveEvent =
 
 export const initialLive: Live = { chat: [], spectators: [], tableChanges: 0, closedBy: null };
 
-function mergeChat(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+export function mergeChat(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
   const byId = new Map(current.map((m) => [m.message_id, m]));
   for (const message of incoming) byId.set(message.message_id, message);
   return [...byId.values()].sort((a, b) => a.message_id - b.message_id).slice(-CHAT_KEPT);
