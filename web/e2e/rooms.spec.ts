@@ -3,7 +3,7 @@
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
-const WEB = "http://localhost:3100";
+const WEB = process.env.E2E_WEB ?? "http://localhost:3100";
 
 async function api(page: Page, method: string, path: string, data?: unknown) {
   const cookies = await page.context().cookies(WEB);
