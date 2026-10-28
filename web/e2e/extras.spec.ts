@@ -9,7 +9,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { PHONES, api, newGuest, outOfView, phone, settled, smallTargets } from "./helpers";
 
 const RUN = Date.now().toString(36).slice(-4);
-const HAND = /^(Mậu thầu|Đôi|Hai đôi|Bộ ba|Sảnh|Thùng|Cù lũ|Tứ quý|Thùng phá sảnh)\b/;
+// not \b: JavaScript counts "ũ" and "ý" as non-word, so "Cù lũ K…" and "Tứ quý A…" never matched
+const HAND = /^(Mậu thầu|Đôi|Hai đôi|Bộ ba|Sảnh|Thùng|Cù lũ|Tứ quý|Thùng phá sảnh)(?=\s|$)/;
 const DESKTOP = { viewport: { width: 1440, height: 900 } };
 
 const area = (page: Page) => page.locator("[data-hand]");
