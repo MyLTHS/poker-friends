@@ -135,6 +135,25 @@ describe("tableView", () => {
     expect(view.bets).toBe(0);
   });
 
+  it("after a showdown: the hand's name by the seat and its board cards lit", () => {
+    const board = ["Qh", "7d", "3c", "Jh", "6h"];
+    const hand = { ...midHand.hand!, board, complete: true, actor: null, legal_actions: null };
+    const view = tableView({ ...midHand, hand }, {
+      showdown: [{ player_id: "2", seat: 3, category: "one_pair", cards: ["Ac", "Ad", "Qh", "Jh", "7d"] }],
+    });
+    expect(view.seats.find((s) => s.seat === 3)!.hand).toBe("Đôi A");
+    expect(view.seats.filter((s) => s.hand)).toHaveLength(1);
+    expect(view.boardHi).toEqual([0, 1, 3]);
+  });
+
+  it("names no hand while the hand runs", () => {
+    const view = tableView(midHand, {
+      showdown: [{ player_id: "2", seat: 3, category: "one_pair", cards: ["Ac", "Ad", "Qh", "Jh", "7d"] }],
+    });
+    expect(view.seats.some((s) => s.hand)).toBe(false);
+    expect(view.boardHi).toEqual([]);
+  });
+
   it("between hands everyone waits with their room balance", () => {
     const view = tableView(between);
     expect(view.board).toEqual([]);

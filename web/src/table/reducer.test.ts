@@ -7,6 +7,7 @@ import type {
   HandCompletedMessage,
   HandStartedMessage,
   ServerMessage,
+  ShowdownHand,
   TableSnapshotMessage,
   TurnDeadlineMessage,
 } from "@/api/protocol";
@@ -202,6 +203,15 @@ describe("hand.completed", () => {
     expect(model.table?.seats.map((s) => s.stack)).toEqual([1135, 945, 920]);
     expect(model.table?.turn).toBeNull();
     expect(reduce(model, { type: "dismiss.celebration" }).celebration).toBeNull();
+  });
+
+  it("keeps the showdown's hand names until the next hand starts", () => {
+    const shown: ShowdownHand = { player_id: "2", seat: 3, category: "one_pair", cards: ["Ac", "Ad", "Qh", "Jh", "7d"] };
+    const completed = withVersion({ ...sevenDeuce, payload: { ...sevenDeuce.payload, seven_deuce: null, showdown: [shown] } }, 14);
+    const model = run([server(started), server(deadline), server(completed)], connected());
+    expect(model.showdown).toEqual([shown]);
+    const next = withVersion({ ...started, hand_id: 42 }, 15);
+    expect(reduce(model, server(next)).showdown).toBeNull();
   });
 });
 

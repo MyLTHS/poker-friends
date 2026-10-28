@@ -133,11 +133,12 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
         ? tableView(table, {
             lastActions: model.lastActions,
             results: model.results,
+            showdown: model.showdown,
             myCards: model.myCards,
             bubbles,
           })
         : null,
-    [table, model.lastActions, model.results, model.myCards, bubbles],
+    [table, model.lastActions, model.results, model.showdown, model.myCards, bubbles],
   );
   const placeOf = useCallback(
     (seat: number): SeatPlace | undefined => {
@@ -201,6 +202,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const winners = (model.results ?? []).filter((r) => r.hand_net > 0);
   const myResult = model.results?.find((r) => r.player_id === you.player_id);
   const nameOf = (playerId: string) => table.seats.find((s) => s.player_id === playerId)?.display_name ?? "?";
+  const handOf = (playerId: string) => view.seats.find((s) => s.playerId === playerId)?.hand;
   const celebration = model.celebration;
   const sevenSpot = celebration ? placeOf(celebration.seat)?.spot : undefined;
   const unread = chatOpen ? 0 : Math.max(0, model.chat.length - seen);
@@ -251,6 +253,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       device={device}
       seats={view.seats}
       board={view.board}
+      boardHi={view.boardHi}
       pot={view.pot}
       mark={`${room.name} · ${blinds}`}
       clock={clock}
@@ -261,7 +264,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       className={celebration ? "is-seven" : ""}
     >
       {layer}
-      {hand?.complete && winners.length > 0 && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} />}
+      {hand?.complete && winners.length > 0 && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} handOf={handOf} />}
       {celebration && sevenSpot && (
         <SevenDeuceStage key={hand?.hand_id} device={device} award={celebration} seats={table.seats} spot={sevenSpot} pot={Math.max(0, (model.results?.find((r) => r.player_id === celebration.player_id)?.hand_net ?? 0))} quiet={model.celebrationQuiet} startedAt={model.celebrationAt} />
       )}
@@ -297,7 +300,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
     </p>
   );
 
-  const idle = idleContent({ table, me, myResult, winners, nameOf, sittingOut, clock, celebration: !!celebration });
+  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration });
 
   if (device === "mobile") {
     let panel: ReactNode;
@@ -524,8 +527,9 @@ function NextHand() {
   );
 }
 
-function WinnerBanner({ device, winners, nameOf }: { device: Device; winners: PlayerResult[]; nameOf: (id: string) => string }) {
+function WinnerBanner({ device, winners, nameOf, handOf }: { device: Device; winners: PlayerResult[]; nameOf: (id: string) => string; handOf: (id: string) => string | undefined }) {
   const names = winners.map((w) => nameOf(w.player_id));
+  const made = handOf(winners[0].player_id);
   const total = winners.reduce((s, w) => s + w.hand_net, 0);
   return (
     <div className={`win-banner win-${device}`} role="status">
@@ -533,7 +537,8 @@ function WinnerBanner({ device, winners, nameOf }: { device: Device; winners: Pl
         <Crown size={device === "desktop" ? 16 : 13} strokeWidth={2.2} />
       </span>
       <b>{winners.length === 1 ? `${names[0]} thắng ${fmt(total)}` : `${names.join(", ")} chia pot`}</b>
-      {winners.length > 1 && <small>Mỗi người {winners.map((w) => `+${fmt(w.hand_net)}`).join(" · ")}</small>}
+      {winners.length === 1 && made && <small>{made}</small>}
+      {winners.length > 1 && <small>Mỗi người {winners.map((w) => `+${fmt(w.hand_net)}`).join(" · ")}{made ? ` · ${made}` : ""}</small>}
     </div>
   );
 }
@@ -566,6 +571,7 @@ function idleContent({
   myResult,
   winners,
   nameOf,
+  handOf,
   sittingOut,
   clock,
   celebration,
@@ -575,6 +581,7 @@ function idleContent({
   myResult: PlayerResult | undefined;
   winners: PlayerResult[];
   nameOf: (id: string) => string;
+  handOf: (id: string) => string | undefined;
   sittingOut: boolean;
   clock: TurnClock | undefined;
   celebration: boolean;
@@ -586,14 +593,16 @@ function idleContent({
   if (hand?.complete) {
     const net = myResult ? myResult.hand_net + myResult.seven_deuce_net : null;
     const showdown = hand.players.filter((p) => p.in_hand && p.cards.length && p.cards.every((c) => c !== "??")).length > 1;
+    const made = winners[0] && handOf(winners[0].player_id);
+    const mine = myResult && handOf(myResult.player_id);
     const win = winners.length === 1 ? `${nameOf(winners[0].player_id)} thắng ${fmt(winners[0].hand_net)}` : winners.length > 1 ? `${winners.map((w) => nameOf(w.player_id)).join(", ")} chia pot` : undefined;
     return {
       eyebrow: `Ván #${hand.hand_no} đã xong`,
       status: "Chờ ván mới",
       center: "Ván mới sắp bắt đầu.",
-      mine: net === null ? (me ? undefined : "Bạn đang xem") : net > 0 ? `Bạn: thắng ${signed(net)}` : net < 0 ? `Bạn: thua ${fmt(net)}` : "Bạn: hoà vốn",
+      mine: net === null ? (me ? undefined : "Bạn đang xem") : `Bạn: ${mine ? `${mine} · ` : ""}${net > 0 ? `thắng ${signed(net)}` : net < 0 ? `thua ${fmt(net)}` : "hoà vốn"}`,
       win: celebration ? undefined : win,
-      winSub: showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined,
+      winSub: made ? `với ${made}` : showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined,
     };
   }
   // Seated but not dealt in: say why (no chips, sitting out, or simply next hand).
@@ -665,8 +674,11 @@ function LogList({ entries, seats, you }: { entries: LogEntry[]; seats: SeatOccu
                 {e.cards.map((c) => (
                   <CardText key={c} card={c} />
                 ))}
+                {e.hand && ` — ${e.hand}`}
               </li>
             );
+          case "muck":
+            return <li key={i}>{name(e.seat)} úp bài (thua)</li>;
           case "win":
             return (
               <li key={i} className="is-win">

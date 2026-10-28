@@ -17,6 +17,7 @@ import type {
   SeatUpdatedMessage,
   ServerMessage,
   SevenDeuceAward,
+  ShowdownHand,
   Spectator,
   TableState,
   TurnDeadlineMessage,
@@ -65,6 +66,8 @@ export type TableModel = {
   buffered: StateEvent[];
   lastAction: AppliedAction | null;
   results: PlayerResult[] | null;
+  /** Made hands named at the showdown of the completed hand (hand.completed), until the next one. */
+  showdown: ShowdownHand[] | null;
   celebration: SevenDeuceAward | null;
   /** server_time minus local time when the message arrived. */
   clockOffsetMs: number;
@@ -115,6 +118,7 @@ export const initialModel = (): TableModel => ({
   buffered: [],
   lastAction: null,
   results: null,
+  showdown: null,
   celebration: null,
   clockOffsetMs: 0,
   pending: null,
@@ -350,6 +354,7 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
         table: { ...table, hand: event.payload.hand, turn: null },
         lastAction: null,
         results: null,
+        showdown: null,
         lastActions: {},
         celebration: null,
       };
@@ -368,7 +373,7 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
     case "turn.deadline":
       return { ...model, table: { ...table, turn: event.payload.turn } };
     case "hand.completed": {
-      const { hand, results, seven_deuce } = event.payload;
+      const { hand, results, seven_deuce, showdown } = event.payload;
       const seats = table.seats.map((seat) => {
         const result = results.find((r) => r.player_id === seat.player_id);
         return result ? { ...seat, stack: result.stack } : seat;
@@ -377,6 +382,7 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
         ...model,
         table: { ...table, hand, turn: null, seats },
         results,
+        showdown,
         celebration: seven_deuce ?? model.celebration,
         pending: null,
       };
