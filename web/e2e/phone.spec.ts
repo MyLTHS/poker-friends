@@ -91,6 +91,13 @@ test("phone: tables of 2–9 seats, the chat drawer and the owner's sheet fit ev
     await settled(page);
     await expect(page.locator(".tpanel .act-fold, .tpanel .act-call").first()).toBeVisible();
     await expectFits(page, `${size.name}, ${turnRoom.seat} ghế, tới lượt mình`);
+    // The closed chat drawer sits past the right edge: the table must not be scrollable sideways,
+    // or moving focus to the bar on your turn slides the whole table off the screen.
+    const slid = await page.locator(".d1.tbl").evaluate((el) => {
+      el.scrollLeft = 300;
+      return el.scrollLeft;
+    });
+    expect(slid, `${size.name}: the table scrolls sideways`).toBe(0);
     await page.goto(`/rooms/${rooms[7]}/table`);
     await expect(page.locator("[data-hand]")).toBeVisible();
     // On the 9-seat table: the chat drawer, the settings and the owner's sheet.
