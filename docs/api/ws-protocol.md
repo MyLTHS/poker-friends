@@ -175,6 +175,7 @@ Mọi trường `hand` là `HandView` = `HandEngine.view_for(người nhận)` c
 | Bài của người đã fold | Không ai; danh sách `cards` thành rỗng `[]` |
 | Bài lật ở showdown | Mọi người, kể cả người xem. Người thua có thể úp bài (PokerKit tự quyết người phải lật), khi đó `cards` là `[]` |
 | 2 lá 7-2 của người ăn pot vì mọi người fold, khi phòng bật thưởng 7-2 (#27) | Mọi người, sau khi ván xong (trong `hand.completed`) |
+| Tên bộ bài (`hand.completed.payload.showdown`) | Mọi người, nhưng **chỉ** cho bài còn ngửa sau showdown. Người fold, người úp bài khi thua, người thắng vì mọi người bỏ bài (kể cả 7-2 được lật) không có tên bộ bài |
 | Bộ bài, lá burn, lá chưa chia | Không ai, không bao giờ rời server |
 | Người xem (spectator) | `view_for(None)`: chỉ bài chung và bài đã lật |
 
@@ -195,7 +196,11 @@ vẫn đúng hình dạng, nên vẫn qua schema. Hai lớp chặn thật, theo 
    không thấy bài mình; người đã fold còn bài; `legal_actions` tới người không đang tới lượt; một lá
    xuất hiện hai lần; có khoá như `deck`/`burn`; `hand_id` của phong bì khác của ván; snapshot gửi
    nhầm người; `hand.completed` làm sinh/mất chip (tổng `hand_net` khác 0, tổng `seven_deuce_net`
-   khác 0, `seven_deuce.total` khác tổng `payments`, `stack` không khớp kết quả ván).
+   khác 0, `seven_deuce.total` khác tổng `payments`, `stack` không khớp kết quả ván); `showdown`
+   đặt tên bộ bài cho người không còn bài ngửa, dùng lá không phải bài ngửa của họ hay bài chung,
+   có khi ván thắng vì mọi người bỏ bài (7-2) hoặc khi chưa đủ 5 lá chung, bỏ sót người có
+   bài ngửa (trừ chính người nhận), hoặc đặt tên sai: tự tính lại bằng PokerKit từ 5 lá (đúng hạng,
+   đúng bộ mạnh nhất của người đó) và kiểm thứ tự lá mà client đọc.
 
 Ví dụ những message đúng schema mà phải bị chặn: [`fixtures/server/leaks/`](fixtures/server/leaks/)
 (người nhận của từng file ghi trong [`fixtures/server/viewers.json`](fixtures/server/viewers.json)).
@@ -295,8 +300,22 @@ rồi phát `action.applied` với `timeout: true`. Client vẽ đồng hồ the
 Ván đã xong và đã chia chip. Gồm `hand` (trạng thái cuối, bài đã lật), `results` (mọi người trong
 ván, cộng người ngồi bàn mà không trong ván, như sit-out, nếu họ trả thưởng 7-2; mỗi dòng:
 `hand_net` lời/lỗ trong pot, `seven_deuce_net` thưởng 7-2 nhận/trả, `stack` số dư phòng sau
-cùng) và `seven_deuce` (`null` nếu không có thưởng). Sau sự kiện này `hand_id` của các message
-tiếp theo là `null` cho tới `hand.started` kế tiếp.
+cùng), `seven_deuce` (`null` nếu không có thưởng) và `showdown` (tên bộ bài, xem dưới). Sau sự
+kiện này `hand_id` của các message tiếp theo là `null` cho tới `hand.started` kế tiếp.
+
+`showdown` có một dòng cho **mỗi người còn bài ngửa sau showdown**, theo số ghế; `[]` khi ván kết
+thúc vì mọi người bỏ bài (kể cả khi 7-2 được lật). Người thua thường úp bài (PokerKit tự quyết, kể
+cả khi all-in), nên thường chỉ có người thắng; chia pot thì có đủ những người chia. Mỗi dòng:
+
+| Trường | Nghĩa |
+|---|---|
+| `player_id`, `seat` | Người có bài |
+| `category` | Mã bộ bài, ổn định: `high_card`, `one_pair`, `two_pair`, `three_of_a_kind`, `straight`, `flush`, `full_house`, `four_of_a_kind`, `straight_flush`. Server tính bằng PokerKit; client chỉ đổi mã ra chữ (web: "Mậu thầu", "Đôi", "Hai đôi", "Bộ ba", "Sảnh", "Thùng", "Cù lũ", "Tứ quý", "Thùng phá sảnh") |
+| `cards` | 5 lá tạo nên bộ bài (từ 2 lá ngửa của họ và bài chung), **lá quan trọng trước**: nhóm lớn trước, rồi lá cao trước; sảnh A-2-3-4-5 để A cuối. Nhờ vậy client ghi được "Thùng già A", "Cù lũ K đôi 9" mà không tự so bài |
+
+Ví dụ ván thắng ở showdown (An đôi A): `"showdown": [{"player_id": "2", "seat": 3, "category":
+"one_pair", "cards": ["Ac", "Ad", "Qh", "Jh", "7d"]}]`. Thêm trường này là đổi tương thích (client
+cũ bỏ qua trường lạ); bản xem lại ván (REST `GET /api/hands/{id}/replay/`) có cùng `showdown`.
 
 Ví dụ: Lym raise, An fold, Bình call; flop `Ah 8d Jc`, Bình check, Lym bet 50, Bình fold. Lym ăn
 pot bằng 7-2 nên được lật bài và mỗi người khác trả 50. Đây là bản **An** nhận — An đã fold nhưng
@@ -327,7 +346,8 @@ vẫn thấy `7h 2c` của Lym:
       "payments": [{"player_id": "2", "seat": 3, "amount": 50},
                    {"player_id": "3", "seat": 5, "amount": 50}],
       "total": 100
-    }
+    },
+    "showdown": []
   }
 }
 ```

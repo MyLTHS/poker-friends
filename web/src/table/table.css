@@ -1864,6 +1864,25 @@
     text-transform: uppercase;
     color: var(--ivory-3);
   }
+  .d1 .pre:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  /* phone: "Chọn trước" in the idle column, two per row, full touch height */
+  .d1 .pre-group-mobile {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .d1 .pre-group-mobile .pre-title {
+    grid-column: 1 / -1;
+  }
+  .d1 .pre-group-mobile .pre {
+    height: 44px;
+    padding: 0 10px;
+    gap: 7px;
+    font-size: var(--fs-sm);
+  }
   /* phone table: bar over the stage, the right column (actions or a panel) */
   .d1 .tbar-m {
     position: absolute;

@@ -168,3 +168,29 @@ def test_every_projection_of_random_hands_passes_the_semantic_check():
             assert contract.hand_view_errors(view, viewer) == [], (viewer, view)
             checked += 1
     assert checked > 5000
+
+
+def test_showdown_hands_of_random_hands_pass_the_semantic_check():
+    """Every finished random hand: the engine's hand names fit what each receiver sees."""
+    checked = 0
+    for engine in _random_hands(300, seed=72):
+        if not engine.is_complete:
+            continue
+        showdown = engine.showdown_hands()
+        for viewer in (*engine.player_order, "99"):
+            payload = {
+                "hand": {
+                    "hand_id": 1,
+                    "hand_no": 1,
+                    **engine.view_for(viewer if viewer != "99" else None),
+                },
+                "showdown": showdown,
+                # Only the shape matters here: a 7-2 award or none.
+                "seven_deuce": {}
+                if engine.seven_deuce_bluff_winner() and engine.config.seven_deuce_bonus
+                else None,
+            }
+            assert contract._showdown_errors(payload, viewer) == [], (viewer, payload)
+            assert all(contract.matches(entry, "ShowdownHand") for entry in showdown)
+            checked += 1
+    assert checked > 500

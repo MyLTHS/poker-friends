@@ -160,6 +160,10 @@ if env_bool("DJANGO_BEHIND_HTTPS_PROXY"):
 # X-Forwarded-For. 0 = none, use the connection's address.
 ACCOUNTS_TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "0"))
 
+# New guest accounts per client IP per hour. Leave it at 20; only the E2E server raises it, because
+# the whole suite makes its guests from one address (web/playwright.config.ts).
+ACCOUNTS_GUESTS_PER_IP_HOUR = int(os.environ.get("GUESTS_PER_IP_HOUR", "20"))
+
 # Links in emails and the end of the Google flow point at the web app, not at Django.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 if FRONTEND_URL not in CSRF_TRUSTED_ORIGINS:

@@ -197,6 +197,7 @@ function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatV
         <span className="stack">{fmt(s.stack ?? 0)}</span>
       </span>
       <SeatTag s={s} device={device} clock={clock} />
+      {s.hand && <span className="seat-hand">{s.hand}</span>}
     </div>
   );
 }
@@ -216,6 +217,7 @@ function MeSeat({ device, s, hint, clock }: { device: Device; s: SeatView; hint?
         ) : (
           <span className="me-nocards">{s.state === "folded" ? "Đã bỏ bài" : "Chưa có bài"}</span>
         )}
+        {s.hand && <span className="me-hand">{s.hand}</span>}
       </span>
       <span className="me-plate">
         <span className="me-av" data-av={s.seat}>
@@ -241,6 +243,8 @@ export type StageProps = {
   device: Device;
   seats: SeatView[];
   board: string[];
+  /** Board positions lit at a showdown (the others are dimmed). */
+  boardHi?: number[];
   pot: number;
   potLabel?: string;
   mark: string;
@@ -255,7 +259,7 @@ export type StageProps = {
   className?: string;
 };
 
-export function Stage({ device, seats, board, pot, potLabel, mark, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, children, className = "" }: StageProps) {
+export function Stage({ device, seats, board, boardHi, pot, potLabel, mark, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, children, className = "" }: StageProps) {
   const g = GEO[device];
   const me = seats.find((s) => s.isMe);
   const button = seats.find((s) => s.isButton);
@@ -271,7 +275,7 @@ export function Stage({ device, seats, board, pot, potLabel, mark, clock, meHint
         {mark}
       </div>
       {showPot && pot > 0 && <Pot device={device} amount={pot} label={potLabel} />}
-      <Board device={device} cards={board} hidden={boardHidden} />
+      <Board device={device} cards={board} hi={boardHi} hidden={boardHidden} />
       {seats.filter((s) => (s.bet ?? 0) > 0).map((s) => <Bet key={s.seat} device={device} s={s} />)}
       {button && (
         <span className="dealer" style={at(dealerPos(device, button.spot, button.isMe))} aria-label="Nút dealer">

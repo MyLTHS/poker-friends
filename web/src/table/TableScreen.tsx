@@ -14,12 +14,14 @@ import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/
 import { FeedbackDialog } from "@/feedback/FeedbackDialog";
 import { Button, ButtonLink, CardText, D1Root, Spinner, ToastProvider, fmt, signed } from "@/ui";
 
-import { IdleBar, PreAction, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
+import { IdleBar, PreAction, PreActions, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
 import { Countdown, secondsLeft, useRecent, type TurnClock } from "./clock";
 import { useDevice } from "./device";
 import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
 import { ConnStrip, PausedCard, ReconnectCard } from "./Overlays";
+import { winnerLines } from "./handName";
+import { canPreAct, facingBet } from "./reducer";
 import { describeAction, raisePresets, tableView, type SeatView } from "./seatView";
 import { SevenDeuceStage, SevenLedger, SevenMedal } from "./SevenDeuce";
 import {
@@ -134,11 +136,12 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
         ? tableView(table, {
             lastActions: model.lastActions,
             results: model.results,
+            showdown: model.showdown,
             myCards: model.myCards,
             bubbles,
           })
         : null,
-    [table, model.lastActions, model.results, model.myCards, bubbles],
+    [table, model.lastActions, model.results, model.showdown, model.myCards, bubbles],
   );
   const placeOf = useCallback(
     (seat: number): SeatPlace | undefined => {
@@ -202,6 +205,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const winners = (model.results ?? []).filter((r) => r.hand_net > 0);
   const myResult = model.results?.find((r) => r.player_id === you.player_id);
   const nameOf = (playerId: string) => table.seats.find((s) => s.player_id === playerId)?.display_name ?? "?";
+  const handOf = (playerId: string) => view.seats.find((s) => s.playerId === playerId)?.hand;
   const celebration = model.celebration;
   const sevenSpot = celebration ? placeOf(celebration.seat)?.spot : undefined;
   const unread = chatOpen ? 0 : Math.max(0, model.chat.length - seen);
@@ -217,6 +221,9 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       }
     : undefined;
   const toggleSit = () => dispatch({ type: "sit", out: !sittingOut, commandId: newCommandId() });
+  const pre = canPreAct(model) && !celebration ? (
+    <PreActions device={device} choice={model.preAction?.kind ?? null} facingBet={facingBet(model)} disabled={!online} onChoose={(kind) => dispatch({ type: "pre.select", kind, commandId: newCommandId() })} />
+  ) : null;
 
   const turnProps = legal && hand
     ? {
@@ -252,6 +259,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       device={device}
       seats={view.seats}
       board={view.board}
+      boardHi={view.boardHi}
       pot={view.pot}
       mark={`${room.name} · ${blinds}`}
       clock={clock}
@@ -262,7 +270,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       className={celebration ? "is-seven" : ""}
     >
       {layer}
-      {hand?.complete && winners.length > 0 && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} />}
+      {hand?.complete && winners.length > 0 && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} handOf={handOf} />}
       {celebration && sevenSpot && (
         <SevenDeuceStage key={hand?.hand_id} device={device} award={celebration} seats={table.seats} spot={sevenSpot} pot={Math.max(0, (model.results?.find((r) => r.player_id === celebration.player_id)?.hand_net ?? 0))} quiet={model.celebrationQuiet} startedAt={model.celebrationAt} />
       )}
@@ -306,7 +314,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
     </p>
   );
 
-  const idle = idleContent({ table, me, myResult, winners, nameOf, sittingOut, clock, celebration: !!celebration });
+  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration });
 
   if (device === "mobile") {
     let panel: ReactNode;
@@ -342,6 +350,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
             </div>
           )}
           {idle.mine && <span className="ip-me">{idle.mine}</span>}
+          {pre}
           {seatError && <span className="ip-error" role="alert">{seatError}</span>}
           <Spectators device="mobile" spectators={model.spectators} />
           <div className="ip-actions">
@@ -404,6 +413,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       <TurnBar key={decisionKey} {...turnProps} device="desktop" />
     ) : (
       <IdleBar
+        className={pre ? "abar-pre" : ""}
         left={
           <span className="idle-hand">
             <small>{idle.eyebrow}</small>
@@ -428,6 +438,8 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
                 <b>{idle.win}</b> {idle.winSub}
               </span>
             </span>
+          ) : pre && !seatError ? (
+            pre
           ) : (
             <span className="idle-msg is-quiet">{seatError ?? idle.center}</span>
           )
@@ -533,16 +545,15 @@ function NextHand() {
   );
 }
 
-function WinnerBanner({ device, winners, nameOf }: { device: Device; winners: PlayerResult[]; nameOf: (id: string) => string }) {
-  const names = winners.map((w) => nameOf(w.player_id));
-  const total = winners.reduce((s, w) => s + w.hand_net, 0);
+function WinnerBanner({ device, winners, nameOf, handOf }: { device: Device; winners: PlayerResult[]; nameOf: (id: string) => string; handOf: (id: string) => string | undefined }) {
+  const { title, detail } = winnerLines(winners.map((w) => ({ name: nameOf(w.player_id), amount: w.hand_net, hand: handOf(w.player_id) })));
   return (
     <div className={`win-banner win-${device}`} role="status">
       <span className="win-crown">
         <Crown size={device === "desktop" ? 16 : 13} strokeWidth={2.2} />
       </span>
-      <b>{winners.length === 1 ? `${names[0]} thắng ${fmt(total)}` : `${names.join(", ")} chia pot`}</b>
-      {winners.length > 1 && <small>Mỗi người {winners.map((w) => `+${fmt(w.hand_net)}`).join(" · ")}</small>}
+      <b>{title}</b>
+      {detail && <small>{detail}</small>}
     </div>
   );
 }
@@ -575,6 +586,7 @@ function idleContent({
   myResult,
   winners,
   nameOf,
+  handOf,
   sittingOut,
   clock,
   celebration,
@@ -584,6 +596,7 @@ function idleContent({
   myResult: PlayerResult | undefined;
   winners: PlayerResult[];
   nameOf: (id: string) => string;
+  handOf: (id: string) => string | undefined;
   sittingOut: boolean;
   clock: TurnClock | undefined;
   celebration: boolean;
@@ -595,14 +608,18 @@ function idleContent({
   if (hand?.complete) {
     const net = myResult ? myResult.hand_net + myResult.seven_deuce_net : null;
     const showdown = hand.players.filter((p) => p.in_hand && p.cards.length && p.cards.every((c) => c !== "??")).length > 1;
-    const win = winners.length === 1 ? `${nameOf(winners[0].player_id)} thắng ${fmt(winners[0].hand_net)}` : winners.length > 1 ? `${winners.map((w) => nameOf(w.player_id)).join(", ")} chia pot` : undefined;
+    const mine = myResult && handOf(myResult.player_id);
+    // Each winner with their own hand: a split or side pot can be won with different hands.
+    const lines = winners.length ? winnerLines(winners.map((w) => ({ name: nameOf(w.player_id), amount: w.hand_net, hand: handOf(w.player_id) }))) : null;
+    const win = lines?.title;
+    const shownSub = lines?.detail && (winners.length === 1 ? `với ${lines.detail}` : lines.detail);
     return {
       eyebrow: `Ván #${hand.hand_no} đã xong`,
       status: "Chờ ván mới",
       center: "Ván mới sắp bắt đầu.",
-      mine: net === null ? (me ? undefined : "Bạn đang xem") : net > 0 ? `Bạn: thắng ${signed(net)}` : net < 0 ? `Bạn: thua ${fmt(net)}` : "Bạn: hoà vốn",
+      mine: net === null ? (me ? undefined : "Bạn đang xem") : `Bạn: ${mine ? `${mine} · ` : ""}${net > 0 ? `thắng ${signed(net)}` : net < 0 ? `thua ${fmt(net)}` : "hoà vốn"}`,
       win: celebration ? undefined : win,
-      winSub: showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined,
+      winSub: shownSub || (showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined),
     };
   }
   // Seated but not dealt in: say why (no chips, sitting out, or simply next hand).
@@ -674,8 +691,11 @@ function LogList({ entries, seats, you }: { entries: LogEntry[]; seats: SeatOccu
                 {e.cards.map((c) => (
                   <CardText key={c} card={c} />
                 ))}
+                {e.hand && ` — ${e.hand}`}
               </li>
             );
+          case "muck":
+            return <li key={i}>{name(e.seat)} úp bài (thua)</li>;
           case "win":
             return (
               <li key={i} className="is-win">

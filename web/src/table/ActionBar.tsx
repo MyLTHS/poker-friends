@@ -12,6 +12,7 @@ import { fmt } from "@/ui";
 
 import { Countdown, LiveBar, type TurnClock } from "./clock";
 import type { Device } from "./geometry";
+import type { PreActionKind } from "./reducer";
 import type { Preset } from "./seatView";
 import { isTyping, ownsArrows, turnCommand } from "./shortcuts";
 
@@ -252,11 +253,52 @@ export function IdleBar({ left, center, right, className = "" }: { left?: ReactN
 }
 
 /** A checkbox-looking toggle of the bar ("Nghỉ ván sau"). */
-export function PreAction({ label, on = false, onToggle, disabled }: { label: string; on?: boolean; onToggle?: () => void; disabled?: boolean }) {
+export function PreAction({ label, name, on = false, onToggle, disabled }: { label: string; name?: string; on?: boolean; onToggle?: () => void; disabled?: boolean }) {
   return (
-    <button type="button" className={`pre${on ? " is-on" : ""}`} aria-pressed={on} onClick={onToggle} disabled={disabled}>
+    <button type="button" className={`pre${on ? " is-on" : ""}`} aria-pressed={on} aria-label={name} onClick={onToggle} disabled={disabled}>
       <i aria-hidden />
       {label}
     </button>
+  );
+}
+
+const PRE_CHOICES: { kind: PreActionKind; label: string }[] = [
+  { kind: "check_fold", label: "Check / Bỏ" },
+  { kind: "check", label: "Check" },
+  { kind: "call_any", label: "Theo bất kỳ" },
+];
+
+/** "Chọn trước" while another player thinks: one choice at a time, clicked again to clear. The
+ *  reducer keeps it and sends it when my turn comes, if legal_actions still allow it. */
+export function PreActions({
+  device,
+  choice,
+  facingBet,
+  disabled,
+  onChoose,
+}: {
+  device: Device;
+  choice: PreActionKind | null;
+  facingBet: boolean;
+  disabled?: boolean;
+  onChoose: (kind: PreActionKind | null) => void;
+}) {
+  return (
+    <span className={`pre-group pre-group-${device}`} role="group" aria-label="Chọn trước khi tới lượt">
+      <span className="pre-title" aria-hidden>
+        Chọn trước
+      </span>
+      {PRE_CHOICES.map(({ kind, label }) => (
+        <PreAction
+          key={kind}
+          label={label}
+          // not just "Check": the turn's own Check button has that name
+          name={`Chọn trước: ${label}`}
+          on={choice === kind}
+          disabled={disabled || (kind === "check" && facingBet)}
+          onToggle={() => onChoose(choice === kind ? null : kind)}
+        />
+      ))}
+    </span>
   );
 }

@@ -6,6 +6,7 @@ import type { AppliedAction, ChatMessage, HandPlayer, HandView, LegalActions, Pl
 import { fmt, signed } from "@/ui/format";
 
 import { spotOf } from "./geometry";
+import { boardHighlights, showdownBySeat, type ShownHand } from "./handName";
 
 export type SeatState = "turn" | "waiting" | "folded" | "all-in" | "sitting-out" | "disconnected" | "winner" | "empty";
 
@@ -29,6 +30,8 @@ export type SeatView = {
   /** Lost the connection: drawn as a flag on the avatar whatever the state. */
   offline?: boolean;
   lastAction?: string;
+  /** Name of the hand shown at the showdown ("Thùng già A"). */
+  hand?: string;
   delta?: { text: string; kind: "gain" | "loss" };
   bubble?: string;
 };
@@ -38,6 +41,8 @@ export type TableView = {
   /** My seat number, null for a spectator. */
   mySeat: number | null;
   board: string[];
+  /** Board positions in a hand shown at the showdown (lit; the rest dimmed). */
+  boardHi: number[];
   /** Chips in the middle (collected pots), bets in front of the seats excluded. */
   pot: number;
   /** Pot plus every bet on the table. */
@@ -96,6 +101,10 @@ export type ViewExtras = {
   lastActions?: Record<number, AppliedAction>;
   /** hand.completed results of the hand on the table. */
   results?: PlayerResult[] | null;
+  /** hand.completed showdown of the hand on the table: the names of the shown hands. */
+  showdown?: readonly ShownHand[] | null;
+  /** Who won, when `results` are not given (the replay): only their hands light the board. */
+  winners?: string[];
   /** Recent chat lines, shown as bubbles over the speakers' seats. */
   bubbles?: ChatMessage[];
   /** My hole cards of the hand on the table: the completed hand drops a showdown loser's cards,
@@ -110,6 +119,9 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
   const live = !!hand && !hand.complete;
   const blinds = live ? blindSeats(hand) : undefined;
   const results = hand?.complete ? (extras.results ?? null) : null;
+  const showdown = hand?.complete ? (extras.showdown ?? null) : null;
+  const handNames = showdownBySeat(showdown);
+  const winners = results ? results.filter((r) => r.hand_net > 0).map((r) => r.player_id) : extras.winners;
 
   const views: SeatView[] = [];
   for (let seat = 1; seat <= room.max_seats; seat++) {
@@ -162,6 +174,7 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
       blind: blinds?.sb === seat ? "SB" : blinds?.bb === seat ? "BB" : undefined,
       offline: !occupant.connected,
       lastAction,
+      hand: handNames[seat],
       delta: result && net !== 0 ? { text: signed(net), kind: net > 0 ? "gain" : "loss" } : undefined,
       bubble,
     });
@@ -173,6 +186,8 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
     seats: views,
     mySeat: you.seat,
     board: hand?.board ?? [],
+    // Only the winners' hands light the board (a shown loser's hand would mislead).
+    boardHi: boardHighlights(showdown?.filter((h) => !winners || winners.includes(h.player_id)), hand?.board ?? []),
     pot,
     potTotal: pot + bets,
     bets,

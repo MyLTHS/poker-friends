@@ -4,6 +4,7 @@
 
 import type { AppliedAction, TableState } from "@/api/protocol";
 
+import { handName } from "./handName";
 import type { StateEvent } from "./reducer";
 import { blindSeats } from "./seatView";
 
@@ -11,7 +12,8 @@ export type LogEntry =
   | { kind: "hand"; handNo: number; button: number; sb: number; bb: number; small: number; big: number }
   | { kind: "action"; action: AppliedAction }
   | { kind: "street"; name: "Flop" | "Turn" | "River"; cards: string[] }
-  | { kind: "show"; seat: number; cards: string[] }
+  | { kind: "show"; seat: number; cards: string[]; hand?: string }
+  | { kind: "muck"; seat: number }
   | { kind: "win"; seat: number; amount: number }
   | { kind: "seven"; seat: number; total: number; bonus: number; payers: number }
   | { kind: "warn"; text: string };
@@ -38,12 +40,16 @@ export function logFor(prev: TableState, event: StateEvent): LogEntry[] {
     case "action.applied":
       return [{ kind: "action", action: event.payload.action }, ...streets(prev.hand?.board ?? [], event.payload.hand.board)];
     case "hand.completed": {
-      const { hand, results, seven_deuce } = event.payload;
+      const { hand, results, seven_deuce, showdown } = event.payload;
       const out: LogEntry[] = streets(prev.hand?.board ?? [], hand.board);
-      if (!seven_deuce) {
-        for (const p of hand.players) {
-          const hidden = prev.hand?.players.find((q) => q.seat === p.seat)?.cards.some((c) => c === "??");
-          if (hidden && p.cards.length && p.cards.every((c) => c !== "??")) out.push({ kind: "show", seat: p.seat, cards: p.cards });
+      // The server names every hand still face up after a showdown; whoever else reached it mucked.
+      for (const entry of showdown) {
+        const cards = hand.players.find((p) => p.seat === entry.seat)?.cards ?? [];
+        out.push({ kind: "show", seat: entry.seat, cards, hand: handName(entry) });
+      }
+      if (showdown.length) {
+        for (const p of prev.hand?.players ?? []) {
+          if (p.in_hand && !showdown.some((entry) => entry.seat === p.seat)) out.push({ kind: "muck", seat: p.seat });
         }
       }
       for (const r of results) if (r.hand_net > 0) out.push({ kind: "win", seat: r.seat, amount: r.hand_net });

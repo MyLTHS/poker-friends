@@ -1362,7 +1362,35 @@ components:
           anyOf:
             - $ref: "./schema/common.schema.json#/$defs/PlayerId"
             - type: "null"
-      required: [hand_id, hand_no, room_id, completed_at, steps, results, seven_deuce_winner]
+        showdown:
+          type: array
+          description: |
+            Bộ bài của từng người còn ngửa bài sau showdown (như `hand.completed.payload.showdown`),
+            theo số ghế; `[]` nếu ván kết thúc vì mọi người bỏ bài (kể cả khi lật 7-2).
+          items:
+            $ref: "./schema/common.schema.json#/$defs/ShowdownHand"
+        prev_hand:
+          description: Ván xong (không bị huỷ) ngay trước ván này trong phòng, theo số ván; `null` nếu không có. Không giới hạn trong 100 ván của danh sách.
+          anyOf:
+            - $ref: "#/components/schemas/HandLink"
+            - type: "null"
+        next_hand:
+          description: Ván xong (không bị huỷ) ngay sau ván này; `null` nếu không có.
+          anyOf:
+            - $ref: "#/components/schemas/HandLink"
+            - type: "null"
+      required: [hand_id, hand_no, room_id, completed_at, steps, results, seven_deuce_winner, showdown, prev_hand, next_hand]
+      additionalProperties: false
+    HandLink:
+      type: object
+      properties:
+        hand_id:
+          type: integer
+          minimum: 1
+        hand_no:
+          type: integer
+          minimum: 1
+      required: [hand_id, hand_no]
       additionalProperties: false
     RoomSummary:
       type: object

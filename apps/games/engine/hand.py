@@ -26,6 +26,24 @@ AUTOMATIONS = (
 
 HIDDEN_CARD = "??"
 SEVEN_DEUCE_RANKS = frozenset({"7", "2"})
+RANK_ORDER = "23456789TJQKA"
+
+
+class HandCategory(StrEnum):
+    """A made hand, named after PokerKit's ``Label`` (the web shows its own words for it)."""
+
+    HIGH_CARD = "high_card"
+    ONE_PAIR = "one_pair"
+    TWO_PAIR = "two_pair"
+    THREE_OF_A_KIND = "three_of_a_kind"
+    STRAIGHT = "straight"
+    FLUSH = "flush"
+    FULL_HOUSE = "full_house"
+    FOUR_OF_A_KIND = "four_of_a_kind"
+    STRAIGHT_FLUSH = "straight_flush"
+
+
+STRAIGHTS = frozenset({HandCategory.STRAIGHT, HandCategory.STRAIGHT_FLUSH})
 
 
 class ActionKind(StrEnum):
@@ -96,6 +114,19 @@ def deal_order(seats: tuple[Seat, ...], button_seat: int) -> list[str]:
 
 def card_code(card: Card) -> str:
     return repr(card)
+
+
+def ordered_hand(category: HandCategory, cards: list[str]) -> list[str]:
+    """The five cards of a made hand, most significant first: bigger groups, then higher ranks,
+    so a client can name the hand from ``cards[0]`` (and ``cards[2]``/``cards[3]``) alone.
+    A five-high straight (the wheel) counts its ace as one and puts it last."""
+    ranks = [card[0] for card in cards]
+    wheel = category in STRAIGHTS and set(ranks) == set("A2345")
+
+    def value(rank: str) -> int:
+        return -1 if wheel and rank == "A" else RANK_ORDER.index(rank)
+
+    return sorted(cards, key=lambda card: (-ranks.count(card[0]), -value(card[0])))
 
 
 class HandEngine:
@@ -174,6 +205,38 @@ class HandEngine:
         winner = remaining[0]
         ranks = {card_code(c)[0] for c in self._state.hole_cards[self._index[winner]]}
         return winner if ranks == SEVEN_DEUCE_RANKS else None
+
+    def showdown_hands(self) -> list[dict[str, Any]]:
+        """The made hand of each player whose cards are face up at a showdown, by seat.
+
+        Empty unless the hand went to a showdown (two or more players never folded), so a win
+        by folds, including a revealed 7-2 bluff, names nobody's hand. A player who mucked has
+        no face-up cards and no entry. Everything here is already public.
+        """
+        if not self.is_complete:
+            return []
+        folded = {a.player_id for a in self._actions if a.kind == ActionKind.FOLD}
+        if len([p for p in self.player_order if p not in folded]) < 2:
+            return []
+        state = self._state
+        hands = []
+        for i, player in enumerate(self.player_order):
+            face_up = state.hole_card_statuses[i]
+            if not state.statuses[i] or not face_up or not all(face_up):
+                continue
+            made = state.get_hand(i, 0, 0)
+            if made is None:
+                continue
+            category = HandCategory(made.entry.label.name.lower())
+            hands.append(
+                {
+                    "player_id": player,
+                    "seat": self._seat_of[player],
+                    "category": str(category),
+                    "cards": ordered_hand(category, [card_code(c) for c in made.cards]),
+                }
+            )
+        return sorted(hands, key=lambda h: h["seat"])
 
     # ---- actions -----------------------------------------------------------------------
 

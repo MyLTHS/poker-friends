@@ -109,7 +109,8 @@ export function CreateRoomScreen() {
   const preview = shown(rules(draft));
   const name = draft.name.trim() || "Bàn mới";
   const submitButton = (
-    <Button kind="primary" size={phone ? "md" : "lg"} type="submit" form={FORM_ID} busy={busy} disabled={!online || me === null}>
+    // aria-label: also named for tools that read only the element's own text, not the <span> in it
+    <Button kind="primary" size={phone ? "md" : "lg"} type="submit" form={FORM_ID} busy={busy} disabled={!online || me === null} aria-label="Tạo phòng & lấy link mời">
       Tạo phòng & lấy link mời
     </Button>
   );
@@ -176,7 +177,7 @@ export function CreateRoomScreen() {
           </div>
           <div className="form-actions">
             {me === undefined && <LoadingLine>Đang kiểm tra tài khoản…</LoadingLine>}
-            <ButtonLink kind="quiet" href="/rooms">
+            <ButtonLink kind="quiet" href="/rooms" aria-label="Huỷ">
               Huỷ
             </ButtonLink>
             {submitButton}
@@ -348,6 +349,7 @@ function CreateFields({ draft, set, errors, phone }: { draft: Draft; set: (patch
           items={[
             {
               value: "public",
+              name: "Công khai: hiện trong sảnh",
               label: (
                 <>
                   <Globe size={18} strokeWidth={1.8} aria-hidden />
@@ -363,6 +365,7 @@ function CreateFields({ draft, set, errors, phone }: { draft: Draft; set: (patch
             },
             {
               value: "private",
+              name: "Riêng: chỉ ai có link mời",
               label: (
                 <>
                   <Lock size={18} strokeWidth={1.8} aria-hidden />

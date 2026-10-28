@@ -8,6 +8,7 @@ import hashlib
 import time
 from dataclasses import dataclass
 
+from django.conf import settings
 from django.core.cache import cache
 
 
@@ -22,6 +23,12 @@ class RateLimit:
     scope: str
     limit: int
     window: int  # seconds
+    # A setting that overrides `limit`, read at every check (so override_settings works).
+    setting: str = ""
+
+    @property
+    def cap(self) -> int:
+        return getattr(settings, self.setting) if self.setting else self.limit
 
     def _key(self, value: str) -> tuple[str, int]:
         # Hash so emails never sit in the cache in clear, and keys stay short and safe.
@@ -35,7 +42,7 @@ class RateLimit:
     def check(self, value: str) -> None:
         """Raise ``RateLimited`` if the limit is already used up, without counting a hit."""
         key, window_start = self._key(value)
-        if cache.get(key, 0) >= self.limit:
+        if cache.get(key, 0) >= self.cap:
             raise RateLimited(self._retry_after(window_start))
 
     def hit(self, value: str) -> None:
@@ -63,4 +70,7 @@ PASSWORD_RESET_PER_IP = RateLimit("reset-ip", limit=5, window=60 * 60)
 PASSWORD_RESET_PER_EMAIL = RateLimit("reset-email", limit=3, window=60 * 60)
 # Sign-up, guest upgrade and "send the link again" all send an email.
 EMAIL_SENDS_PER_IP = RateLimit("email-ip", limit=10, window=60 * 60)
-GUESTS_PER_IP = RateLimit("guest-ip", limit=20, window=60 * 60)
+# 20 unless the setting says otherwise (only the E2E server raises it).
+GUESTS_PER_IP = RateLimit(
+    "guest-ip", limit=20, window=60 * 60, setting="ACCOUNTS_GUESTS_PER_IP_HOUR"
+)

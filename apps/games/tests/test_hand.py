@@ -422,3 +422,97 @@ class TestSevenDeuceReveal:
         assert record["config"]["seven_deuce_bonus"] == 50
         assert replayed.seven_deuce_bluff_winner() == "B"
         assert replayed.view_for(None) == original.view_for(None)
+
+
+class TestShowdownHands:
+    """The made hand of every player whose cards are face up at a showdown (nobody else's)."""
+
+    @staticmethod
+    def ranks(entry) -> str:
+        return "".join(card[0] for card in entry["cards"])
+
+    def test_only_the_shown_winner_gets_a_hand_when_the_loser_mucks(self):
+        # B (big blind) shows first after the river; A cannot win, so A mucks.
+        engine = heads_up(holes={"B": "AcAd", "A": "7c2d"}, board="KhQs9c5d3h")
+        engine.act(call("A"))
+        check_down(engine)
+        assert engine.showdown_hands() == [
+            {
+                "player_id": "B",
+                "seat": 5,
+                "category": "one_pair",
+                "cards": ["Ac", "Ad", "Kh", "Qs", "9c"],
+            }
+        ]
+
+    def test_both_hands_are_named_when_the_pot_is_split(self):
+        engine = heads_up(holes={"A": "AhKd", "B": "AcKs"}, board="9h4h3h2c7s")
+        engine.act(call("A"))
+        check_down(engine)
+        hands = engine.showdown_hands()
+        assert [(e["player_id"], e["category"]) for e in hands] == [
+            ("A", "high_card"),
+            ("B", "high_card"),
+        ]
+        assert [self.ranks(e) for e in hands] == ["AK974", "AK974"]
+
+    def test_cards_are_ordered_by_what_makes_the_hand(self):
+        engine = heads_up(holes={"A": "7h2h", "B": "AsAd"}, board="7d7c2s9h4c")
+        engine.act(call("A"))
+        check_down(engine)
+        (entry,) = [e for e in engine.showdown_hands() if e["player_id"] == "A"]
+        assert entry["category"] == "full_house"
+        assert self.ranks(entry) == "77722"
+
+    def test_a_wheel_puts_the_ace_last(self):
+        engine = heads_up(holes={"A": "Ah5d", "B": "KcKd"}, board="2c3h4sKh9d")
+        engine.act(call("A"))
+        check_down(engine)
+        (entry,) = [e for e in engine.showdown_hands() if e["player_id"] == "A"]
+        assert entry["category"] == "straight"
+        assert self.ranks(entry) == "5432A"
+
+    def test_an_all_in_loser_mucks_and_gets_no_hand(self):
+        # Both hands are face up during the run-out; at the end the losing hand is killed, so
+        # its cards (and so its name) are not in the final view.
+        engine = heads_up(holes={"A": "AhKh", "B": "QcQd"}, board="9h4hTh2c7s")
+        engine.act(raise_to("A", 100))
+        engine.act(call("B"))
+        assert [(e["player_id"], e["category"]) for e in engine.showdown_hands()] == [
+            ("A", "flush")
+        ]
+
+    def test_a_named_hand_always_has_face_up_cards_in_the_final_view(self):
+        engine = heads_up(holes={"B": "7c2d", "A": "AcAd"}, board="KhQs9c5d3h")
+        engine.act(call("A"))
+        check_down(engine)
+        shown = {p["player_id"]: p["cards"] for p in engine.view_for(None)["players"]}
+        for entry in engine.showdown_hands():
+            assert HIDDEN_CARD not in shown[entry["player_id"]]
+            assert set(entry["cards"]) <= set(shown[entry["player_id"]]) | set(engine.board())
+
+    def test_a_win_by_fold_has_no_showdown(self):
+        engine = heads_up(holes={"B": "AcAd", "A": "7c3d"}, board="KhQs9c5d3h")
+        engine.act(fold("A"))
+        assert engine.showdown_hands() == []
+
+    def test_a_revealed_seven_deuce_bluff_is_not_a_showdown(self):
+        engine = heads_up(
+            holes={"A": "7c2d", "B": "AcAd"}, board="KhQs9c5d3h", seven_deuce_bonus=50
+        )
+        engine.act(raise_to("A", 6))
+        engine.act(fold("B"))
+        assert engine.view_for(None)["players"][0]["cards"] == ["7c", "2d"]
+        assert engine.showdown_hands() == []
+
+    def test_a_running_hand_has_no_showdown_yet(self):
+        engine = heads_up(holes={"B": "AcAd", "A": "7c2d"}, board="KhQs9c5d3h")
+        engine.act(call("A"))
+        assert engine.showdown_hands() == []
+
+    def test_replay_gives_the_same_hands(self):
+        engine = heads_up(holes={"B": "7c2d", "A": "AcAd"}, board="KhQs9c5d3h")
+        engine.act(call("A"))
+        check_down(engine)
+        replayed = HandEngine.replay(json.loads(json.dumps(engine.record())))
+        assert replayed.showdown_hands() == engine.showdown_hands()

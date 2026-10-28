@@ -10,6 +10,7 @@ from collections import defaultdict
 from typing import Any
 
 from asgiref.sync import sync_to_async
+from django.db.models import Q
 from django.http import HttpRequest, JsonResponse
 
 from . import contract
@@ -107,9 +108,27 @@ async def list_hands(request: HttpRequest, room_id: int) -> JsonResponse:
     return JsonResponse({"hands": rows})
 
 
-def replay_steps(hand: Hand, viewer: str | None) -> tuple[list[dict[str, Any]], str | None]:
-    """Every state of ``hand`` as ``viewer`` saw it, from the deal to the end, and the 7-2
-    bluff winner by rule #27 (even when nobody had chips left to pay the bonus)."""
+def adjacent_hands(hand: Hand) -> tuple[dict[str, int] | None, dict[str, int] | None]:
+    """The room's finished, replayable hands just before and after ``hand`` (for "Ván trước /
+    Ván sau"), by hand number, however old: not limited to the hands the list shows."""
+    # Not exclude(result__voided=True): a result without the key compares as NULL and would go too.
+    voided = Q(result__has_key="voided") & Q(result__voided=True)
+    playable = Hand.objects.filter(room_id=hand.room_id, completed_at__isnull=False).exclude(voided)
+    before = playable.filter(hand_no__lt=hand.hand_no).order_by("-hand_no").first()
+    after = playable.filter(hand_no__gt=hand.hand_no).order_by("hand_no").first()
+
+    def short(h: Hand | None) -> dict[str, int] | None:
+        return h and {"hand_id": h.pk, "hand_no": h.hand_no}
+
+    return short(before), short(after)
+
+
+def replay_steps(
+    hand: Hand, viewer: str | None
+) -> tuple[list[dict[str, Any]], str | None, list[dict[str, Any]]]:
+    """Every state of ``hand`` as ``viewer`` saw it, from the deal to the end, the 7-2 bluff
+    winner by rule #27 (even when nobody had chips left to pay the bonus) and the hands named
+    at the showdown (the same for everyone: only cards shown to the whole table)."""
     engine = HandEngine.replay({"config": hand.config, "actions": []})
     seated = viewer if viewer in engine.player_order else None
     seats = _seats(hand)
@@ -137,7 +156,7 @@ def replay_steps(hand: Hand, viewer: str | None) -> tuple[list[dict[str, Any]], 
         }
         steps.append({"action": applied, "hand": view()})
     winner = engine.seven_deuce_bluff_winner() if hand.config.get("seven_deuce_bonus") else None
-    return steps, winner
+    return steps, winner, engine.showdown_hands()
 
 
 async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
@@ -151,7 +170,8 @@ async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
         return error("hand_voided", "This hand was voided by an admin.")
     viewer = str(user.pk) if user.is_authenticated else None
     # Replaying touches the ORM (hand.commands) and PokerKit: run it off the event loop.
-    steps, winner = await sync_to_async(replay_steps)(hand, viewer)
+    steps, winner, showdown = await sync_to_async(replay_steps)(hand, viewer)
+    prev_hand, next_hand = await sync_to_async(adjacent_hands)(hand)
 
     hand_net: dict[str, int] = defaultdict(int)
     bonus_net: dict[str, int] = defaultdict(int)
@@ -178,6 +198,9 @@ async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
             "steps": steps,
             "results": results,
             "seven_deuce_winner": winner,
+            "showdown": showdown,
+            "prev_hand": prev_hand,
+            "next_hand": next_hand,
         }
     )
 

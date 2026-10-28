@@ -625,12 +625,14 @@ class TableActor:
             return {"hand_id": hand_pk, "hand_no": hand_no, **engine.view_for(seated)}
 
         results, seven_deuce = _settlement_payload(engine, new_entries, self.session, self)
+        showdown = engine.showdown_hands()
         await self._broadcast(
             "hand.completed",
             lambda viewer: {
                 "hand": final_view(viewer),
                 "results": results,
                 "seven_deuce": seven_deuce,
+                "showdown": showdown,
             },
             hand_id=hand_pk,
         )

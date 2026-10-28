@@ -622,6 +622,54 @@
       ],
       "additionalProperties": false
     },
+    "HandCategory": {
+      "title": "HandCategory",
+      "description": "A made poker hand, from PokerKit's hand labels. Stable codes: the client shows its own words for them.",
+      "type": "string",
+      "enum": [
+        "high_card",
+        "one_pair",
+        "two_pair",
+        "three_of_a_kind",
+        "straight",
+        "flush",
+        "full_house",
+        "four_of_a_kind",
+        "straight_flush"
+      ]
+    },
+    "ShowdownHand": {
+      "title": "ShowdownHand",
+      "description": "The made hand of one player whose cards are face up at the end of a showdown. Never for a player who folded or mucked, nor for a win by folds (a revealed 7-2 bluff included). cards are the best five, from the player's two cards and the board, most significant first (bigger groups, then higher ranks; the ace of a five-high straight last).",
+      "type": "object",
+      "properties": {
+        "player_id": {
+          "$ref": "#/$defs/PlayerId"
+        },
+        "seat": {
+          "$ref": "#/$defs/SeatNumber"
+        },
+        "category": {
+          "$ref": "#/$defs/HandCategory"
+        },
+        "cards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VisibleCard"
+          },
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "player_id",
+        "seat",
+        "category",
+        "cards"
+      ],
+      "additionalProperties": false
+    },
     "RejectCode": {
       "title": "RejectCode",
       "description": "Stable reason a command was refused. See the table in docs/api/ws-protocol.md.",

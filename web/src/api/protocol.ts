@@ -72,6 +72,19 @@ export type AppliedAction =
       timeout: boolean;
     };
 /**
+ * A made poker hand, from PokerKit's hand labels. Stable codes: the client shows its own words for them.
+ */
+export type HandCategory =
+  | "high_card"
+  | "one_pair"
+  | "two_pair"
+  | "three_of_a_kind"
+  | "straight"
+  | "flush"
+  | "full_house"
+  | "four_of_a_kind"
+  | "straight_flush";
+/**
  * Created by the client once per intent and resent unchanged on every retry. A UUID v4 is recommended.
  */
 export type CommandId = string;
@@ -283,7 +296,7 @@ export interface TurnDeadlineMessage {
   };
 }
 /**
- * State event: the hand is over and settled. Cards shown at showdown, and the 7-2 winner's two cards, are visible to everyone; folded cards stay hidden. Always about one hand, so hand_id is never null.
+ * State event: the hand is over and settled. Cards shown at showdown, and the 7-2 winner's two cards, are visible to everyone; folded cards stay hidden. showdown names the made hand of every player whose cards are face up after a showdown. Always about one hand, so hand_id is never null.
  */
 export interface HandCompletedMessage {
   protocol_version: ProtocolVersion;
@@ -299,6 +312,12 @@ export interface HandCompletedMessage {
      */
     results: [PlayerResult, PlayerResult, ...PlayerResult[]];
     seven_deuce: SevenDeuceAward | null;
+    /**
+     * One row per player whose cards are face up after a showdown, by seat; [] when the hand was won by folds.
+     *
+     * @maxItems 9
+     */
+    showdown: ShowdownHand[];
   };
 }
 /**
@@ -345,6 +364,19 @@ export interface SevenDeucePayment {
    * What this player actually paid: min(bonus, chips left after the pot).
    */
   amount: number;
+}
+/**
+ * The made hand of one player whose cards are face up at the end of a showdown. Never for a player who folded or mucked, nor for a win by folds (a revealed 7-2 bluff included). cards are the best five, from the player's two cards and the board, most significant first (bigger groups, then higher ranks; the ace of a five-high straight last).
+ */
+export interface ShowdownHand {
+  player_id: PlayerId;
+  seat: SeatNumber;
+  category: HandCategory;
+  /**
+   * @minItems 5
+   * @maxItems 5
+   */
+  cards: [VisibleCard, VisibleCard, VisibleCard, VisibleCard, VisibleCard, ...VisibleCard[]];
 }
 /**
  * State event: a seat changed (taken, left, sitting out or back, chips granted, connection). occupant null means the seat is now empty.

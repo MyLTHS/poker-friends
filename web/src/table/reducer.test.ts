@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import type {
   ActCommandMessage,
   ActionAppliedMessage,
+  AppliedAction,
   CommandAckMessage,
   CommandRejectedMessage,
   HandCompletedMessage,
   HandStartedMessage,
+  HandView,
+  LegalActions,
   ServerMessage,
+  ShowdownHand,
   TableSnapshotMessage,
   TurnDeadlineMessage,
 } from "@/api/protocol";
@@ -18,7 +22,7 @@ import sevenDeuceFixture from "../../../docs/api/fixtures/server/valid/hand.comp
 import snapshotFixture from "../../../docs/api/fixtures/server/valid/table.snapshot.between-hands.json";
 import startedFixture from "../../../docs/api/fixtures/server/valid/hand.started.json";
 import deadlineFixture from "../../../docs/api/fixtures/server/valid/turn.deadline.json";
-import { initialModel, reduce, type TableAction, type TableModel } from "./reducer";
+import { initialModel, reduce, type PreActionKind, type TableAction, type TableModel } from "./reducer";
 
 // Fixtures from docs/api/: Lym's view of hand 41 (snapshot v11, hand.started v12, turn v13, raise v14).
 const snapshot = snapshotFixture as unknown as TableSnapshotMessage;
@@ -203,6 +207,15 @@ describe("hand.completed", () => {
     expect(model.table?.turn).toBeNull();
     expect(reduce(model, { type: "dismiss.celebration" }).celebration).toBeNull();
   });
+
+  it("keeps the showdown's hand names until the next hand starts", () => {
+    const shown: ShowdownHand = { player_id: "2", seat: 3, category: "one_pair", cards: ["Ac", "Ad", "Qh", "Jh", "7d"] };
+    const completed = withVersion({ ...sevenDeuce, payload: { ...sevenDeuce.payload, seven_deuce: null, showdown: [shown] } }, 14);
+    const model = run([server(started), server(deadline), server(completed)], connected());
+    expect(model.showdown).toEqual([shown]);
+    const next = withVersion({ ...started, hand_id: 42 }, 15);
+    expect(reduce(model, server(next)).showdown).toBeNull();
+  });
 });
 
 describe("real backend messages (B4b)", () => {
@@ -304,5 +317,97 @@ describe("suspended room", () => {
     expect(model.table?.room.status).toBe("suspended");
     expect(model.table?.turn).toEqual(deadline.payload.turn);
     expect(model.suspendedAt).toBe(T0 + 5000);
+  });
+});
+
+describe("pre-action (chọn trước)", () => {
+  // Lym (seat 1) raised to 30 at v14; An (seat 3) is to act, then Bình (seat 5), then Lym again.
+  const hand = raised.payload.hand;
+  const step = (version: number, action: Partial<AppliedAction>, patch: Partial<HandView>): ActionAppliedMessage => ({
+    ...raised,
+    version,
+    payload: {
+      action: { player_id: "2", seat: 3, kind: "call", amount: null, timeout: false, ...action } as AppliedAction,
+      hand: { ...hand, ...patch },
+    },
+  });
+  const myTurn = (legal: Partial<LegalActions>): Partial<HandView> => ({
+    actor: "1",
+    legal_actions: { can_fold: true, can_check: false, call_amount: 60, min_raise_to: 150, max_raise_to: 970, ...legal },
+  });
+  const waiting = () => run([server(started), server(deadline), server(raised)], connected());
+  const choose = (kind: PreActionKind | null, model: TableModel, commandId = "pre-1") => reduce(model, { type: "pre.select", kind, commandId });
+
+  it("Check / Bỏ folds when a bet waits at my turn: one command, with the id made when choosing", () => {
+    let model = choose("check_fold", waiting());
+    model = run([server(step(15, { kind: "raise", amount: 90 }, { actor: "3" })), server(step(16, { player_id: "3", seat: 5, kind: "fold" }, myTurn({})))], model);
+    expect(sentCommands(model)).toHaveLength(1);
+    expect(sentCommands(model)[0]).toMatchObject({ command_id: "pre-1", hand_id: hand.hand_id, payload: { kind: "fold", amount: null } });
+    expect(model.preAction).toBeNull();
+    // The next event of the same turn sends nothing more.
+    model = reduce(model, server(withVersion(deadline, 17)));
+    expect(sentCommands(model)).toHaveLength(1);
+  });
+
+  it("Check / Bỏ checks when checking is free", () => {
+    const model = run([server(step(15, { kind: "call" }, { actor: "3" })), server(step(16, { player_id: "3", seat: 5, kind: "call" }, myTurn({ can_check: true, can_fold: false, call_amount: 0 })))], choose("check_fold", waiting()));
+    expect(sentCommands(model).map((m) => m.payload.kind)).toEqual(["check"]);
+  });
+
+  it("Theo bất kỳ stays through a raise and calls", () => {
+    const model = run([server(step(15, { kind: "raise", amount: 90 }, { actor: "3" })), server(step(16, { player_id: "3", seat: 5, kind: "fold" }, myTurn({})))], choose("call_any", waiting()));
+    expect(sentCommands(model).map((m) => m.payload)).toEqual([{ kind: "call", amount: null }]);
+  });
+
+  it("Check is dropped as soon as someone raises, and nothing is sent at my turn", () => {
+    let model = run([server(step(15, { kind: "raise", amount: 90 }, { actor: "3" }))], choose("check", waiting()));
+    expect(model.preAction).toBeNull();
+    model = reduce(model, server(step(16, { player_id: "3", seat: 5, kind: "fold" }, myTurn({}))));
+    expect(sentCommands(model)).toHaveLength(0);
+  });
+
+  it("a choice no longer legal when my turn comes is dropped, not sent", () => {
+    // Missed events: the resync snapshot is the first I hear of the bet.
+    const model = choose("check", waiting());
+    const snap = withVersion(snapshot, 20);
+    const table = { ...snap.payload.table, hand: { ...hand, ...myTurn({ can_check: false }) } };
+    const next = reduce(model, server({ ...snap, hand_id: hand.hand_id, payload: { table } }));
+    expect(sentCommands(next)).toHaveLength(0);
+    expect(next.preAction).toBeNull();
+  });
+
+  it("a reconnect whose snapshot lands on my turn sends the choice once, with its own command_id", () => {
+    let model = reduce(choose("call_any", waiting(), "pre-9"), { type: "socket.closed" });
+    model = reduce(model, { type: "socket.open" });
+    const snap = withVersion(snapshot, 20);
+    const table = { ...snap.payload.table, hand: { ...hand, ...myTurn({}) } };
+    model = reduce(model, server({ ...snap, hand_id: hand.hand_id, payload: { table } }));
+    expect(sentCommands(model)).toEqual([expect.objectContaining({ command_id: "pre-9", payload: { kind: "call", amount: null } })]);
+    expect(model.preAction).toBeNull();
+    expect(model.pending?.message.command_id).toBe("pre-9");
+  });
+
+  it("sends nothing while the room is suspended, and keeps the choice for when it resumes", () => {
+    const snap = withVersion(snapshot, 20);
+    const suspendedTable = { ...snap.payload.table, room: { ...snap.payload.table.room, status: "suspended" as const }, hand: { ...hand, ...myTurn({}) } };
+    let model = reduce(choose("call_any", waiting()), server({ ...snap, hand_id: hand.hand_id, payload: { table: suspendedTable } }));
+    expect(sentCommands(model)).toHaveLength(0);
+    expect(model.preAction?.kind).toBe("call_any");
+    const resumed = { ...suspendedTable, room: { ...suspendedTable.room, status: "playing" as const } };
+    model = reduce(model, server({ ...withVersion(snapshot, 21), hand_id: hand.hand_id, payload: { table: resumed } }));
+    expect(sentCommands(model).map((m) => m.payload.kind)).toEqual(["call"]);
+  });
+
+  it("is dropped on a new street and on a new hand", () => {
+    const flop = reduce(choose("call_any", waiting()), server(step(15, { kind: "call" }, { actor: "3", board: ["Ah", "8d", "Jc"] })));
+    expect(flop.preAction).toBeNull();
+    const next = reduce(choose("call_any", waiting()), server(withVersion({ ...started, hand_id: 42 }, 15)));
+    expect(next.preAction).toBeNull();
+  });
+
+  it("toggles off, and cannot be chosen on my own turn", () => {
+    expect(choose(null, choose("check", waiting())).preAction).toBeNull();
+    const mine = run([server(started)], connected()); // hand.started: Lym acts first
+    expect(choose("check_fold", mine).preAction).toBeNull();
   });
 });
