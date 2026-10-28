@@ -162,3 +162,29 @@ cược, ngăn trượt (drawer), `Confetti`, medal 7-2, tab cột phải.
 2. **Tên tay bài ở showdown**: mặc định không hiện (cần backend gửi nếu muốn).
 3. **"Chọn trước"**: mặc định làm cuối cùng nếu kịp; không kịp thì để thanh chờ chỉ có
    "Nghỉ ván sau".
+
+## 10. Kết quả (28/10/2026, sau khi C2 gộp)
+
+Đã làm theo kế hoạch, kèm những chỗ chốt khi code:
+
+- Bàn vẽ đúng toạ độ thiết kế rồi **phóng to/thu nhỏ cả khối** (`FitStage`, `transform: scale`)
+  thay vì đổi sang %: ở 1440×900 và 844×390 hệ số là 1, khớp từng px; chuyển động tính toạ độ bằng
+  `GEO` nên không lệch khi phóng. Khung quanh bàn (thanh trên, thanh hành động, cột phải, cột điện
+  thoại, ngăn chat) là lưới co giãn.
+- Bàn 2/4/6/8 ghế dùng thêm chỗ "giữa trên" (spot 10) cho cân đối; mình luôn ở giữa dưới.
+- `table.css` được import ngay trong màn bàn (không sửa `globals.css` chung). Keyframes đặt ngoài
+  `@layer`.
+- Server chỉ lật bài **người thắng**; người thua ở showdown bị báo `in_hand: false` như bỏ bài. Màn
+  bàn chỉ ghi "Đã bỏ" khi thấy hành động fold trong ván, và giữ 2 lá của mình sau ván (mình đã thấy).
+  Vì vậy "lật bài lần lượt" thực tế chỉ lật tay người thắng (và 7-2).
+- Khi cả bàn bỏ bài, `action.applied` cuối đã trả pot về 0 ⇒ chip bay về người thắng lấy số
+  `hand_net` từ `results`.
+- Trong bản xem lại, dòng "Bước x/y" ẩn khi có người ngồi ghế giữa trên (dòng "đang xem" ở cột phải
+  nói thay).
+- E2E chạy thật với Django: 2 người + 1 người xem, một người trên điện thoại ngang có "giảm chuyển
+  động", chat, rớt mạng → nối lại không phát lại chuyển động, mở bản xem lại.
+
+Còn khác thiết kế (thiếu dữ liệu server): tên tay bài, số giây "Ván mới sau 4 giây", số giây
+"tự thử lại" của bàn tạm dừng, đồng hồ dừng ở bao nhiêu giây khi tạm dừng (reducer xoá `turn`),
+nhật ký trước lúc vào bàn, nút "Ván trước/Ván sau" trong bản xem lại, menu "…" trên điện thoại,
+"Chọn trước" (chưa làm).
