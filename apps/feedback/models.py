@@ -35,9 +35,11 @@ class Feedback(models.Model):
 
 
 class ClientError(models.Model):
-    """One error a browser reported; the same message on the same page within 10 minutes only
-    raises ``count`` and ``last_seen`` (the fingerprint keys that, as both texts can be long)."""
+    """One error a browser reported. The same message on the same page from the same release,
+    within one fixed 10-minute window, only raises ``count`` and ``last_seen``: the database
+    keeps one row per (fingerprint, window), so two reports racing cannot make two."""
 
+    # sha256 of message, page and release: the texts themselves can be too long to index
     fingerprint = models.CharField(max_length=64)
     message = models.TextField(max_length=1000)
     stack = models.TextField(blank=True)
@@ -50,11 +52,17 @@ class ClientError(models.Model):
     )
     count = models.PositiveIntegerField(default=1)
     first_seen = models.DateTimeField(auto_now_add=True)
-    last_seen = models.DateTimeField()
+    last_seen = models.DateTimeField(db_index=True)
+    # start of the 10-minute window this row counts (apps/feedback/views.py DUPLICATE_WINDOW)
+    window_start = models.DateTimeField()
 
     class Meta:
         ordering = ["-last_seen"]
-        indexes = [models.Index(fields=["fingerprint", "last_seen"], name="clienterror_recent")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fingerprint", "window_start"], name="clienterror_one_per_window"
+            )
+        ]
         verbose_name = "lỗi trình duyệt"
         verbose_name_plural = "lỗi trình duyệt"
 

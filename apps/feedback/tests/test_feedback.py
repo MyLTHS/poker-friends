@@ -3,14 +3,15 @@
 Both are write-only over HTTP: players send, only staff read (Django admin).
 """
 
+import importlib
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from django.apps import apps
 from django.core.cache import cache
 from django.test import Client
-from django.utils import timezone
 
 from apps.feedback import views
 from apps.feedback.models import ClientError, Feedback
@@ -18,6 +19,7 @@ from apps.games.models import Room, User
 
 pytestmark = pytest.mark.django_db
 FROZEN_NOW = 1_800_000_000 + 30  # inside one window of every rate limit
+WINDOW_START = datetime(2026, 10, 28, 20, 0, tzinfo=UTC)  # a 10-minute window of client errors
 
 
 @pytest.fixture(autouse=True)
@@ -182,22 +184,69 @@ class TestClientErrors:
         for field, limit in limits.items():
             assert len(getattr(row, field)) == limit, field
 
-    def test_the_same_error_on_the_same_page_within_10_minutes_only_counts(self, monkeypatch):
+    def test_the_same_error_on_the_same_page_in_one_10_minute_window_only_counts(self, monkeypatch):
+        start = WINDOW_START + timedelta(seconds=5)
+        monkeypatch.setattr(views.timezone, "now", lambda: start)
         client = Client()
         for _ in range(3):
             assert post(client, "/api/client-errors/", ERROR).status_code == 204
         row = ClientError.objects.get()
-        assert row.count == 3
+        assert (row.count, row.window_start) == (3, WINDOW_START)
 
         other_page = post(client, "/api/client-errors/", {**ERROR, "page": "/rooms/2/table"})
         assert other_page.status_code == 204
         assert ClientError.objects.count() == 2
 
-        later = timezone.now() + timedelta(minutes=11)
-        monkeypatch.setattr(views.timezone, "now", lambda: later)
+        # still the same window 9 minutes later: counted on the same row
+        monkeypatch.setattr(views.timezone, "now", lambda: start + timedelta(minutes=9))
+        assert post(client, "/api/client-errors/", ERROR).status_code == 204
+        assert ClientError.objects.get(pk=row.pk).count == 4
+
+        # the next window: a new row, the old one keeps its count
+        monkeypatch.setattr(views.timezone, "now", lambda: start + timedelta(minutes=11))
         assert post(client, "/api/client-errors/", ERROR).status_code == 204
         assert ClientError.objects.count() == 3
-        assert ClientError.objects.get(pk=row.pk).count == 3
+        assert ClientError.objects.get(pk=row.pk).count == 4
+
+    def test_another_release_is_another_error(self):
+        client = Client()
+        post(client, "/api/client-errors/", ERROR)
+        post(client, "/api/client-errors/", {**ERROR, "release": "2026.10.29-d4e5f6"})
+        assert sorted(ClientError.objects.values_list("release", "count")) == [
+            ("2026.10.28-a1b2c3", 1),
+            ("2026.10.29-d4e5f6", 1),
+        ]
+
+    def test_two_reports_racing_for_a_new_error_make_one_row(self, monkeypatch):
+        # Both find no row; the other request creates it first. This one must count on it, not
+        # fail on the unique (fingerprint, window) constraint.
+        count_again = views._count_again
+
+        def other_request_wins(fingerprint, window, now):
+            monkeypatch.setattr(views, "_count_again", count_again)
+            ClientError.objects.create(
+                fingerprint=fingerprint, window_start=window, last_seen=now, message="x"
+            )
+            return 0
+
+        monkeypatch.setattr(views, "_count_again", other_request_wins)
+        assert post(Client(), "/api/client-errors/", ERROR).status_code == 204
+        assert ClientError.objects.get().count == 2
+
+    def test_rows_stored_before_the_windows_get_one(self):
+        # migration 0002 gives old rows the window of their last report and a fingerprint
+        # that covers the release
+        migration = importlib.import_module("apps.feedback.migrations.0002_clienterror_window")
+        row = ClientError.objects.create(
+            fingerprint="old",
+            window_start=WINDOW_START,
+            last_seen=WINDOW_START + timedelta(minutes=27, seconds=3),
+            **ERROR,
+        )
+        migration.fill_windows(apps, None)
+        row.refresh_from_db()
+        assert row.window_start == WINDOW_START + timedelta(minutes=20)
+        assert row.fingerprint == views._fingerprint(ERROR)
 
     def test_rate_limited_per_player(self, guest):
         client = logged_in(guest)

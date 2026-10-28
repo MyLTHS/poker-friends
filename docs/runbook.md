@@ -42,8 +42,9 @@ trình duyệt":
 
 - **Phản hồi**: mới nhất ở trên, lọc theo loại (Lỗi / Ý tưởng / Khác) và theo phòng ở cột bên
   phải, theo ngày ở thanh trên. Mỗi dòng có người gửi, trang đang mở và trình duyệt.
-- **Lỗi trình duyệt**: cùng lỗi trên cùng trang trong 10 phút chỉ là một dòng, cột `Count` đếm số
-  lần. Lọc theo `release` để biết lỗi thuộc bản nào, mở dòng để xem `stack`.
+- **Lỗi trình duyệt**: cùng lỗi trên cùng trang của cùng bản (`release`), trong cùng khung 10 phút
+  (10:00–10:10, 10:10–10:20…), chỉ là một dòng, cột `Count` đếm số lần. Lọc theo `release` để biết
+  lỗi thuộc bản nào, mở dòng để xem `stack`.
 
 Cookie, token trong link và bài đã bị xoá trước khi lưu (chỗ đó ghi `[đã xoá]`). Hai bảng chỉ xem
 và xoá được, không sửa. Lỗi phía server (bàn tạm dừng, lệch chip) vẫn nằm trong log, xem các mục

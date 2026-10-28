@@ -4,9 +4,11 @@ Both only write. There is no endpoint to read them back: staff use the Django ad
 """
 
 import hashlib
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from asgiref.sync import sync_to_async
+from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils import timezone
@@ -133,12 +135,37 @@ def _clean_client_error(body: dict[str, Any], request: HttpRequest) -> dict[str,
     return report
 
 
-async def _record(report: dict[str, str], user) -> None:
+def _window_start(now: datetime) -> datetime:
+    """The fixed window ``now`` falls in (10:00, 10:10 …): one row per error per window."""
+    step = int(DUPLICATE_WINDOW.total_seconds())
+    return datetime.fromtimestamp(int(now.timestamp()) // step * step, tz=UTC)
+
+
+def _fingerprint(report: dict[str, str]) -> str:
+    """Which error this is: the same message on the same page of the same release."""
+    text = "\n".join((report["message"], report["page"], report["release"]))
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _count_again(fingerprint: str, window: datetime, now: datetime) -> int:
+    """Count one more report on the window's row; 0 when there is no row yet."""
+    same = ClientError.objects.filter(fingerprint=fingerprint, window_start=window)
+    return same.update(count=F("count") + 1, last_seen=now)
+
+
+@sync_to_async
+def _record(report: dict[str, str], user) -> None:
     now = timezone.now()
-    fingerprint = hashlib.sha256(f"{report['message']}\n{report['page']}".encode()).hexdigest()
-    recent = ClientError.objects.filter(
-        fingerprint=fingerprint, last_seen__gte=now - DUPLICATE_WINDOW
-    )
-    if await recent.aupdate(count=F("count") + 1, last_seen=now):
+    window = _window_start(now)
+    fingerprint = _fingerprint(report)
+    if _count_again(fingerprint, window, now):
         return
-    await ClientError.objects.acreate(fingerprint=fingerprint, last_seen=now, user=user, **report)
+    try:
+        # A savepoint: another report of the same error may create the row first, and then
+        # the unique (fingerprint, window_start) constraint sends this one to count on it.
+        with transaction.atomic():
+            ClientError.objects.create(
+                fingerprint=fingerprint, window_start=window, last_seen=now, user=user, **report
+            )
+    except IntegrityError:
+        _count_again(fingerprint, window, now)
