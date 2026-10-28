@@ -1,0 +1,10 @@
+# Used instead of the root .dockerignore for web/Dockerfile: only web/ and docs/api/ go in.
+*
+!web
+!docs/api
+web/node_modules
+web/.next
+web/playwright-report
+web/test-results
+web/*.sqlite3
+web/.env*

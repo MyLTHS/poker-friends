@@ -23,19 +23,15 @@ import {
   Btn,
   DesktopNav,
   HomeBar,
-  IconBtn,
-  MobileAppBar,
-  MobileTabBar,
+  MobileRail,
   Root,
   Segmented,
-  StatusBar,
-  Wordmark,
   fmt,
   signed,
   tone,
 } from "./kit";
 import { MiniTable } from "./screens-rooms";
-import { Stage, TableTopBar, type TableModel } from "./table";
+import { MobileTableBar, PhonePanel, Stage, TableTopBar, type TableModel } from "./table";
 
 /* ================= history ================= */
 
@@ -140,53 +136,63 @@ export function History({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-app">
-        <StatusBar />
-        <MobileAppBar
-          title="Lịch sử"
-          sub={
-            <>
-              Bàn thứ Sáu <ChevronDown size={12} />
-            </>
-          }
-        />
-        <div className="m-page m-history">
-          <div className="m-sec-row">
-            <h4 className="m-sec">Tổng kết · 38 ván</h4>
-            <span className="lg-check">
-              <Scale size={13} /> Sổ khớp
+        <MobileRail active="history" />
+        <main className="m-main m-history">
+          <div className="m-head">
+            <div className="m-title">
+              <h1>Lời / lỗ tối nay</h1>
+              <small>Chip ảo · không phải tiền thật</small>
+            </div>
+            <span className="room-select">
+              <MiniTable seats={9} seated={7} w={40} h={26} />
+              <span>
+                <small>Phòng</small>
+                <b>Bàn thứ Sáu</b>
+              </span>
+              <ChevronDown size={16} />
             </span>
           </div>
-          <ul className="m-ledger">
-            {SUMMARY.map((r) => (
-              <li key={r.name} className={r.name === "Lym" ? "is-me" : ""}>
-                <Avatar name={r.name} size={30} />
-                <span className="ml-id">
-                  <b>
-                    {r.name}
-                    {r.name === "Lym" && <em>bạn</em>}
-                  </b>
-                  <small>
-                    cấp {fmt(r.granted)} · {r.hands} ván · 7-2 {r.sevenDeuce === 0 ? "0" : signed(r.sevenDeuce)}
-                  </small>
-                </span>
-                <span className="ml-net">
-                  <b className={`is-${tone(r.net)}`}>{signed(r.net)}</b>
-                  <small>còn {fmt(r.balance)}</small>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="m-sec-row">
-            <h4 className="m-sec">Các ván gần đây</h4>
-            <span className="link is-muted">Tất cả</span>
-          </div>
-          <ul className="hands is-mobile">
-            {HANDS.map((h) => (
-              <HandItem key={h.no} h={h} device="mobile" />
-            ))}
-          </ul>
-        </div>
-        <MobileTabBar active="history" />
+          <section className="m-col">
+            <div className="m-sec-row">
+              <h4 className="m-sec">Tổng kết · 38 ván</h4>
+              <span className="lg-check">
+                <Scale size={13} /> Sổ khớp
+              </span>
+            </div>
+            <ul className="m-ledger">
+              {SUMMARY.map((r) => (
+                <li key={r.name} className={r.name === "Lym" ? "is-me" : ""}>
+                  <Avatar name={r.name} size={28} />
+                  <span className="ml-id">
+                    <b>
+                      {r.name}
+                      {r.name === "Lym" && <em>bạn</em>}
+                    </b>
+                    <small>
+                      cấp {fmt(r.granted)} · {r.hands} ván · 7-2 {r.sevenDeuce === 0 ? "0" : signed(r.sevenDeuce)}
+                    </small>
+                  </span>
+                  <NetBar net={r.net} />
+                  <span className="ml-net">
+                    <b className={`is-${tone(r.net)}`}>{signed(r.net)}</b>
+                    <small>còn {fmt(r.balance)}</small>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section className="m-col">
+            <div className="m-sec-row">
+              <h4 className="m-sec">Các ván gần đây</h4>
+              <span className="link is-muted">Xem thêm 34 ván</span>
+            </div>
+            <ul className="m-scroll hands is-mobile">
+              {HANDS.map((h) => (
+                <HandItem key={h.no} h={h} device="mobile" />
+              ))}
+            </ul>
+          </section>
+        </main>
         <HomeBar />
       </Root>
     );
@@ -329,42 +335,29 @@ export function Replay({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-table">
-        <StatusBar />
-        <MobileAppBar
-          title={`Xem lại ván #${R.handNo}`}
-          sub="Bàn thứ Sáu · 21:03"
-          left={
-            <IconBtn>
-              <ChevronLeft size={22} />
-            </IconBtn>
-          }
-          right={<span className="speed">1×</span>}
-        />
         <div className="table-area-m">
           <Stage device="mobile" model={replayModel} meHint={<span className="turn-hint is-quiet"><small>Bạn xem bài mình,</small><small>bài người khác úp</small></span>}>
             <Caption device="mobile" />
           </Stage>
         </div>
-        <div className="dock dock-replay">
-          <div className="tl-strip">
-            {R.timeline.slice(current - 1, current + 2).map((t, k) => {
-              const i = current - 1 + k;
-              return (
-                <span key={i} className={i === current ? "is-now" : i < current ? "is-past" : "is-future"}>
-                  <i>{i + 1}</i>
-                  <em>{t}</em>
-                </span>
-              );
-            })}
+        <MobileTableBar model={replayModel} title={`Xem lại ván #${R.handNo}`} sub={`${TABLE_TURN.room} · 21:03`} right={false} />
+        <PhonePanel className="rp-panel">
+          <div className="rp-panel-head">
+            <span>
+              <b>Diễn biến</b>
+              <small>{R.steps} bước</small>
+            </span>
+            <span className="speed">
+              1× <ChevronDown size={13} />
+            </span>
+          </div>
+          <Timeline device="mobile" />
+          <div className="rp-result-m">
+            Kết quả: <b>Bình ăn 220</b> · bạn <b className="is-loss">−60</b>
           </div>
           <StepSlider device="mobile" />
-          <div className="rp-dock-row">
-            <Transport device="mobile" />
-          </div>
-          <div className="rp-result-m">
-            Kết quả sau bước 7: <b>Bình ăn 220</b> · bạn <b className="is-loss">−60</b>
-          </div>
-        </div>
+          <Transport device="mobile" />
+        </PhonePanel>
         <HomeBar />
       </Root>
     );
@@ -524,34 +517,39 @@ export function States({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-app">
-        <StatusBar />
-        <header className="m-brandbar">
-          <Wordmark small />
-          <Avatar name="Lym" size={34} />
-        </header>
-        <KickedToast device="mobile" />
-        <div className="m-page m-states">
-          <span className="state-label">
-            <i>1</i> Đang tải
-          </span>
-          <div className="state-box is-loading">
-            <SkeletonCard compact />
-            <SkeletonCard compact />
+        <MobileRail active="lobby" />
+        <main className="m-main m-states">
+          <KickedToast device="mobile" />
+          <section className="m-col">
+            <span className="state-label">
+              <i>1</i> Đang tải
+            </span>
+            <div className="state-box is-loading">
+              <span className="sk sk-search" />
+              <SkeletonCard compact />
+              <SkeletonCard compact />
+              <SkeletonCard compact />
+            </div>
+          </section>
+          <div className="m-col">
+            <section>
+              <span className="state-label">
+                <i>2</i> Lỗi mạng
+              </span>
+              <div className="state-box">
+                <ErrorBlock device="mobile" />
+              </div>
+            </section>
+            <section>
+              <span className="state-label">
+                <i>3</i> Sảnh trống
+              </span>
+              <div className="state-box">
+                <EmptyBlock device="mobile" />
+              </div>
+            </section>
           </div>
-          <span className="state-label">
-            <i>2</i> Lỗi mạng
-          </span>
-          <div className="state-box">
-            <ErrorBlock device="mobile" />
-          </div>
-          <span className="state-label">
-            <i>3</i> Sảnh trống
-          </span>
-          <div className="state-box">
-            <EmptyBlock device="mobile" />
-          </div>
-        </div>
-        <MobileTabBar active="lobby" />
+        </main>
         <HomeBar />
       </Root>
     );

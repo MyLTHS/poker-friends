@@ -163,8 +163,8 @@ dần sau mỗi lát. Bài học và cổng duyệt của chủ dự án diễn 
 
 ### C1. Thiết kế
 
-**Việc:** user flow; wireframe; 2 phương án phong cách để chọn; design system (màu, chữ, lá bài,
-chip, nút); mockup Figma desktop + mobile dọc.
+**Việc:** user flow; wireframe; 4 phương án phong cách để chọn; design system (màu, chữ, lá bài,
+chip, nút); mockup Figma desktop + điện thoại xoay ngang (không có bản dọc, spec #28).
 **Dự đoán:** trên điện thoại, khi tới lượt mình trong 20 giây, người chơi cần thấy gì?
 **Tự làm:** vẽ tay (hoặc Figma) wireframe màn bàn chơi trên mobile, rồi so với bản của Claude.
 

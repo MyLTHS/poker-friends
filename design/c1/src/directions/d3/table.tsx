@@ -1,6 +1,6 @@
-// Kẹo Đêm (d3) — the table: desktop stadium stage with 9 bubbles, mobile arc grid + felt pill.
-import type { CSSProperties, ReactNode } from "react";
-import { Bell, ChevronLeft, Crown, Ellipsis, Eye, History, MessageCircle, Moon, Plus, Send, Settings, Smile, WifiOff } from "lucide-react";
+// Kẹo Đêm (d3) — the table: desktop stadium stage with 9 bubbles, landscape phone felt with seat pills + dock.
+import type { ReactNode } from "react";
+import { ChevronLeft, Crown, Ellipsis, Eye, History, MessageCircle, Moon, Plus, Send, Settings, Smile, WifiOff } from "lucide-react";
 
 import type { Card, Seat } from "../../shared/data";
 import { CHAT, QUICK_EMOJI } from "../../shared/data";
@@ -382,164 +382,164 @@ export function Composer({ text, focus }: { text?: string; focus?: boolean }) {
   );
 }
 
-/* ================================================================= MOBILE */
+/* ================================================================== PHONE */
 
-/** 2 rows of 4 opponents, in a gentle arch. Row 1 = far side (4–7), row 2 = sides (3,2 | 9,8). */
-export const MROWS = [
-  [4, 5, 6, 7],
-  [3, 2, 9, 8],
-];
+type MP = { x: number; y: number; side: "l" | "r" | "b" };
+/**
+ * Phone, landscape 844×390. The table zone is x 0–552 (the dock takes the right edge); the felt
+ * sits at x 155–445, y 96–252. Seat pills are 112×42 and stay inside x 44–552 (the side safe
+ * areas hold only felt). `side` is where the seat faces the felt: hole cards peek out on that
+ * side. Seat 1 is you: the hero block, not a pill.
+ */
+export const MPOS: Record<number, MP> = {
+  2: { x: 120, y: 290, side: "r" },
+  3: { x: 100, y: 188, side: "r" },
+  4: { x: 124, y: 98, side: "r" },
+  5: { x: 262, y: 46, side: "b" },
+  6: { x: 386, y: 46, side: "b" },
+  7: { x: 476, y: 98, side: "l" },
+  8: { x: 496, y: 188, side: "l" },
+  9: { x: 480, y: 290, side: "l" },
+};
 
-export function MSeat({
-  s,
-  faceUp,
-  sticker,
-  extra,
-  style,
-  className = "",
-}: {
-  s: Seat;
-  faceUp?: boolean;
-  sticker?: ReactNode;
-  extra?: ReactNode;
-  style?: CSSProperties;
-  className?: string;
-}) {
+export function MSeat({ s, faceUp, sticker, extra }: { s: Seat; faceUp?: boolean; sticker?: ReactNode; extra?: ReactNode }) {
+  const p = MPOS[s.seat];
+  const pos = { left: p.x - 56, top: p.y - 21 };
   if (s.state === "empty")
     return (
-      <div className="mseat mseat-empty" style={style}>
+      <div className={`mseat mseat-${p.side} mseat-empty`} style={pos}>
         <span className="mseat-plus">
-          <Plus size={18} strokeWidth={3} />
+          <Plus size={16} strokeWidth={3} />
         </span>
-        <span className="mseat-name">Ghế {s.seat}</span>
-        <span className="mseat-sub">trống</span>
+        <span className="mseat-t">
+          <b className="mseat-name">Ghế trống</b>
+          <span className="mseat-sub">Bấm để ngồi</span>
+        </span>
       </div>
     );
   const st = seatSticker(s);
   const backs = !faceUp && s.cards && s.cards.length > 0 && !dimmed(s);
   return (
-    <div className={`mseat st-${s.state} ${faceUp ? "mseat-shown" : ""} ${className}`} style={style}>
-      <div className="mseat-body" />
+    <>
       {backs && (
-        <span className="mseat-cards">
-          <PCard c="back" size="xs" tilt={-6} />
+        <span className={`mseat-hold mseat-hold-${p.side} ${s.state === "disconnected" ? "mseat-hold-off" : ""}`} style={pos}>
+          <PCard c="back" size="xs" tilt={-8} />
           <PCard c="back" size="xs" tilt={8} />
         </span>
       )}
-      {faceUp && s.cards && (
-        <span className="mseat-cards mseat-faceup">
-          {s.cards.map((c, i) => (
-            <PCard key={i} c={c} size="xs" tilt={i ? 7 : -5} />
-          ))}
+      <div className={`mseat mseat-${p.side} st-${s.state}`} style={pos}>
+        <Avatar
+          name={s.name!}
+          size={34}
+          dim={dimmed(s)}
+          badge={
+            s.state === "disconnected" ? (
+              <span className="av-badge av-badge-orange">
+                <WifiOff size={11} strokeWidth={3} />
+              </span>
+            ) : s.state === "sitting-out" ? (
+              <span className="av-badge av-badge-grape">
+                <Moon size={10} strokeWidth={3} />
+              </span>
+            ) : null
+          }
+        />
+        <span className="mseat-t">
+          <b className="mseat-name">{s.name}</b>
+          <span className="mseat-stack">
+            <Token size={11} />
+            <b className="num">{fmt(s.stack ?? 0)}</b>
+          </span>
         </span>
-      )}
-      <Avatar
-        name={s.name!}
-        size={44}
-        dim={dimmed(s)}
-        ring={s.timer ? { pct: s.timer.left / s.timer.total } : undefined}
-        className="mseat-av"
-        badge={
-          s.state === "disconnected" ? (
-            <span className="av-badge av-badge-orange">
-              <WifiOff size={11} strokeWidth={3} />
-            </span>
-          ) : s.state === "sitting-out" ? (
-            <span className="av-badge av-badge-grape">
-              <Moon size={10} strokeWidth={3} />
-            </span>
-          ) : null
-        }
-      />
-      {s.isButton && <span className="dealer mseat-dealer">D</span>}
-      <b className="mseat-name">{s.name}</b>
-      <span className="mseat-stack">
-        <Token size={11} />
-        <b className="num">{fmt(s.stack ?? 0)}</b>
-      </span>
-      <span className="mseat-stk">
+        {faceUp && s.cards && (
+          <span className="mseat-faceup">
+            {s.cards.map((c, i) => (
+              <PCard key={i} c={c} size="sm" tilt={i ? 6 : -6} />
+            ))}
+          </span>
+        )}
+        {s.isButton && <span className="dealer mseat-dealer">D</span>}
         {sticker ??
-          ((s.bet ?? 0) > 0 ? (
-            <span className={`mbet mbet-${st?.tone ?? "sun"}`}>
-              <Token size={13} />
-              {s.lastAction}
-            </span>
-          ) : (
-            st && (
-              <Sticker tone={st.tone} tilt={-3}>
-                {s.state === "disconnected" ? "Mất kết nối" : st.text}
-              </Sticker>
-            )
+          (st && (
+            <Sticker tone={st.tone} tilt={-4} className="mseat-stk">
+              {(s.bet ?? 0) > 0 && <Token size={12} />}
+              {st.text}
+            </Sticker>
           ))}
-      </span>
-      {extra}
-    </div>
+        {extra}
+      </div>
+    </>
   );
 }
 
-export function MOpponents({
+/** The table zone: felt, the eight other seats (their bets ride on the action sticker) and `me`. */
+export function MTable({
   seats,
+  center,
+  me,
+  print = "Blind 10/20 · 7-2: 50",
   faceUp = [],
   stickers = {},
   extras = {},
+  children,
+  className = "",
 }: {
   seats: Seat[];
+  center: ReactNode;
+  me: ReactNode;
+  print?: string;
   faceUp?: number[];
   stickers?: Record<number, ReactNode>;
   extras?: Record<number, ReactNode>;
+  children?: ReactNode;
+  className?: string;
 }) {
-  const by = (n: number) => seats.find((s) => s.seat === n) ?? { seat: n, state: "empty" as const };
   return (
-    <div className="mopp">
-      {MROWS.map((row, r) => (
-        <div key={r} className={`mopp-row mopp-row${r + 1}`}>
-          {row.map((n, i) => (
-            <MSeat
-              key={n}
-              s={by(n)}
-              faceUp={faceUp.includes(n)}
-              sticker={stickers[n]}
-              extra={extras[n]}
-              style={r === 0 && (i === 0 || i === 3) ? { marginTop: 14 } : undefined}
-            />
-          ))}
-        </div>
-      ))}
+    <div className={`mzone ${className}`}>
+      <div className="mfelt">
+        <div className="mfelt-stitch" />
+      </div>
+      <div className="mfelt-center">
+        {print && <span className="mfelt-print">{print}</span>}
+        {center}
+      </div>
+      {seats
+        .filter((s) => s.seat !== 1)
+        .map((s) => (
+          <MSeat key={s.seat} s={s} faceUp={faceUp.includes(s.seat)} sticker={stickers[s.seat]} extra={extras[s.seat]} />
+        ))}
+      {me}
+      {children}
     </div>
   );
 }
 
-export function MTableHead({ room = "Bàn thứ Sáu", hand, unread = 3 }: { room?: string; hand: number; unread?: number }) {
+/** Corner controls over the table: back + room on the top left, chat + menu on the top right. */
+export function MTableBar({ hand, unread = 3 }: { hand: number; unread?: number }) {
   return (
-    <div className="mhead mhead-table">
-      <IconBtn size={42}>
-        <ChevronLeft size={22} strokeWidth={3} />
-      </IconBtn>
-      <div className="mhead-t">
-        <b>{room}</b>
-        <span>
-          Blind 10/20 · Ván #{hand} · <em>7-2: 50</em>
+    <>
+      <div className="mtbar">
+        <IconBtn size={44}>
+          <ChevronLeft size={22} strokeWidth={3} />
+        </IconBtn>
+        <span className="mtbar-room">
+          <b>Bàn thứ Sáu</b>
+          <small>Ván #{hand}</small>
         </span>
       </div>
-      <div className="mhead-r">
-        <IconBtn size={42} badge={unread || undefined}>
+      <div className="mtbar mtbar-r">
+        <IconBtn size={44} badge={unread || undefined}>
           <MessageCircle size={20} strokeWidth={2.8} />
         </IconBtn>
-        <IconBtn size={42}>
+        <IconBtn size={44}>
           <Ellipsis size={20} strokeWidth={3} />
         </IconBtn>
       </div>
-    </div>
+    </>
   );
 }
 
-export function MFelt({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`mfelt ${className}`}>
-      <div className="mfelt-stitch" />
-      <div className="mfelt-in">{children}</div>
-    </div>
-  );
-}
-
-export const BellIcon = () => <Bell size={18} strokeWidth={2.8} />;
+/** The right-hand dock: betting controls, next-hand info or the 7-2 reactions, under the right thumb. */
+export const MDock = ({ children, className = "" }: { children: ReactNode; className?: string }) => (
+  <aside className={`mdock ${className}`}>{children}</aside>
+);

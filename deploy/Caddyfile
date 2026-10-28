@@ -1,0 +1,31 @@
+# Caddy in front of Poker Friends (docker-compose.prod.yml). One origin for the browser:
+# Django for /api, /accounts (Google flow), /admin, /ws (WebSocket), its static files from the
+# shared volume, and the Next.js app for every other page.
+#
+# SITE_ADDRESS is the domain (Caddy gets and renews the HTTPS certificate by itself), or ":80"
+# for a plain-HTTP smoke test. reverse_proxy sets X-Forwarded-For/-Proto itself and drops the
+# values a client sends, so Django sees exactly one trusted proxy: TRUSTED_PROXIES=1.
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# Django admin CSS/JS, written by `collectstatic` when the backend starts.
+	handle_path /static/* {
+		root * /srv/static
+		file_server
+	}
+
+	@django path /api/* /accounts/* /admin/* /ws/*
+	handle @django {
+		# WebSocket upgrades pass through reverse_proxy as they are, and an idle socket is never
+		# cut (Daphne pings it every 20 s, docs/deploy.md "Bắt buộc" 4). On a config reload,
+		# keep open sockets for 5 more minutes instead of dropping every table at once.
+		reverse_proxy backend:8000 {
+			stream_close_delay 5m
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -34,6 +34,7 @@ không tiền thật, không rake. Quy mô 10–20 người, 1 server.
 | 25 | API | Phục vụ web của dự án, thiết kế chuẩn để dùng lại cho app mobile |
 | 26 | Dự án | Django mới hoàn toàn |
 | 27 | Luật 7-2 | Chủ phòng cấu hình theo phòng (`Room.seven_deuce_bonus`, mặc định 0 = tắt). Chỉ thưởng khi người cầm đúng hạng **7 và 2** (bất kỳ chất) **ăn pot vì mọi người khác đã fold** (bluff thành công); thắng ở showdown thì **không** thưởng, nên mỗi ván có tối đa một người nhận. Khi đó server **tự lật 2 lá 7-2** của người thắng cho cả bàn (kể cả người xem) sau khi ván xong; bài của người đã fold vẫn úp. **Mọi người khác đang ngồi bàn** (kể cả sit-out) trả người thắng `min(bonus, chip còn lại sau khi chia pot)`, không bao giờ âm; người thắng nhận đúng tổng thực trả; ai còn 0 chip thì không trả. *Walk* (mọi người fold tới big blind, BB cầm 7-2) **cũng được thưởng** (quyết định 27/10/2026, thay bản cũ "thắng tại showdown") |
+| 28 | Điện thoại | Giao diện điện thoại **chỉ xoay ngang**, không thiết kế màn dọc (quyết định 27/10/2026). Cầm dọc thì làm gì (ví dụ lời nhắc xoay máy) quyết ở C2 |
 
 ## Kiến trúc (tối giản cho 20 người)
 

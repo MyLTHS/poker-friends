@@ -1,659 +1,502 @@
-// Giấy & Mực — the table, drawn like a game board. Seats sit at fixed, hand-checked coordinates
-// so nothing overlaps at 1440×900 or 390×844.
+// Kính & Ánh Kim (d2) — the table: a petrol felt under one overhead lamp, a dark polished rail
+// with a champagne inlay, nine seats on fixed coordinates, the screen chrome around it.
 import type { ReactNode } from "react";
-import {
-  Armchair,
-  ChevronLeft,
-  Coffee,
-  Eye,
-  History,
-  Lock,
-  LogOut,
-  Menu,
-  Plus,
-  Settings2,
-  Trophy,
-  WifiOff,
-} from "lucide-react";
+import { ChevronLeft, Crown, Eye, Lock, MessageCircle, Minus, Plus, Settings2, WifiOff, Moon } from "lucide-react";
 
 import { TABLE_TURN, type Card, type Seat } from "../../shared/data";
-import {
-  Avatar,
-  Badge,
-  Bet,
-  Brand,
-  Btn,
-  Check,
-  ChipStack,
-  Dealer,
-  HomeBar,
-  IconBtn,
-  OnTable,
-  PCard,
-  Progress,
-  Slider,
-  SlotCard,
-  StatusBar,
-  TimerRing,
-  fmt,
-  type CardSize,
-  type Pt,
-} from "./ui";
+import type { Device } from "../../shared/screens";
+import { fmt } from "./lib";
+import { Avatar, Bet, Btn, Chip, Dealer, IconBtn, Mark, PCard, Pill, Ring, Slot, Stack, type ChipTone } from "./ui";
 
-/* =====================================================================
-   Desktop geometry — stage is x 0..1100, y 56..760 of the 1440×900 frame
-   ===================================================================== */
+/* ============================================================= geometry */
 
-export const STAGE = { top: 56, width: 1100, height: 704 };
-/** Stadium: x 230..870, y 140..470 (r = 165). Board: x 350..750, y 255..355. */
-export const D_SEATS: Record<number, { card: Pt; bet: Pt; dealer: Pt }> = {
-  1: { card: [550, 652], bet: [550, 425], dealer: [640, 428] },
-  2: { card: [196, 482], bet: [318, 412], dealer: [300, 380] },
-  3: { card: [112, 305], bet: [282, 305], dealer: [282, 262] },
-  4: { card: [196, 128], bet: [318, 198], dealer: [300, 236] },
-  5: { card: [440, 80], bet: [452, 172], dealer: [390, 176] },
-  6: { card: [660, 80], bet: [648, 172], dealer: [710, 176] },
-  7: { card: [904, 128], bet: [782, 198], dealer: [800, 236] },
-  8: { card: [988, 305], bet: [818, 305], dealer: [818, 262] },
-  9: { card: [904, 482], bet: [782, 412], dealer: [800, 380] },
+type P = { x: number; y: number };
+/** Stage sizes: desktop stage sits under the 64px top bar, left of the 400px side column. */
+export const STAGE: Record<Device, { w: number; h: number; c: P; felt: { w: number; h: number } }> = {
+  desktop: { w: 1040, h: 836, c: { x: 520, y: 392 }, felt: { w: 750, h: 386 } },
+  mobile: { w: 588, h: 390, c: { x: 316, y: 196 }, felt: { w: 384, h: 192 } },
 };
-export const D_CENTER: Pt = [550, 222];
 
-export function Board({
-  cards,
-  size,
-  marks,
-  dim,
-  slots = 5,
-}: {
-  cards: Card[];
-  size: CardSize;
-  marks?: boolean[];
-  dim?: boolean;
-  slots?: number;
-}) {
-  return (
-    <div className={`board board-${size}`}>
-      {Array.from({ length: slots }, (_, i) =>
-        cards[i] ? (
-          <PCard key={i} c={cards[i]} size={size} dim={dim || (marks ? !marks[i] : false)} mark={marks?.[i]} />
-        ) : (
-          <SlotCard key={i} size={size} label={i === 3 ? "Turn" : i === 4 ? "River" : undefined} />
-        ),
-      )}
-    </div>
-  );
-}
+/** Seat anchors (centre of the avatar), clockwise from my seat at the bottom. */
+export const SEAT_AT: Record<Device, Record<number, P>> = {
+  desktop: {
+    1: { x: 520, y: 704 },
+    2: { x: 226, y: 618 },
+    3: { x: 84, y: 424 },
+    4: { x: 150, y: 206 },
+    5: { x: 384, y: 112 },
+    6: { x: 656, y: 112 },
+    7: { x: 890, y: 206 },
+    8: { x: 956, y: 424 },
+    9: { x: 814, y: 618 },
+  },
+  mobile: {
+    1: { x: 316, y: 346 },
+    2: { x: 164, y: 304 },
+    3: { x: 100, y: 214 },
+    4: { x: 132, y: 116 },
+    5: { x: 248, y: 74 },
+    6: { x: 384, y: 74 },
+    7: { x: 500, y: 116 },
+    8: { x: 532, y: 214 },
+    9: { x: 468, y: 304 },
+  },
+};
 
-export function Pot({ amount, label = "Pot", small }: { amount: number; label?: string; small?: boolean }) {
-  return (
-    <div className={`pot${small ? " pot-sm" : ""}`}>
-      <ChipStack />
-      <span className="pot-l">{label}</span>
-      <span className="mono pot-n">{fmt(amount)}</span>
-    </div>
-  );
-}
+const lerp = (a: P, b: P, k: number): P => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
+/** Where a seat's bet sits: on the felt, between the seat and the pot. */
+const betAt = (d: Device, seat: number): P => lerp(SEAT_AT[d][seat], STAGE[d].c, d === "desktop" ? 0.42 : 0.4);
+/** The dealer button sits beside the bet line, rotated a quarter turn away from it. */
+const dealerAt = (d: Device, seat: number): P => {
+  const a = SEAT_AT[d][seat];
+  const c = STAGE[d].c;
+  const len = Math.hypot(c.x - a.x, c.y - a.y);
+  const off = d === "desktop" ? 40 : 30;
+  const p = lerp(a, c, d === "desktop" ? 0.3 : 0.24);
+  return { x: p.x - ((c.y - a.y) / len) * off, y: p.y + ((c.x - a.x) / len) * off };
+};
 
-function seatTab(s: Seat, win?: number): ReactNode {
+const BET_TONES: ChipTone[][] = [["ivory", "petrol"], ["onyx", "ivory", "petrol"], ["ruby", "ivory"]];
+
+/* ================================================================= seats */
+
+function seatTag(s: Seat, d: Device): ReactNode {
+  const small = d === "mobile";
   switch (s.state) {
+    case "turn":
+      return null;
     case "folded":
-      return <Badge kind="muted">Đã bỏ</Badge>;
+      return <Pill tone="mute">Đã bỏ</Pill>;
     case "sitting-out":
       return (
-        <Badge kind="dash" icon={<Coffee size={11} strokeWidth={2} />}>
+        <Pill tone="glass" icon={<Moon size={small ? 10 : 12} strokeWidth={2.4} />}>
           Đang nghỉ
-        </Badge>
+        </Pill>
       );
     case "disconnected":
       return (
-        <Badge kind="warn" icon={<WifiOff size={11} strokeWidth={2} />}>
+        <Pill tone="red" icon={<WifiOff size={small ? 10 : 12} strokeWidth={2.4} />}>
           {s.lastAction ?? "Mất kết nối"}
-        </Badge>
+        </Pill>
       );
     case "all-in":
-      return <Badge kind="red">{s.lastAction ?? "All-in"}</Badge>;
+      return <Pill tone="solid">{s.lastAction ?? "All-in"}</Pill>;
     case "winner":
       return (
-        <Badge kind="ink" icon={<Trophy size={11} strokeWidth={2} />}>
-          {win ? `Thắng +${fmt(win)}` : "Thắng"}
-        </Badge>
+        <Pill tone="gold" icon={<Crown size={small ? 10 : 12} strokeWidth={2.4} />}>
+          {s.hand ?? "Thắng"}
+        </Pill>
       );
-    case "turn":
-      return <Badge kind="red">Đến lượt</Badge>;
     default:
-      return null;
+      if (s.hand) return <Pill tone="glass">{s.hand}</Pill>;
+      if (!s.lastAction) return null;
+      if (s.lastAction.startsWith("Theo")) return <Pill tone="cyan">{s.lastAction}</Pill>;
+      if (s.lastAction.startsWith("Cược") || s.lastAction.startsWith("Tố")) return <Pill tone="gold">{s.lastAction}</Pill>;
+      return <Pill tone="glass">{s.lastAction}</Pill>;
   }
 }
 
-/** A name card around the desktop table (192×64), centred on `at`. */
-export function SeatCard({ s, win, tab }: { s: Seat; win?: number; tab?: ReactNode }) {
-  const [cx, cy] = D_SEATS[s.seat].card;
-  const style = { left: cx - 96, top: cy - 32 };
-  if (s.state === "empty")
-    return (
-      <div className="seat seat-empty" style={style}>
-        <span className="seat-hole">
-          <Armchair size={16} strokeWidth={1.75} />
-        </span>
-        <span className="seat-txt">
-          <span className="seat-name">Ghế {s.seat}</span>
-          <span className="seat-sub">Đang trống</span>
-        </span>
-      </div>
-    );
-  const cards = s.cards ?? [];
-  const faceUp = cards.length > 0 && cards[0] !== "back";
-  const sub = s.hand ?? (s.state === "waiting" || s.state === "turn" ? s.lastAction : undefined);
-  const t = tab ?? seatTab(s, win);
+export type SeatOpts = {
+  /** Show these cards face up next to the seat (showdown / 7-2). */
+  reveal?: boolean;
+  /** Replace the state tag. */
+  tag?: ReactNode;
+  /** Extra node under the seat (payments in the 7-2 moment). */
+  extra?: ReactNode;
+  /** Chat bubble above the seat. */
+  say?: string;
+};
+
+function EmptySeat({ d, p }: { d: Device; p: P }) {
   return (
-    <div className={`seat st-${s.state}${faceUp ? " has-up" : ""}`} style={style}>
-      {cards.length > 0 && (
-        <div className={`seat-cards ${faceUp ? "up" : "down"}`}>
-          {cards.map((c, i) => (
-            <PCard key={i} c={c} size={faceUp ? "sm" : "xs"} />
-          ))}
-        </div>
-      )}
-      {t && <div className="seat-tab">{t}</div>}
-      <span className="seat-av">
-        {s.state === "turn" && s.timer ? (
-          <TimerRing size={42} left={s.timer.left} total={s.timer.total}>
-            <Avatar name={s.name!} size={32} />
-          </TimerRing>
-        ) : (
-          <Avatar name={s.name!} size={36} />
-        )}
-        {s.state === "disconnected" && (
-          <span className="av-flag">
-            <WifiOff size={10} strokeWidth={2.4} />
-          </span>
-        )}
+    <div className={`k-seat k-seat-empty ${d === "mobile" ? "k-mseat" : ""}`} style={{ left: p.x, top: p.y }}>
+      <span className="k-empty-ring">
+        <Plus size={d === "mobile" ? 15 : 20} strokeWidth={2.2} />
       </span>
-      <span className="seat-txt">
-        <span className="seat-name">{s.name}</span>
-        <span className="seat-sub">
-          <span className="mono">{fmt(s.stack ?? 0)}</span>
-          {sub && <span className="seat-act">{sub}</span>}
-        </span>
+      <span className="k-empty-t">
+        <b>Ngồi vào</b>
+        {d === "desktop" && <small>Ghế trống</small>}
       </span>
     </div>
   );
 }
 
-/** Seat 1 on desktop: large cards above a wide name card. */
-export function HeroDesk({ s, hint, result }: { s: Seat; hint?: ReactNode; result?: ReactNode }) {
-  const turn = s.state === "turn" && s.timer;
+function SeatView({ s, d, o = {} }: { s: Seat; d: Device; o?: SeatOpts }) {
+  const p = SEAT_AT[d][s.seat];
+  if (s.state === "empty") return <EmptySeat d={d} p={p} />;
+  const mob = d === "mobile";
+  const name = s.name ?? "";
+  const turn = s.state === "turn";
+  const av = mob ? (s.isMe ? 38 : 30) : s.isMe ? 66 : 56;
+  const ring = s.state === "winner" ? "gold" : turn ? "none" : "steel";
+  const dim = s.state === "folded" || s.state === "sitting-out";
+  const avatar = <Avatar name={name} size={av} ring={ring} dim={dim} />;
+  const face = turn && s.timer ? (
+    <Ring size={av + (mob ? 10 : 14)} left={s.timer.left} total={s.timer.total} stroke={mob ? 3 : 4}>
+      {avatar}
+    </Ring>
+  ) : (
+    avatar
+  );
+  const holeBacks = !o.reveal && !s.isMe && s.cards && s.cards.length > 0 && s.cards[0] === "back";
+  const shown = o.reveal && s.cards && s.cards.length > 0 && s.cards[0] !== "back";
+  const tag = o.tag ?? seatTag(s, d);
+  return (
+    <div
+      className={`k-seat k-seat-${s.state} ${s.isMe ? "k-seat-me" : ""} ${mob ? "k-mseat" : ""}`}
+      style={{ left: p.x, top: p.y }}
+    >
+      {o.say && <span className="k-say">{o.say}</span>}
+      {holeBacks && (
+        <span className="k-hole">
+          <PCard c="back" w={mob ? 14 : 22} tilt={-8} />
+          <PCard c="back" w={mob ? 14 : 22} tilt={7} />
+        </span>
+      )}
+      {shown && (
+        <span className={`k-shown ${mob ? (s.seat >= 2 && s.seat <= 5 ? "k-shown-r" : "k-shown-l") : ""}`}>
+          {s.cards!.map((c, i) => (
+            <PCard key={i} c={c} w={mob ? 30 : 46} tilt={i ? 6 : -6} glow={s.state === "winner" ? "gold" : undefined} />
+          ))}
+        </span>
+      )}
+      <span className="k-seat-av">
+        {face}
+        {s.state === "disconnected" && (
+          <span className="k-av-flag red">
+            <WifiOff size={mob ? 9 : 12} strokeWidth={2.6} />
+          </span>
+        )}
+        {s.state === "sitting-out" && (
+          <span className="k-av-flag">
+            <Moon size={mob ? 9 : 12} strokeWidth={2.6} />
+          </span>
+        )}
+        {s.state === "winner" && (
+          <span className="k-av-crown">
+            <Crown size={mob ? 12 : 16} strokeWidth={2.4} />
+          </span>
+        )}
+      </span>
+      <span className="k-plate">
+        <b className="k-plate-n">
+          {name}
+          {s.isMe && <em>bạn</em>}
+        </b>
+        <span className="k-plate-s">
+          <Chip size={mob ? 10 : 12} />
+          <b className="k-num">{fmt(s.stack ?? 0)}</b>
+        </span>
+      </span>
+      {tag && <span className="k-seat-tag">{tag}</span>}
+      {o.extra && <span className="k-seat-extra">{o.extra}</span>}
+    </div>
+  );
+}
+
+/* ================================================================= table */
+
+export function Felt({ d, room = "Bàn thứ Sáu", children }: { d: Device; room?: string; children?: ReactNode }) {
+  const st = STAGE[d];
+  return (
+    <div
+      className="k-rail"
+      style={{
+        left: st.c.x - st.felt.w / 2,
+        top: st.c.y - st.felt.h / 2,
+        width: st.felt.w,
+        height: st.felt.h,
+      }}
+    >
+      <i className="k-rail-shine" />
+      <div className="k-felt">
+        <i className="k-felt-line" />
+        <span className="k-felt-mark">
+          <Mark size={d === "mobile" ? 14 : 22} />
+          {room}
+        </span>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function Board({ cards, w, glow = [], dim = [], className = "" }: { cards: Card[]; w: number; glow?: number[]; dim?: number[]; className?: string }) {
+  return (
+    <div className={`k-board ${className}`}>
+      {Array.from({ length: 5 }, (_, i) =>
+        cards[i] ? <PCard key={i} c={cards[i]} w={w} glow={glow.includes(i) ? "gold" : undefined} dim={dim.includes(i)} /> : <Slot key={i} w={w} />,
+      )}
+    </div>
+  );
+}
+
+export function Pot({ n, label = "Pot", d, tones = ["petrol", "ivory", "onyx", "ruby", "ivory"] }: { n: number; label?: string; d: Device; tones?: ChipTone[] }) {
+  return (
+    <span className={`k-pot ${d === "mobile" ? "k-pot-m" : ""}`}>
+      <Stack tones={tones.slice(0, 3)} w={d === "mobile" ? 16 : 24} />
+      <Stack tones={tones} w={d === "mobile" ? 16 : 24} />
+      <span className="k-pot-t">
+        <small>{label}</small>
+        <b className="k-num">{fmt(n)}</b>
+      </span>
+    </span>
+  );
+}
+
+export function Table({
+  d,
+  seats,
+  board,
+  pot,
+  potLabel,
+  opts = {},
+  center,
+  hero,
+  glowBoard,
+  dimBoard,
+  className = "",
+  children,
+}: {
+  d: Device;
+  seats: Seat[];
+  board: Card[];
+  pot: number;
+  potLabel?: string;
+  opts?: Record<number, SeatOpts>;
+  /** Replaces pot + board in the middle of the felt. */
+  center?: ReactNode;
+  /** My two cards, big, in front of my seat. */
+  hero?: ReactNode;
+  glowBoard?: number[];
+  dimBoard?: number[];
+  className?: string;
+  children?: ReactNode;
+}) {
+  const st = STAGE[d];
+  const mob = d === "mobile";
+  const button = seats.find((s) => s.isButton);
+  return (
+    <div className={`k-table ${mob ? "k-table-m" : ""} ${className}`} style={{ width: st.w, height: st.h }}>
+      <i className="k-lamp" style={{ left: st.c.x, top: st.c.y }} />
+      <Felt d={d} />
+      <div className="k-mid" style={{ left: st.c.x, top: st.c.y }}>
+        {center ?? (
+          <>
+            <Pot n={pot} label={potLabel} d={d} />
+            <Board cards={board} w={mob ? 38 : 64} glow={glowBoard} dim={dimBoard} />
+          </>
+        )}
+      </div>
+      {seats.map((s) =>
+        (s.bet ?? 0) > 0 ? (
+          <span key={`b${s.seat}`} className="k-bet-at" style={{ left: betAt(d, s.seat).x, top: betAt(d, s.seat).y }}>
+            <Bet amount={s.bet!} tones={BET_TONES[s.seat % BET_TONES.length]} w={mob ? 15 : 22} />
+          </span>
+        ) : null,
+      )}
+      {button && (
+        <span className="k-dealer-at" style={{ left: dealerAt(d, button.seat).x, top: dealerAt(d, button.seat).y }}>
+          <Dealer size={mob ? 18 : 26} />
+        </span>
+      )}
+      {seats.map((s) => (
+        <SeatView key={s.seat} s={s} d={d} o={opts[s.seat]} />
+      ))}
+      {hero && <div className="k-hero">{hero}</div>}
+      {children}
+    </div>
+  );
+}
+
+/** My two cards, fanned, lifted off the felt. */
+export function HeroCards({ cards, d, dim }: { cards: Card[]; d: Device; dim?: boolean }) {
+  return (
+    <span className={`k-herocards ${dim ? "dim" : ""}`}>
+      {cards.map((c, i) => (
+        <PCard key={i} c={c} w={d === "mobile" ? 40 : 76} tilt={i ? 7 : -7} />
+      ))}
+    </span>
+  );
+}
+
+/* ================================================================ chrome */
+
+export function RoomMeta({ hand, extra }: { hand: number; extra?: ReactNode }) {
+  return (
+    <span className="k-meta">
+      <span>
+        Blind <b className="k-num">10/20</b>
+      </span>
+      <i />
+      <span>
+        Ván <b className="k-num">#{hand}</b>
+      </span>
+      <i />
+      <span>
+        Thưởng 7-2 <b className="k-num">50</b>
+      </span>
+      {extra}
+    </span>
+  );
+}
+
+/** Desktop top bar over the table screens. */
+export function TableTop({ hand, extra, chatBadge = 2 }: { hand: number; extra?: ReactNode; chatBadge?: number }) {
+  return (
+    <header className="k-ttop">
+      <span className="k-ttop-back">
+        <IconBtn icon={<ChevronLeft size={20} strokeWidth={2.2} />} />
+        <span>Sảnh</span>
+      </span>
+      <span className="k-ttop-room">
+        <b>
+          {TABLE_TURN.room}
+          <Lock size={14} strokeWidth={2.4} />
+        </b>
+        <RoomMeta hand={hand} extra={extra} />
+      </span>
+      <span className="k-ttop-r">
+        <span className="k-watchers">
+          <span className="k-watchers-av">
+            <Avatar name="Mai" size={24} ring="none" />
+            <Avatar name="Tùng" size={24} ring="none" />
+            <Avatar name="Ngọc" size={24} ring="none" />
+          </span>
+          <Eye size={15} strokeWidth={2.2} />
+          <b className="k-num">3</b> đang xem
+        </span>
+        <IconBtn icon={<MessageCircle size={19} strokeWidth={2.1} />} badge={chatBadge || undefined} active={!chatBadge} />
+        <IconBtn icon={<Settings2 size={19} strokeWidth={2.1} />} />
+        <span className="k-ttop-me">
+          <Avatar name="Lym" size={34} />
+        </span>
+      </span>
+    </header>
+  );
+}
+
+/** Phone: back + room at top-left of the stage, chat/viewers at its top-right. */
+export function MTableTop({ hand, chatBadge = 2, right = true }: { hand: number; chatBadge?: number; right?: boolean }) {
   return (
     <>
-      <div className={`hero-cards${s.state === "folded" ? " is-folded" : ""}`} style={{ left: 466, top: 500 }}>
-        {(s.cards ?? []).map((c, i) => (
-          <PCard key={i} c={c} size="xl" />
-        ))}
-      </div>
-      <div className={`hero-card${turn ? " is-turn" : ""}`} style={{ left: 420, top: 620 }}>
-        {turn ? (
-          <TimerRing size={50} left={s.timer!.left} total={s.timer!.total}>
-            <Avatar name="Lym" size={40} />
-          </TimerRing>
-        ) : (
-          <Avatar name="Lym" size={42} />
-        )}
-        <span className="seat-txt">
-          <span className="seat-name">
-            {s.name} <em className="you">Bạn · ghế 1</em>
-          </span>
-          <span className="seat-sub">
-            <span className="mono">{fmt(s.stack ?? 0)}</span>
-            {s.hand && <span className="seat-act">{s.hand}</span>}
-          </span>
+      <span className="k-mtop-l">
+        <IconBtn icon={<ChevronLeft size={20} strokeWidth={2.2} />} />
+        <span className="k-mtop-room">
+          <b>{TABLE_TURN.room}</b>
+          <small>
+            Ván <span className="k-num">#{hand}</span> · <span className="k-num">10/20</span>
+          </small>
         </span>
-        {s.state === "folded" && (
-          <span className="hero-state">
-            <Badge kind="muted">Đã bỏ</Badge>
-          </span>
-        )}
-        {turn && (
-          <span className="hero-clock">
-            <b className="mono">0:{String(s.timer!.left).padStart(2, "0")}</b>
-            <small>còn lại</small>
-          </span>
-        )}
-        {result}
-      </div>
-      {hint && (
-        <div className="hero-hint" style={{ left: 652, top: 516 }}>
-          {hint}
-        </div>
+      </span>
+      {right && (
+        <span className="k-mtop-r">
+          <IconBtn icon={<Eye size={18} strokeWidth={2.1} />} badge={3} className="k-ibtn-quiet" />
+          <IconBtn icon={<MessageCircle size={18} strokeWidth={2.1} />} badge={chatBadge} />
+        </span>
       )}
     </>
   );
 }
 
-function SpectatorBar({ names }: { names: string[] }) {
+/* ============================================================== actions */
+
+const T = TABLE_TURN;
+export const RAISE = 150;
+const raisePct = (RAISE - T.minRaise) / (T.maxRaise - T.minRaise);
+
+export function Presets({ d }: { d: Device }) {
   return (
-    <div className="spec-bar" style={{ left: 16, top: 14 }}>
-      <Eye size={14} strokeWidth={1.8} />
-      <span className="eyebrow">Đang xem</span>
-      <span className="spec-avs">
-        {names.map((n) => (
-          <Avatar key={n} name={n} size={22} />
-        ))}
-      </span>
-      <span>{names.join(" · ")}</span>
-    </div>
-  );
-}
-
-export type DeskTableProps = {
-  room: string;
-  blinds: string;
-  handNo: number;
-  seats: Seat[];
-  board: Card[];
-  marks?: boolean[];
-  boardDim?: boolean;
-  pot?: number;
-  center?: ReactNode;
-  showBets?: boolean;
-  win?: { seat: number; amount: number };
-  heroHint?: ReactNode;
-  heroResult?: ReactNode;
-  under?: ReactNode;
-  over?: ReactNode;
-  spectators?: string[];
-  status?: ReactNode;
-  sideTab?: 0 | 1 | 2;
-  side?: ReactNode;
-  bar?: ReactNode;
-  seatTabs?: Record<number, ReactNode>;
-};
-
-/** The whole 1440×900 desktop table screen, positioned absolutely (so it can also be cropped). */
-export function DeskTable(p: DeskTableProps) {
-  return (
-    <div className="dt">
-      <header className="ttop">
-        <Brand size="sm" />
-        <span className="ttop-div" />
-        <div className="ttop-room">
-          <h1 className="serif">{p.room}</h1>
-          <span className="ttop-meta">
-            <span className="mono">Blind {p.blinds}</span>
-            <i />
-            <span>
-              Ván <span className="mono">#{p.handNo}</span>
-            </span>
-            <i />
-            <span className="ttop-lock">
-              <Lock size={12} strokeWidth={2} /> Riêng tư
-            </span>
-            <i />
-            <span>
-              Thưởng 7-2 · <span className="mono">50</span>
-            </span>
-          </span>
-        </div>
-        <div className="ttop-right">
-          {p.status}
-          <span className="ttop-watch">
-            <Eye size={15} strokeWidth={1.8} /> 3 người xem
-          </span>
-          <IconBtn icon={<Settings2 size={18} strokeWidth={1.75} />} label="Bảng chủ phòng" />
-          <IconBtn icon={<History size={18} strokeWidth={1.75} />} label="Lịch sử ván" />
-          <Btn v="ghost" s="sm" icon={<LogOut size={15} strokeWidth={1.9} />}>
-            Rời bàn
-          </Btn>
-        </div>
-      </header>
-
-      <div className="stage" style={{ top: STAGE.top, width: STAGE.width, height: STAGE.height }}>
-        <div className="stadium" style={{ left: 230, top: 140, width: 640, height: 330 }}>
-          <div className="stadium-in" />
-          <span className="stadium-print">No-Limit Hold'em · Blind {p.blinds}</span>
-        </div>
-        {p.spectators && <SpectatorBar names={p.spectators} />}
-        {p.under}
-        {p.center ??
-          (p.pot !== undefined && (
-            <OnTable at={D_CENTER}>
-              <Pot amount={p.pot} />
-            </OnTable>
-          ))}
-        <div className="board-pos" style={{ left: 350, top: 255 }}>
-          <Board cards={p.board} size="lg" marks={p.marks} dim={p.boardDim} />
-        </div>
-        {p.seats.map((s) =>
-          s.isMe ? (
-            <HeroDesk key={s.seat} s={s} hint={p.heroHint} result={p.heroResult} />
-          ) : (
-            <SeatCard key={s.seat} s={s} win={p.win?.seat === s.seat ? p.win.amount : undefined} tab={p.seatTabs?.[s.seat]} />
-          ),
-        )}
-        {p.showBets && p.seats.filter((s) => s.bet).map((s) => <Bet key={s.seat} at={D_SEATS[s.seat].bet} amount={s.bet!} />)}
-        {p.seats
-          .filter((s) => s.isButton)
-          .map((s) => (
-            <Dealer key={s.seat} at={D_SEATS[s.seat].dealer} />
-          ))}
-        {p.over}
-      </div>
-
-      <aside className="side">
-        <div className="side-tabs">
-          {(["Người chơi", "Chat", "Nhật ký ván"] as const).map((t, i) => (
-            <span key={t} className={i === (p.sideTab ?? 2) ? "on" : ""}>
-              {t}
-              {i === 1 && <em>2</em>}
-            </span>
-          ))}
-        </div>
-        <div className="side-body">{p.side}</div>
-      </aside>
-
-      <div className="dbar">{p.bar}</div>
-    </div>
-  );
-}
-
-/* ---------- desktop action bars ---------- */
-
-export function TurnBar() {
-  const t = TABLE_TURN;
-  const value = (225 - t.minRaise) / (t.maxRaise - t.minRaise);
-  return (
-    <div className="tbar">
-      <div className="tbar-status">
-        <span className="eyebrow red">Đến lượt bạn</span>
-        <span className="tbar-clock">
-          <b className="mono">0:14</b>
-          <small>/ 20 giây</small>
+    <div className={`k-presets ${d === "mobile" ? "k-presets-m" : ""}`}>
+      {T.presets.map((p, i) => (
+        <span key={p.label} className={`k-preset ${i === 0 ? "on" : ""} ${p.label === "All-in" ? "allin" : ""}`}>
+          <small>{p.label}</small>
+          <b className="k-num">{fmt(p.amount)}</b>
         </span>
-        <Progress value={14 / 20} />
-        <small className="tbar-need">
-          Cần theo <b className="mono">{t.toCall}</b> · pot <b className="mono">{t.pot}</b>
-        </small>
-      </div>
-      <div className="tbar-raise">
-        <div className="presets">
-          {t.presets.map((p, i) => (
-            <span key={p.label} className={`preset${i === 1 ? " on" : ""}`}>
-              <span>{p.label}</span>
-              <b className="mono">{fmt(p.amount)}</b>
-            </span>
-          ))}
-        </div>
-        <div className="raise-row">
-          <span className="mono raise-end">{t.minRaise}</span>
-          <Slider value={value} />
-          <span className="mono raise-end">{fmt(t.maxRaise)}</span>
-          <span className="raise-box">
-            <small>Tố tới</small>
-            <b className="mono">225</b>
-          </span>
-        </div>
-      </div>
-      <div className="tbar-acts">
-        <Btn v="line" s="xl" className="act">
-          Bỏ bài
-          <kbd>F</kbd>
-        </Btn>
-        <Btn v="ink" s="xl" className="act">
-          Theo {t.toCall}
-          <kbd>C</kbd>
-        </Btn>
-        <Btn v="red" s="xl" className="act">
-          Tố 225
-          <kbd>R</kbd>
-        </Btn>
-      </div>
+      ))}
     </div>
   );
 }
 
-export function IdleBar({
-  eyebrow,
-  title,
-  progress,
-  sub,
-  actions,
-}: {
-  eyebrow: ReactNode;
-  title: ReactNode;
-  progress: number;
-  sub: ReactNode;
-  actions: ReactNode;
-}) {
+export function Slider({ d }: { d: Device }) {
+  const mob = d === "mobile";
   return (
-    <div className="ibar">
-      <div className="ibar-status">
-        <span className="eyebrow">{eyebrow}</span>
-        <b className="serif">{title}</b>
-        <Progress value={progress} tone="ink" />
+    <div className={`k-slider ${mob ? "k-slider-m" : ""}`}>
+      <span className="k-step">
+        <Minus size={mob ? 16 : 18} strokeWidth={2.4} />
+      </span>
+      <span className="k-track">
+        <i className="k-track-fill" style={{ width: `${raisePct * 100}%` }} />
+        <b className="k-thumb" style={{ left: `${raisePct * 100}%` }} />
+        {!mob && (
+          <>
+            <small className="k-track-min k-num">{fmt(T.minRaise)}</small>
+            <small className="k-track-max k-num">{fmt(T.maxRaise)}</small>
+          </>
+        )}
+      </span>
+      <span className="k-step">
+        <Plus size={mob ? 16 : 18} strokeWidth={2.4} />
+      </span>
+    </div>
+  );
+}
+
+export function TurnHead({ d, left = 14, title = "Lượt của bạn", sub = "còn 14 giây để chọn" }: { d: Device; left?: number; title?: string; sub?: string }) {
+  const mob = d === "mobile";
+  return (
+    <div className={`k-turnhead ${mob ? "k-turnhead-m" : ""}`}>
+      <Ring size={mob ? 46 : 74} left={left} total={20} stroke={mob ? 3.5 : 5}>
+        <b className="k-num">{left}</b>
+      </Ring>
+      <span>
+        <b>{title}</b>
         <small>{sub}</small>
-      </div>
-      <div className="ibar-pre">
-        <span className="eyebrow">Chọn trước</span>
-        <div className="ibar-checks">
-          <Check on>Tự check / bỏ</Check>
-          <Check>Tự theo mọi mức</Check>
-          <Check>Nghỉ từ ván sau</Check>
-        </div>
-      </div>
-      <div className="ibar-acts">{actions}</div>
-    </div>
-  );
-}
-
-/* =====================================================================
-   Mobile geometry — 390×844 portrait. Stadium x 50..340, y 116..452.
-   Avatars sit on the outline; labels hang below them.
-   ===================================================================== */
-
-export const M_SEATS: Record<number, { av: Pt; bet: Pt }> = {
-  1: { av: [195, 452], bet: [195, 352] },
-  2: { av: [76, 390], bet: [128, 352] },
-  3: { av: [50, 284], bet: [110, 240] },
-  4: { av: [76, 178], bet: [140, 214] },
-  5: { av: [150, 123], bet: [172, 196] },
-  6: { av: [240, 123], bet: [218, 196] },
-  7: { av: [314, 178], bet: [250, 214] },
-  8: { av: [340, 284], bet: [280, 240] },
-  9: { av: [314, 390], bet: [262, 352] },
-};
-
-function mBadge(s: Seat): ReactNode {
-  switch (s.state) {
-    case "folded":
-      return <Badge kind="muted">Đã bỏ</Badge>;
-    case "sitting-out":
-      return <Badge kind="dash">Đang nghỉ</Badge>;
-    case "disconnected":
-      return <Badge kind="warn">Mất kết nối</Badge>;
-    case "all-in":
-      return <Badge kind="red">All-in</Badge>;
-    case "winner":
-      return <Badge kind="ink">Thắng</Badge>;
-    case "waiting":
-      return s.lastAction ? <Badge kind="paper">{s.lastAction}</Badge> : null;
-    default:
-      return null;
-  }
-}
-
-export function MSeat({ s, badge }: { s: Seat; badge?: ReactNode }) {
-  const [cx, cy] = M_SEATS[s.seat].av;
-  const style = { left: cx - 36, top: cy - 20 };
-  if (s.state === "empty")
-    return (
-      <div className="ms ms-empty" style={style}>
-        <span className="ms-hole">
-          <Plus size={14} strokeWidth={2} />
-        </span>
-        <span className="ms-spacer" />
-        <span className="ms-label">
-          <span className="ms-name">Ghế {s.seat}</span>
-          <span className="ms-stack">trống</span>
-        </span>
-      </div>
-    );
-  const b = badge === undefined ? mBadge(s) : badge;
-  const faceDown = (s.cards ?? []).length > 0 && s.cards![0] === "back";
-  return (
-    <div className={`ms mst-${s.state}`} style={style}>
-      {faceDown && (
-        <span className="ms-cards">
-          <i />
-          <i />
-        </span>
-      )}
-      <Avatar name={s.name!} size={40} />
-      {s.isButton && <span className="ms-dealer">D</span>}
-      {s.state === "disconnected" && (
-        <span className="ms-flag">
-          <WifiOff size={10} strokeWidth={2.4} />
-        </span>
-      )}
-      {b ? <span className="ms-badge">{b}</span> : <span className="ms-spacer" />}
-      <span className="ms-label">
-        <span className="ms-name">{s.name}</span>
-        <span className="ms-stack mono">{fmt(s.stack ?? 0)}</span>
       </span>
     </div>
   );
 }
 
-export type MobTableProps = {
-  room: string;
-  blinds: string;
-  handNo: number;
-  pot: number;
-  seats: Seat[];
-  board: Card[];
-  marks?: boolean[];
-  boardDim?: boolean;
-  center?: ReactNode;
-  showBets?: boolean;
-  badges?: Record<number, ReactNode>;
-  extra?: ReactNode;
-  stripTag?: ReactNode;
-  boardTop?: number;
-  noBoard?: boolean;
-};
-
-/** Status bar, top strip and the ring of seats (y 0..~452). */
-export function MobTable(p: MobTableProps) {
-  const boardTop = p.boardTop ?? 269;
+/** The betting console: presets, slider, Bỏ bài / Theo / Tố. */
+export function Actions({ d }: { d: Device }) {
+  const mob = d === "mobile";
   return (
-    <div className="mt">
-      <StatusBar />
-      <div className="mstrip">
-        <IconBtn icon={<ChevronLeft size={20} strokeWidth={1.9} />} label="Về sảnh" />
-        <span className="mstrip-room">
-          <b className="serif">{p.room}</b>
-          <span>
-            <span className="mono">{p.blinds}</span> · Ván <span className="mono">#{p.handNo}</span>
-            {p.stripTag}
-          </span>
-        </span>
-        <span className="mstrip-pot">
-          <span className="eyebrow">Pot</span>
-          <b className="mono">{fmt(p.pot)}</b>
-        </span>
-        <IconBtn icon={<Menu size={20} strokeWidth={1.9} />} label="Menu" />
-      </div>
-      <div className="stadium m" style={{ left: 50, top: 116, width: 290, height: 336 }}>
-        <div className="stadium-in" />
-      </div>
-      {p.center ?? (
-        <OnTable at={[195, 245]}>
-          <Pot amount={p.pot} small />
-        </OnTable>
-      )}
-      {!p.noBoard && (
-        <div className="board-pos" style={{ left: 92, top: boardTop }}>
-          <Board cards={p.board} size="sm" marks={p.marks} dim={p.boardDim} />
-        </div>
-      )}
-      {p.seats
-        .filter((s) => !s.isMe)
-        .map((s) => (
-          <MSeat key={s.seat} s={s} badge={p.badges?.[s.seat]} />
-        ))}
-      {p.showBets &&
-        p.seats.filter((s) => s.bet && !s.isMe).map((s) => <Bet key={s.seat} at={M_SEATS[s.seat].bet} amount={s.bet!} small />)}
-      {p.extra}
-    </div>
-  );
-}
-
-/** Me, near the bottom: timer ring + big cards + a hand hint (y 462..592). */
-export function MobHero({ s, hint }: { s: Seat; hint: ReactNode }) {
-  const turn = s.state === "turn" && s.timer;
-  return (
-    <div className="mhero">
-      <div className={`mhero-me${turn ? " is-turn" : ""}`}>
-        {turn ? (
-          <TimerRing size={56} left={s.timer!.left} total={s.timer!.total}>
-            <Avatar name="Lym" size={44} />
-          </TimerRing>
-        ) : (
-          <Avatar name="Lym" size={48} />
-        )}
-        <span className="mhero-name">
-          Lym <em>· bạn</em>
-        </span>
-        <span className="mono mhero-stack">{fmt(s.stack ?? 0)}</span>
-      </div>
-      <div className="mhero-cards">
-        {(s.cards ?? []).map((c, i) => (
-          <PCard key={i} c={c} size="mh" />
-        ))}
-      </div>
-      <div className="mhero-hint">{hint}</div>
-    </div>
-  );
-}
-
-/** The bottom sheet with the betting controls (y 592..844). */
-export function TurnSheet() {
-  const t = TABLE_TURN;
-  const value = (225 - t.minRaise) / (t.maxRaise - t.minRaise);
-  return (
-    <div className="msheet ts" style={{ top: 592 }}>
-      <span className="handle" />
-      <div className="ts-row">
-        <span className="eyebrow red">Đến lượt bạn</span>
-        <Progress value={14 / 20} />
-        <b className="mono ts-clock">0:14</b>
-      </div>
-      <div className="ts-presets">
-        {t.presets.map((p, i) => (
-          <span key={p.label} className={`preset${i === 1 ? " on" : ""}`}>
-            <span>{p.label}</span>
-            <b className="mono">{fmt(p.amount)}</b>
-          </span>
-        ))}
-      </div>
-      <div className="ts-slider">
-        <span className="mono raise-end">{t.minRaise}</span>
-        <Slider value={value} />
-        <span className="raise-box">
-          <b className="mono">225</b>
-        </span>
-      </div>
-      <div className="ts-acts">
-        <Btn v="line" s="xl">
+    <div className={`k-actions ${mob ? "k-actions-m" : ""}`}>
+      <Presets d={d} />
+      <Slider d={d} />
+      <Btn tone="gold" size={mob ? "lg" : "xl"} block className="k-raise">
+        Tố lên <b className="k-num">{RAISE}</b>
+      </Btn>
+      <div className="k-actions-row">
+        <Btn tone="danger" size={mob ? "lg" : "xl"} block>
           Bỏ bài
         </Btn>
-        <Btn v="ink" s="xl">
-          Theo {t.toCall}
-        </Btn>
-        <Btn v="red" s="xl">
-          Tố 225
+        <Btn tone="cyan" size={mob ? "lg" : "xl"} block>
+          Theo <b className="k-num">{T.toCall}</b>
         </Btn>
       </div>
-      <HomeBar />
     </div>
+  );
+}
+
+/* ============================================================ utilities */
+
+export function LogLine({ who, children, time, tone = "" }: { who?: string; children: ReactNode; time?: string; tone?: string }) {
+  return (
+    <li className={`k-log-i ${tone}`}>
+      {who ? <Avatar name={who} size={22} ring="none" /> : <i className="k-log-dot" />}
+      <span className="k-log-t">{children}</span>
+      {time && <small className="k-num">{time}</small>}
+    </li>
+  );
+}
+
+export function MiniCards({ cards, w = 22 }: { cards: Card[]; w?: number }) {
+  return (
+    <span className="k-minicards">
+      {cards.map((c, i) => (
+        <PCard key={i} c={c} w={w} />
+      ))}
+    </span>
   );
 }
