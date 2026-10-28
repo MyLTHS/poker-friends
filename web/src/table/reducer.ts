@@ -267,7 +267,8 @@ function firePreAction(model: TableModel): TableModel {
   const me = hand.players.find((p) => p.player_id === model.table!.you.player_id);
   if (!me?.in_hand) return { ...model, preAction: null };
   const legal = hand.legal_actions;
-  if (hand.actor !== me.player_id || !legal) return model;
+  // A suspended room takes no command: keep the choice for when it resumes (a snapshot follows).
+  if (hand.actor !== me.player_id || !legal || model.table!.room.status === "suspended") return model;
   const kind = pre.kind === "check_fold" ? (legal.can_check ? "check" : "fold") : pre.kind === "check" ? (legal.can_check ? "check" : null) : legal.can_check ? "check" : "call";
   const cleared = { ...model, preAction: null };
   if (kind === null || (kind === "fold" && !legal.can_fold)) return cleared;

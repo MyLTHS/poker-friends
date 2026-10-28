@@ -376,6 +376,28 @@ describe("pre-action (chọn trước)", () => {
     expect(next.preAction).toBeNull();
   });
 
+  it("a reconnect whose snapshot lands on my turn sends the choice once, with its own command_id", () => {
+    let model = reduce(choose("call_any", waiting(), "pre-9"), { type: "socket.closed" });
+    model = reduce(model, { type: "socket.open" });
+    const snap = withVersion(snapshot, 20);
+    const table = { ...snap.payload.table, hand: { ...hand, ...myTurn({}) } };
+    model = reduce(model, server({ ...snap, hand_id: hand.hand_id, payload: { table } }));
+    expect(sentCommands(model)).toEqual([expect.objectContaining({ command_id: "pre-9", payload: { kind: "call", amount: null } })]);
+    expect(model.preAction).toBeNull();
+    expect(model.pending?.message.command_id).toBe("pre-9");
+  });
+
+  it("sends nothing while the room is suspended, and keeps the choice for when it resumes", () => {
+    const snap = withVersion(snapshot, 20);
+    const suspendedTable = { ...snap.payload.table, room: { ...snap.payload.table.room, status: "suspended" as const }, hand: { ...hand, ...myTurn({}) } };
+    let model = reduce(choose("call_any", waiting()), server({ ...snap, hand_id: hand.hand_id, payload: { table: suspendedTable } }));
+    expect(sentCommands(model)).toHaveLength(0);
+    expect(model.preAction?.kind).toBe("call_any");
+    const resumed = { ...suspendedTable, room: { ...suspendedTable.room, status: "playing" as const } };
+    model = reduce(model, server({ ...withVersion(snapshot, 21), hand_id: hand.hand_id, payload: { table: resumed } }));
+    expect(sentCommands(model).map((m) => m.payload.kind)).toEqual(["call"]);
+  });
+
   it("is dropped on a new street and on a new hand", () => {
     const flop = reduce(choose("call_any", waiting()), server(step(15, { kind: "call" }, { actor: "3", board: ["Ah", "8d", "Jc"] })));
     expect(flop.preAction).toBeNull();
