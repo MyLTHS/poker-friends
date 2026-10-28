@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { ClientErrorReport } from "./api";
-import { MAX_PER_MINUTE, MAX_WAITING, createErrorReporter, describeError, type ReporterDeps } from "./reporter";
+import { MAX_PER_MINUTE, MAX_WAITING, createErrorReporter, describeError, pageOf, type ReporterDeps } from "./reporter";
 
 function setup(over: Partial<ReporterDeps> = {}) {
   const sent: ClientErrorReport[] = [];
@@ -147,5 +147,35 @@ describe("describeError", () => {
   it("adds the digest Next.js gives a server error", () => {
     const error = Object.assign(new Error("hidden"), { digest: "123" });
     expect(describeError(error).message).toBe("Error: hidden (digest 123)");
+  });
+});
+
+describe("pageOf", () => {
+  it("keeps the path and drops the query and hash, where links carry their token", () => {
+    expect(pageOf(new URL("https://x.test/account/reset?uid=MQ&token=secret#top"))).toBe("/account/reset");
+    expect(pageOf(new URL("https://x.test/rooms/join?token=invite-secret"))).toBe("/rooms/join");
+  });
+});
+
+describe("a failed csrf fetch", () => {
+  it("is retried by the next report instead of silencing the page", async () => {
+    let attempts = 0;
+    let csrf = false;
+    const { reporter, sent, noCsrf } = setup({
+      hasCsrf: () => csrf,
+      fetchCsrf: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("offline");
+        csrf = true;
+      },
+    });
+    noCsrf();
+    for (let i = 0; i < MAX_WAITING; i++) reporter.report({ message: `before ${i}` });
+    await settle();
+    expect(sent).toHaveLength(0); // the first fetch failed: nothing could go out
+    reporter.report({ message: "after the blip" });
+    await settle();
+    expect(attempts).toBe(2);
+    expect(sent.map((r) => r.message)).toContain("before 0");
   });
 });

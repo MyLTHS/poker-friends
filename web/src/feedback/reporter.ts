@@ -19,6 +19,12 @@ const FOREIGN = /(chrome|moz|safari)-extension:\/\//;
 
 export type ErrorInfo = { message: string; stack?: string };
 
+/** The page a report or feedback names: the path only. Reset, verify and invite links carry their
+ * token in the query string, so it never leaves the browser. */
+export function pageOf(location: { pathname: string }): string {
+  return location.pathname;
+}
+
 export type ReporterDeps = {
   send: (report: ClientErrorReport) => Promise<unknown>;
   hasCsrf: () => boolean;
@@ -74,10 +80,13 @@ export function createErrorReporter(deps: ReporterDeps) {
       const body: ClientErrorReport = { message: text, page, user_agent: deps.userAgent, release: deps.release };
       if (stack) body.stack = stack.slice(0, STACK_MAX);
       if (deps.hasCsrf()) post(body);
-      else if (waiting.length < MAX_WAITING) {
-        waiting.push(body);
+      else {
+        // Ask again each time: a first fetch that failed (offline, a blip) must not silence the
+        // rest of the page. Reports past MAX_WAITING are dropped while the cookie is missing.
         askForCsrf();
-      } else return;
+        if (waiting.length >= MAX_WAITING) return;
+        waiting.push(body);
+      }
       seen.add(key);
       recent.push(now);
     } catch {

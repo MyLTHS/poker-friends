@@ -14,6 +14,7 @@ import { Alert, Button } from "@/ui/controls";
 import { Modal, useToast } from "@/ui/surfaces";
 
 import { KINDS, MESSAGE_MAX, createFeedbackApi, roomIdFromPath, type FeedbackKind, type FeedbackRequest } from "./api";
+import { pageOf } from "./reporter";
 
 import "./feedback.css";
 
@@ -63,7 +64,7 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
         return;
       }
     }
-    const path = window.location.pathname; // no query: links carry tokens there
+    const path = pageOf(window.location);
     const body: FeedbackRequest = { kind, message: message.trim(), page: path };
     const room = roomIdFromPath(path);
     let result = await api.send(room === null ? body : { ...body, room_id: room });

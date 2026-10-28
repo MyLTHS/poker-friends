@@ -6,7 +6,7 @@
 import { useEffect } from "react";
 
 import { createFeedbackApi } from "./api";
-import { createErrorReporter, describeError, type ErrorReporter } from "./reporter";
+import { createErrorReporter, describeError, pageOf, type ErrorReporter } from "./reporter";
 
 let reporter: ErrorReporter | null = null;
 
@@ -18,7 +18,7 @@ function errorReporter(): ErrorReporter {
       hasCsrf: api.hasCsrf,
       fetchCsrf: api.fetchCsrf,
       now: Date.now,
-      page: () => window.location.pathname, // never the query: links carry tokens there
+      page: () => pageOf(window.location),
       userAgent: navigator.userAgent,
       // set at build time (web/Dockerfile, from APP_VERSION); empty in development
       release: process.env.NEXT_PUBLIC_RELEASE ?? "",
