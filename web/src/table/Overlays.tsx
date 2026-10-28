@@ -4,18 +4,18 @@
 // a strip saying the buttons are locked, the "Đang kết nối lại…" card with my clock still running,
 // and the "Bàn tạm dừng" card when the server suspended the room.
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { Clock, Lock, RefreshCw, RotateCw, ServerCrash, Timer } from "lucide-react";
 
 import { Button, ButtonLink } from "@/ui";
 
-import { secondsLeft, type TurnClock } from "./clock";
+import { Countdown, type TurnClock } from "./clock";
 import type { Device } from "./geometry";
 import type { Retry } from "./useTableSocket";
 
 export function ReconnectCard({
   device,
   retry,
-  now,
   myClock,
   canCheck,
   backHref,
@@ -23,7 +23,6 @@ export function ReconnectCard({
 }: {
   device: Device;
   retry: Retry;
-  now: number;
   /** My turn clock, when the connection dropped during my turn: it keeps running on the server. */
   myClock?: TurnClock;
   canCheck: boolean;
@@ -31,26 +30,34 @@ export function ReconnectCard({
   onRetry: () => void;
 }) {
   const d = device === "desktop";
-  const wait = retry.at !== null ? secondsLeft(retry.at, now) : 0;
+  // A dialog that takes focus once; its countdowns are hidden from screen readers (a live region
+  // would read them every second), a fixed sentence says the same.
+  const card = useRef<HTMLDivElement>(null);
+  useEffect(() => card.current?.focus(), []);
   return (
-    <div className={`overlay-card rc-card rc-${device}`} role="alertdialog" aria-live="assertive" aria-label="Mất kết nối">
+    <div ref={card} tabIndex={-1} className={`overlay-card rc-card rc-${device}`} role="alertdialog" aria-labelledby="rc-title" aria-describedby="rc-desc">
+      <p id="rc-desc" className="sr-only">
+        {retry.final
+          ? "Máy chủ không cho kết nối lại."
+          : `Mất kết nối với bàn, đang tự thử lại. Các nút tạm khoá.${myClock ? " Đồng hồ lượt của bạn vẫn chạy trên máy chủ." : ""}`}
+      </p>
       <span className="rc-spinner" aria-hidden>
         <i />
         <RefreshCw size={d ? 22 : 20} strokeWidth={2} />
       </span>
-      <b className="rc-title">{retry.final ? "Không vào lại được bàn" : "Đang kết nối lại…"}</b>
-      <span className="rc-sub">
+      <b className="rc-title" id="rc-title">{retry.final ? "Không vào lại được bàn" : "Đang kết nối lại…"}</b>
+      <span className="rc-sub" aria-hidden>
         {retry.final
           ? "Server không cho kết nối nữa (bị mời ra hoặc hết quyền vào phòng)."
           : retry.at !== null
-            ? `Lần thử ${Math.max(1, retry.attempt)} · tự thử lại sau ${wait} giây`
+            ? <>Lần thử {Math.max(1, retry.attempt)} · tự thử lại sau <Countdown deadline={retry.at} /> giây</>
             : `Lần thử ${Math.max(1, retry.attempt)} · đang nối…`}
       </span>
       {myClock && !retry.final && (
-        <span className="rc-timer">
+        <span className="rc-timer" aria-hidden>
           <Timer size={16} strokeWidth={2.2} />
           <span>
-            <b>Đồng hồ của bạn vẫn chạy: còn {secondsLeft(myClock.deadline, now)} giây.</b>{" "}
+            <b>Đồng hồ của bạn vẫn chạy: còn <Countdown deadline={myClock.deadline} /> giây.</b>{" "}
             {canCheck ? "Hết giờ sẽ tự check." : "Hết giờ sẽ tự bỏ bài."}
           </span>
         </span>

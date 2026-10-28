@@ -9,7 +9,7 @@ import { Crown, Moon, Plus, Timer, WifiOff } from "lucide-react";
 
 import { Avatar, ChipStack, FlipCard, PlayingCard, fmt } from "@/ui";
 
-import { LiveRing, secondsLeft, type TurnClock } from "./clock";
+import { Countdown, LiveRing, type TurnClock } from "./clock";
 import { GEO, betPos, dealerPos, fitScale, spotPos, type Device, type Pt } from "./geometry";
 import type { SeatView } from "./seatView";
 
@@ -85,14 +85,20 @@ function Bet({ device, s }: { device: Device; s: SeatView }) {
 
 /* ---------- seats ---------- */
 
-function SeatTag({ s, device, left }: { s: SeatView; device: Device; left?: number }) {
+function SeatTag({ s, device, clock }: { s: SeatView; device: Device; clock?: TurnClock }) {
   const ic = device === "desktop" ? 12 : 10;
   switch (s.state) {
     case "turn":
       return (
         <span className="tag tag-turn">
           <Timer size={ic} strokeWidth={2.4} />
-          {left !== undefined ? `${left}s` : "Tới lượt"}
+          {clock ? (
+            <>
+              <Countdown deadline={clock.deadline} frozenAt={clock.frozenAt} />s
+            </>
+          ) : (
+            "Tới lượt"
+          )}
         </span>
       );
     case "folded":
@@ -132,7 +138,7 @@ export type StageFx = {
   unflipped?: Set<number>;
 };
 
-function SeatPod({ device, s, cx, clock, now, fx, onSit }: { device: Device; s: SeatView; cx: number; clock?: TurnClock; now: number; fx: StageFx; onSit?: (seat: number) => void }) {
+function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatView; cx: number; clock?: TurnClock; fx: StageFx; onSit?: (seat: number) => void }) {
   const p = spotPos(device, s.spot);
   const d = device === "desktop";
   const avSize = d ? 56 : 36;
@@ -190,7 +196,7 @@ function SeatPod({ device, s, cx, clock, now, fx, onSit }: { device: Device; s: 
         <b>{s.name}</b>
         <span className="stack">{fmt(s.stack ?? 0)}</span>
       </span>
-      <SeatTag s={s} device={device} left={clock ? (clock.frozenAt ?? secondsLeft(clock.deadline, now)) : undefined} />
+      <SeatTag s={s} device={device} clock={clock} />
     </div>
   );
 }
@@ -239,7 +245,6 @@ export type StageProps = {
   potLabel?: string;
   mark: string;
   clock?: TurnClock;
-  now: number;
   meHint?: ReactNode;
   showPot?: boolean;
   fx?: StageFx;
@@ -250,7 +255,7 @@ export type StageProps = {
   className?: string;
 };
 
-export function Stage({ device, seats, board, pot, potLabel, mark, clock, now, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, children, className = "" }: StageProps) {
+export function Stage({ device, seats, board, pot, potLabel, mark, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, children, className = "" }: StageProps) {
   const g = GEO[device];
   const me = seats.find((s) => s.isMe);
   const button = seats.find((s) => s.isButton);
@@ -276,7 +281,7 @@ export function Stage({ device, seats, board, pot, potLabel, mark, clock, now, m
       {seats
         .filter((s) => !s.isMe)
         .map((s) => (
-          <SeatPod key={s.seat} device={device} s={s} cx={g.c.x} clock={s.state === "turn" ? clock : undefined} now={now} fx={fx} onSit={onSit} />
+          <SeatPod key={s.seat} device={device} s={s} cx={g.c.x} clock={s.state === "turn" ? clock : undefined} fx={fx} onSit={onSit} />
         ))}
       {me && <MeSeat device={device} s={me} hint={meHint} clock={me.state === "turn" ? clock : undefined} />}
       {children}

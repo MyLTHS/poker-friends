@@ -85,6 +85,10 @@ export type TableModel = {
   log: LogEntry[];
   /** My hole cards in the hand on the table (kept when the completed hand drops them). */
   myCards: string[];
+  /** Local time the room.suspended notice arrived: the turn clock shows where it stopped. */
+  suspendedAt: number | null;
+  /** Local time the 7-2 moment started: a remount (phone ↔ desktop) does not play it again. */
+  celebrationAt: number | null;
 };
 
 /** Cues kept: the player only ever needs the ones not played yet. */
@@ -124,6 +128,8 @@ export const initialModel = (): TableModel => ({
   celebrationQuiet: false,
   log: [],
   myCards: [],
+  suspendedAt: null,
+  celebrationAt: null,
 });
 
 const REJECT_TEXT: Partial<Record<RejectCode, string>> = {
@@ -156,8 +162,13 @@ export function reduce(model: TableModel, action: TableAction): TableModel {
         outbox: [],
         pending: model.pending && { ...model.pending, sentAt: null },
       };
-    case "server":
-      return onServer({ ...model, clockOffsetMs: Date.parse(action.message.server_time) - action.receivedAt }, action.message);
+    case "server": {
+      const next = onServer({ ...model, clockOffsetMs: Date.parse(action.message.server_time) - action.receivedAt }, action.message);
+      const suspended = next.table?.room.status === "suspended";
+      const suspendedAt = suspended ? (model.table?.room.status === "suspended" ? model.suspendedAt : action.receivedAt) : null;
+      const celebrationAt = next.celebration ? (next.celebration === model.celebration ? model.celebrationAt : action.receivedAt) : null;
+      return suspendedAt === next.suspendedAt && celebrationAt === next.celebrationAt ? next : { ...next, suspendedAt, celebrationAt };
+    }
     case "act":
       return onIntent(model, action);
     case "outbox.sent": {
@@ -185,11 +196,14 @@ export function reduce(model: TableModel, action: TableAction): TableModel {
     case "chat.send": {
       const text = action.text.trim();
       if (!text || !model.table) return model;
+      // The outbox is dropped when the socket opens again: never queue while offline.
+      if (model.status !== "open") return { ...model, notice: notice(model, "Mất kết nối — tin nhắn chưa gửi được.") };
       const message: ClientMessage = { protocol_version: 1, type: "chat.send", room_id: model.table.room.room_id, payload: { text } };
       return { ...model, outbox: [...model.outbox, message] };
     }
     case "sit": {
       if (!model.table) return model;
+      if (model.status !== "open") return { ...model, notice: notice(model, "Mất kết nối — thử lại khi đã nối lại.") };
       const message: ClientMessage = {
         protocol_version: 1,
         type: action.out ? "command.sit_out" : "command.sit_in",
@@ -381,7 +395,8 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
     case "room.suspended":
       return {
         ...model,
-        table: { ...table, room: { ...table.room, status: "suspended" }, turn: null },
+        // The turn stays: its clock is drawn stopped where the room paused.
+        table: { ...table, room: { ...table.room, status: "suspended" } },
         notice: notice(model, "Bàn tạm dừng để khôi phục. Chờ một chút rồi trang sẽ tự nối lại."),
       };
     case "room.updated": {

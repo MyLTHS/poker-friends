@@ -6,7 +6,7 @@
 // came from; what no longer exists (gathered bets, the paid pot, folded cards) flies as a ghost
 // that removes itself. New cues finish the running ones first, a snapshot (epoch) finishes all,
 // a hidden tab skips them, and reduced motion turns movements into fades (ghosts are skipped).
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ChipStack, DURATION, EASE, PlayingCard, STAGGER, fmt, play, prefersReducedMotion } from "@/ui";
 
@@ -79,7 +79,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
 
   const later = (ms: number, run: () => void) => {
     const entry = { id: setTimeout(() => {
-      timers.current = timers.current.filter((t) => t !== entry);
+      timers.current.splice(timers.current.indexOf(entry), 1);
       run();
     }, ms), run };
     timers.current.push(entry);
@@ -204,6 +204,14 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
     if (newGhosts.length) setGhosts(newGhosts);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cues, epoch, device]);
+
+  // Leaving the page: drop the steps still waiting (they would set state on an unmounted table).
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      for (const t of pending.splice(0)) clearTimeout(t.id);
+    };
+  }, []);
 
   const done = useCallback((key: number) => setGhosts((all) => all.filter((g) => g.key !== key)), []);
 

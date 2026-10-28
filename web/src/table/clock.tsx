@@ -5,6 +5,8 @@
 // without re-rendering React.
 import { useEffect, useRef, useState } from "react";
 
+import type { ChatMessage } from "@/api/protocol";
+
 /** Date.now(), refreshed every `intervalMs`. */
 export function useNow(intervalMs: number) {
   const [now, setNow] = useState(() => Date.now());
@@ -17,6 +19,33 @@ export function useNow(intervalMs: number) {
 
 /** Whole seconds left before a local-time deadline (ms), never below 0. */
 export const secondsLeft = (deadline: number, now: number) => Math.max(0, Math.ceil((deadline - now) / 1000));
+
+/** Seconds left before a local-time deadline, ticking on its own: only this text re-renders, not
+ *  the screen around it. `frozenAt` stops it (room suspended). */
+export function Countdown({ deadline, frozenAt }: { deadline: number; frozenAt?: number }) {
+  const now = useNow(250);
+  return <>{frozenAt ?? secondsLeft(deadline, now)}</>;
+}
+
+/** Chat lines younger than `ms` by the server's clock (`offsetMs` = server − local). Re-renders only
+ *  when a line arrives or ages out, not on a ticker. */
+export function useRecent(messages: ChatMessage[], offsetMs: number, ms: number): ChatMessage[] {
+  const [now, setNow] = useState(() => Date.now());
+  const serverNow = now + offsetMs;
+  const recent = messages.filter((m) => serverNow - Date.parse(m.sent_at) < ms);
+  const next = Math.min(...recent.map((m) => Date.parse(m.sent_at) + ms - serverNow));
+  // A new line: read the clock again right away. Then wake up when the oldest bubble expires.
+  useEffect(() => {
+    const timer = setTimeout(() => setNow(Date.now()), 0);
+    return () => clearTimeout(timer);
+  }, [messages.length]);
+  useEffect(() => {
+    if (!Number.isFinite(next)) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(50, next));
+    return () => clearTimeout(timer);
+  }, [next]);
+  return recent;
+}
 
 export type TurnClock = {
   /** Deadline in local milliseconds (server deadline minus the clock offset). */

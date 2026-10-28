@@ -14,7 +14,7 @@ import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/
 import { Button, ButtonLink, CardText, D1Root, Spinner, fmt, signed } from "@/ui";
 
 import { IdleBar, PreAction, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
-import { secondsLeft, useNow, type TurnClock } from "./clock";
+import { Countdown, secondsLeft, useRecent, type TurnClock } from "./clock";
 import { useDevice } from "./device";
 import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
@@ -71,7 +71,6 @@ export type TableScreenProps = {
 export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = MOCK_HELP, loadChat, onTakeSeat, onLeaveSeat, ownerHref, replayHref }: TableScreenProps) {
   const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
   const device = useDevice();
-  const now = useNow(250);
   const [tab, setTab] = useState<SideTab>("chat");
   const [drawer, setDrawer] = useState(false);
   const [seen, setSeen] = useState(0);
@@ -100,6 +99,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
     setDrawer(open);
   };
 
+  const bubbles = useRecent(model.chat, model.clockOffsetMs, BUBBLE_MS);
   const view = useMemo(
     () =>
       table
@@ -107,10 +107,10 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
             lastActions: model.lastActions,
             results: model.results,
             myCards: model.myCards,
-            bubbles: model.chat.filter((m) => now - Date.parse(m.sent_at) - model.clockOffsetMs < BUBBLE_MS),
+            bubbles,
           })
         : null,
-    [table, model.lastActions, model.results, model.myCards, model.chat, model.clockOffsetMs, now],
+    [table, model.lastActions, model.results, model.myCards, bubbles],
   );
   const placeOf = useCallback(
     (seat: number): SeatPlace | undefined => {
@@ -161,12 +161,13 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
     "data-hand": hand ? (hand.complete ? "complete" : "live") : "none",
   };
 
-  // The turn clock runs on the server: deadline − measured offset. Suspended: frozen.
-  const clock: TurnClock | undefined = turn
-    ? { deadline: Date.parse(turn.deadline) - model.clockOffsetMs, total: turn.think_time_seconds, frozenAt: suspended ? secondsLeft(Date.parse(turn.deadline) - model.clockOffsetMs, now) : undefined }
-    : undefined;
-  const left = clock ? (clock.frozenAt ?? secondsLeft(clock.deadline, now)) : undefined;
+  // The turn clock runs on the server: deadline − measured offset. Suspended: frozen where it
+  // stood when the room.suspended notice arrived.
+  const deadline = turn ? Date.parse(turn.deadline) - model.clockOffsetMs : 0;
+  const frozenAt = suspended && model.suspendedAt !== null ? secondsLeft(deadline, model.suspendedAt) : undefined;
+  const clock: TurnClock | undefined = turn ? { deadline, total: turn.think_time_seconds, frozenAt } : undefined;
   const myClock = myTurn ? clock : undefined;
+  const myFrozen = turn?.player_id === you.player_id ? frozenAt : undefined;
 
   const handNo = hand?.hand_no;
   const blinds = `${fmt(room.small_blind)}/${fmt(room.big_blind)}`;
@@ -197,16 +198,17 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
         step: room.big_blind,
         facingBet: hand.players.some((p) => p.bet > 0),
         clock: myClock,
-        now,
         enabled: online && !pending,
         onAct,
       }
     : null;
   const decisionKey = `${hand?.hand_id}-${hand?.board.length}-${legal?.min_raise_to}-${legal?.max_raise_to}-${legal?.call_amount}`;
 
-  const meHint = myTurn && left !== undefined ? (
+  const meHint = myTurn && clock ? (
     <span className="turn-hint">
-      <b>{left}s</b>
+      <b>
+        <Countdown deadline={clock.deadline} />s
+      </b>
       <small>Tới lượt bạn</small>
     </span>
   ) : hand?.complete && myResult ? (
@@ -224,7 +226,6 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       pot={view.pot}
       mark={`${room.name} · ${blinds}`}
       clock={clock}
-      now={now}
       meHint={meHint}
       showPot={!hand?.complete}
       fx={fx}
@@ -234,7 +235,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       {layer}
       {hand?.complete && winners.length > 0 && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} />}
       {celebration && sevenSpot && (
-        <SevenDeuceStage key={hand?.hand_id} device={device} award={celebration} seats={table.seats} spot={sevenSpot} pot={Math.max(0, (model.results?.find((r) => r.player_id === celebration.player_id)?.hand_net ?? 0))} quiet={model.celebrationQuiet} />
+        <SevenDeuceStage key={hand?.hand_id} device={device} award={celebration} seats={table.seats} spot={sevenSpot} pot={Math.max(0, (model.results?.find((r) => r.player_id === celebration.player_id)?.hand_net ?? 0))} quiet={model.celebrationQuiet} startedAt={model.celebrationAt} />
       )}
       {device === "desktop" && hand?.complete && <Spectators device="desktop" spectators={model.spectators} />}
     </Stage>
@@ -245,19 +246,26 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       <div className={`scrim scrim-${device === "desktop" ? "d" : "m"}`} />
       {device === "desktop" && <ConnStrip device="desktop" />}
       <div className="rc-wrap">
-        <ReconnectCard device={device} retry={retry} now={now} myClock={myClock} canCheck={!!legal?.can_check} backHref={backHref} onRetry={reconnectNow} />
+        <ReconnectCard device={device} retry={retry} myClock={myClock} canCheck={!!legal?.can_check} backHref={backHref} onRetry={reconnectNow} />
       </div>
     </>
   );
 
-  const idle = idleContent({ table, me, myResult, winners, nameOf, sittingOut, left, celebration: !!celebration });
+  // Screen readers hear when it becomes my turn (once: the text only changes with the turn).
+  const announce = (
+    <p className="sr-only" role="status" aria-live="polite">
+      {myTurn && legal ? `Tới lượt bạn. ${legal.can_check ? "Có thể check." : `Theo ${fmt(legal.call_amount)}.`} ${device === "desktop" ? `Phím tắt: F bỏ, C ${legal.can_check ? "check" : "theo"}, R tố.` : ""}` : ""}
+    </p>
+  );
+
+  const idle = idleContent({ table, me, myResult, winners, nameOf, sittingOut, clock, celebration: !!celebration });
 
   if (device === "mobile") {
     let panel: ReactNode;
     if (suspended) {
       panel = (
         <aside className="ppanel paused-panel">
-          <PausedCard device="mobile" handNo={handNo} frozenAt={myTurn ? left : undefined} onReload={reload} backHref={backHref} />
+          <PausedCard device="mobile" handNo={handNo} frozenAt={myFrozen} onReload={reload} backHref={backHref} />
         </aside>
       );
     } else if (myTurn && turnProps) {
@@ -290,7 +298,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
           <Spectators device="mobile" spectators={model.spectators} />
           <div className="ip-actions">
             {isSeated && (
-              <Button kind="quiet" block icon={<Coffee size={16} />} onClick={toggleSit} aria-pressed={sittingOut}>
+              <Button kind="quiet" block icon={<Coffee size={16} />} onClick={toggleSit} aria-pressed={sittingOut} disabled={!online}>
                 {sittingOut ? "Quay lại chơi" : "Nghỉ ván sau"}
               </Button>
             )}
@@ -332,8 +340,9 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
         </div>
         {panel}
         {overlay}
-        <ChatDrawer open={drawer} onClose={() => openDrawer(false)} messages={model.chat} me={you.player_id} spectators={model.spectators} onSend={say} />
+        <ChatDrawer open={drawer} onClose={() => openDrawer(false)} messages={model.chat} me={you.player_id} spectators={model.spectators} onSend={say} offline={!online} />
         <Notice model={model} onDismiss={dismissNotice} />
+        {announce}
       </D1Root>
     );
   }
@@ -414,6 +423,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
             watchers={model.spectators.length}
             sittingOut={sittingOut}
             canSit={isSeated}
+            online={online}
             onSitToggle={toggleSit}
             ownerHref={ownerHref}
             leave={isSeated ? leave : undefined}
@@ -426,14 +436,14 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       <div className={`abar-slot${!online || suspended ? " is-dimmed" : ""}`}>{bar}</div>
       {suspended ? (
         <aside className="side side-variant">
-          <PausedCard device="desktop" handNo={handNo} frozenAt={myTurn ? left : undefined} onReload={reload} backHref={backHref} />
+          <PausedCard device="desktop" handNo={handNo} frozenAt={myFrozen} onReload={reload} backHref={backHref} />
         </aside>
       ) : (
         <SidePanel
           tab={tab}
           onTab={openTab}
           counts={{ chat: tab === "chat" ? undefined : unread || undefined, players: view.seats.filter((s) => s.state !== "empty").length }}
-          footer={tab === "chat" ? <ChatComposer onSend={say} /> : tab === "log" && hand && !hand.complete ? <HandFooter pot={view.potTotal} bets={view.bets} inHand={view.inHand} /> : undefined}
+          footer={tab === "chat" ? <ChatComposer onSend={say} disabled={!online} /> : tab === "log" && hand && !hand.complete ? <HandFooter pot={view.potTotal} bets={view.bets} inHand={view.inHand} /> : undefined}
         >
           {tab === "chat" && (
             <>
@@ -452,6 +462,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       )}
       {overlay}
       <Notice model={model} onDismiss={dismissNotice} />
+      {announce}
     </D1Root>
   );
 }
@@ -500,7 +511,7 @@ function Notice({ model, onDismiss }: { model: ReturnType<typeof useTableSocket>
   );
 }
 
-type Idle = { eyebrow: string; status: string; center: string; mine?: string; win?: string; winSub?: string };
+type Idle = { eyebrow: string; status: ReactNode; center: ReactNode; mine?: string; win?: string; winSub?: string };
 
 /** Words of the idle bar / phone column for whatever is going on when it is not my turn. */
 function idleContent({
@@ -510,7 +521,7 @@ function idleContent({
   winners,
   nameOf,
   sittingOut,
-  left,
+  clock,
   celebration,
 }: {
   table: TableState;
@@ -519,7 +530,7 @@ function idleContent({
   winners: PlayerResult[];
   nameOf: (id: string) => string;
   sittingOut: boolean;
-  left: number | undefined;
+  clock: TurnClock | undefined;
   celebration: boolean;
 }): Idle {
   const { hand, room } = table;
@@ -552,7 +563,19 @@ function idleContent({
     return { eyebrow: noChips ? "Bạn đã ngồi" : sittingOut ? "Bạn đang nghỉ" : "Giữa hai ván", status: noChips ? seatedWait : waiting, center: noChips ? seatedWait : waiting + "." };
   }
   const actor = hand.actor ? nameOf(hand.actor) : null;
-  const thinking = actor ? `${actor} suy nghĩ${left !== undefined ? ` · ${left}s` : ""}` : "Đang chờ";
+  const thinking: ReactNode = actor ? (
+    <>
+      {actor} suy nghĩ
+      {clock && (
+        <>
+          {" · "}
+          <Countdown deadline={clock.deadline} frozenAt={clock.frozenAt} />s
+        </>
+      )}
+    </>
+  ) : (
+    "Đang chờ"
+  );
   if (!me) return { eyebrow: "Bạn đang xem", status: thinking, center: "Người xem không thấy bài úp." };
   if (me.state === "folded") return { eyebrow: "Bạn đã bỏ bài", status: thinking, center: thinking };
   if ((me.cards?.length ?? 0) === 0) return { eyebrow: noChips ? "Bạn đã ngồi" : "Chờ ván sau", status: seatedWait, center: thinking };

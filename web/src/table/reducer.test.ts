@@ -279,3 +279,30 @@ describe("one click, one command", () => {
     expect(sent[1]).toBe(sent[0]);
   });
 });
+
+describe("offline", () => {
+  it("does not queue chat or sit-out while the socket is down (it would be dropped): says so", () => {
+    const offline = reduce(connected(), { type: "socket.closed" });
+    for (const action of [{ type: "chat.send", text: "gg" }, { type: "sit", out: true, commandId: "s1" }] as TableAction[]) {
+      const model = reduce(offline, action);
+      expect(model.outbox).toEqual([]);
+      expect(model.notice?.text).toMatch(/Mất kết nối/);
+    }
+  });
+});
+
+describe("suspended room", () => {
+  it("keeps the turn and remembers when it stopped, for the frozen clock", () => {
+    const suspended: ServerMessage = {
+      ...snapshot,
+      type: "room.suspended",
+      hand_id: 41,
+      version: 14,
+      payload: { reason: "recovery_needed", message: "Bàn tạm dừng" },
+    };
+    const model = run([server(started), server(deadline), server(suspended, T0 + 5000)], connected());
+    expect(model.table?.room.status).toBe("suspended");
+    expect(model.table?.turn).toEqual(deadline.payload.turn);
+    expect(model.suspendedAt).toBe(T0 + 5000);
+  });
+});

@@ -3259,6 +3259,9 @@
   .d1.tbl-mobile .rc-wrap {
     inset: 0 var(--pw) 50px var(--safe-l);
   }
+  .d1 .rc-wrap .rc-card:focus {
+    outline: none;
+  }
   .d1 .rc-wrap .rc-card {
     position: relative;
     left: auto;

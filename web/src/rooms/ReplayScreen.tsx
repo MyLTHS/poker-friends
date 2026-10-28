@@ -11,7 +11,6 @@ import { Check, ChevronLeft, ChevronRight, Pause, Play, SkipBack, SkipForward } 
 
 import { errorText } from "@/account/messages";
 import type { AppliedAction, HandView, TableState } from "@/api/protocol";
-import { useNow } from "@/table/clock";
 import { cuesFor, type Cue } from "@/table/cues";
 import { useDevice } from "@/table/device";
 import type { Device } from "@/table/geometry";
@@ -98,7 +97,6 @@ export function ReplayScreen({ handId }: { handId: number }) {
   const [speed, setSpeed] = useState<1 | 2>(1);
   const [fx, setFx] = useState<{ cues: Cue[]; epoch: number }>({ cues: [], epoch: 0 });
   const device = useDevice();
-  const now = useNow(1000);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,7 +217,6 @@ export function ReplayScreen({ handId }: { handId: number }) {
       board={view.board}
       pot={view.pot}
       mark={`${roomName || "Ván"} · ${fmt(table.room.small_blind)}/${fmt(table.room.big_blind)}`}
-      now={now}
       showPot={!table.hand?.complete}
       fx={stageFx}
       meHint={

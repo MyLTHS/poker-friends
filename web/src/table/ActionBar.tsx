@@ -10,7 +10,7 @@ import { Minus, Plus } from "lucide-react";
 import type { LegalActions } from "@/api/protocol";
 import { fmt } from "@/ui";
 
-import { LiveBar, secondsLeft, type TurnClock } from "./clock";
+import { Countdown, LiveBar, type TurnClock } from "./clock";
 import type { Device } from "./geometry";
 import type { Preset } from "./seatView";
 
@@ -25,7 +25,6 @@ export type TurnProps = {
   /** Somebody has bet this street: the raise button says "Tố", otherwise "Cược". */
   facingBet: boolean;
   clock?: TurnClock;
-  now: number;
   enabled: boolean;
   onAct: (kind: ActKind, amount?: number) => void;
 };
@@ -165,18 +164,19 @@ const timeoutNote = (legal: LegalActions, short: boolean) =>
 
 /** Desktop: my turn. */
 export function TurnBar(props: TurnProps) {
-  const { legal, presets, step, facingBet, clock, now, enabled, onAct } = props;
+  const { legal, presets, step, facingBet, clock, enabled, onAct } = props;
   const raise = useRaise(legal);
   useShortcuts(enabled, legal, raise.amount, onAct);
-  const left = clock ? (clock.frozenAt ?? secondsLeft(clock.deadline, now)) : null;
   const canRaise = legal.min_raise_to !== null;
   return (
     <div className="abar" role="region" aria-label="Tới lượt bạn">
       <div className="abar-status">
         <span className="abar-eyebrow">Tới lượt bạn</span>
-        {left !== null && (
+        {clock && (
           <span className="abar-clock" role="timer" aria-live="off">
-            <b>{left}</b>
+            <b>
+              <Countdown deadline={clock.deadline} frozenAt={clock.frozenAt} />
+            </b>
             <small>giây</small>
           </span>
         )}
@@ -202,15 +202,14 @@ export function TurnBar(props: TurnProps) {
 /** Phone: my turn in the right column. Clock on top, sizing in the middle, the three actions at the
  *  bottom where the right thumb rests. */
 export function TurnPanel(props: TurnProps) {
-  const { legal, presets, step, facingBet, clock, now, enabled, onAct } = props;
+  const { legal, presets, step, facingBet, clock, enabled, onAct } = props;
   const raise = useRaise(legal);
-  const left = clock ? (clock.frozenAt ?? secondsLeft(clock.deadline, now)) : null;
   const canRaise = legal.min_raise_to !== null;
   return (
     <aside className="ppanel tpanel" aria-label="Tới lượt bạn">
       <div className="tp-clock">
         <span className="tp-secs" role="timer">
-          <b>{left ?? "–"}</b>
+          <b>{clock ? <Countdown deadline={clock.deadline} frozenAt={clock.frozenAt} /> : "–"}</b>
           <small>giây</small>
         </span>
         <span className="tp-label">

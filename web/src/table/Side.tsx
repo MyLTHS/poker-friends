@@ -54,6 +54,7 @@ export function TableTools({
   watchers,
   sittingOut,
   canSit,
+  online,
   onSitToggle,
   ownerHref,
   leave,
@@ -61,6 +62,7 @@ export function TableTools({
   watchers: number;
   sittingOut: boolean;
   canSit: boolean;
+  online: boolean;
   onSitToggle: () => void;
   ownerHref?: string;
   leave?: { onLeave: () => void; label: string };
@@ -72,7 +74,7 @@ export function TableTools({
         {watchers} đang xem
       </span>
       {canSit && (
-        <button type="button" className={`tbar-btn${sittingOut ? " is-on" : ""}`} aria-pressed={sittingOut} onClick={onSitToggle}>
+        <button type="button" className={`tbar-btn${sittingOut ? " is-on" : ""}`} aria-pressed={sittingOut} onClick={onSitToggle} disabled={!online}>
           <Coffee size={15} strokeWidth={1.9} />
           {sittingOut ? "Đang nghỉ · quay lại" : "Nghỉ ván sau"}
         </button>
@@ -110,13 +112,14 @@ export function MobileTableBar({ backHref, title, sub, right }: { backHref: stri
 }
 
 export function MobileTools({ watchers, unread, onChat }: { watchers: number; unread: number; onChat: () => void }) {
+  // id: the chat drawer gives focus back to this button when it closes
   return (
     <>
       <span className="tbar-m-watch" title="Người đang xem">
         <Eye size={15} strokeWidth={2} />
         {watchers}
       </span>
-      <IconButton label="Chat" badge={unread > 0 ? unread : undefined} onClick={onChat}>
+      <IconButton id="tbl-chat-btn" label="Chat" badge={unread > 0 ? unread : undefined} onClick={onChat}>
         <MessageCircle size={20} strokeWidth={1.9} />
       </IconButton>
     </>
@@ -226,6 +229,7 @@ export function ChatList({ messages, me, spectators, compact = false }: { messag
 }
 
 export function ChatComposer({ onSend, disabled }: { onSend: (text: string) => void; disabled?: boolean }) {
+  // Offline (disabled) the draft stays: it is sent once the socket is back.
   const [draft, setDraft] = useState("");
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
@@ -250,7 +254,7 @@ export function ChatComposer({ onSend, disabled }: { onSend: (text: string) => v
             className="composer-field"
             value={draft}
             maxLength={CHAT_MAX}
-            placeholder="Nhắn cho cả bàn…"
+            placeholder={disabled ? "Mất kết nối — chờ nối lại…" : "Nhắn cho cả bàn…"}
             aria-label="Tin nhắn"
             onChange={(e) => setDraft(e.target.value)}
             disabled={disabled}
@@ -345,6 +349,7 @@ export function ChatDrawer({
   me,
   spectators,
   onSend,
+  offline,
 }: {
   open: boolean;
   onClose: () => void;
@@ -352,6 +357,7 @@ export function ChatDrawer({
   me: string;
   spectators: Spectator[];
   onSend: (text: string) => void;
+  offline?: boolean;
 }) {
   const [tab, setTab] = useState<"chat" | "watch">("chat");
   const panel = useRef<HTMLDivElement>(null);
@@ -361,8 +367,12 @@ export function ChatDrawer({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+  // Focus moves into the drawer when it opens and back to the chat button when it closes.
+  const wasOpen = useRef(false);
   useEffect(() => {
     if (open) panel.current?.focus();
+    else if (wasOpen.current) document.getElementById("tbl-chat-btn")?.focus();
+    wasOpen.current = open;
   }, [open]);
   return (
     <>
@@ -385,7 +395,7 @@ export function ChatDrawer({
           <>
             {spectators.length > 0 && <WatchersBlock spectators={spectators} device="mobile" />}
             <ChatList compact messages={messages} me={me} spectators={spectators} />
-            <ChatComposer onSend={onSend} />
+            <ChatComposer onSend={onSend} disabled={offline} />
           </>
         )}
       </div>

@@ -60,25 +60,44 @@ export function SevenLedger({ device, award, seats }: { device: Device; award: S
   );
 }
 
-/** Phases of the moment: cards turning, then the banner and confetti, then settled. */
-function useMoment(quiet: boolean) {
-  const still = quiet || prefersReducedMotion();
-  const [phase, setPhase] = useState<"turn" | "burst" | "settled">(still ? "settled" : "turn");
+/** Phases of the moment: cards turning, then the banner and confetti, then settled. It runs on
+ *  the clock of when it started (`startedAt`, local ms): mounted again later (phone ↔ desktop
+ *  layout) it picks up where it is, or stays settled, instead of playing again. */
+function useMoment(quiet: boolean, startedAt: number | null) {
+  const [elapsed] = useState(() => (startedAt === null ? 0 : Date.now() - startedAt));
+  const still = quiet || prefersReducedMotion() || elapsed >= DURATION.sevenDeuce;
+  const [phase, setPhase] = useState<"turn" | "burst" | "settled">(still ? "settled" : elapsed >= DURATION.flip ? "burst" : "turn");
   useEffect(() => {
     if (still) return;
-    const burst = setTimeout(() => setPhase("burst"), DURATION.flip);
-    const settle = setTimeout(() => setPhase("settled"), DURATION.sevenDeuce);
+    const burst = setTimeout(() => setPhase("burst"), Math.max(0, DURATION.flip - elapsed));
+    const settle = setTimeout(() => setPhase("settled"), DURATION.sevenDeuce - elapsed);
     return () => {
       clearTimeout(burst);
       clearTimeout(settle);
     };
-  }, [still]);
+  }, [still, elapsed]);
   return { phase, still };
 }
 
 /** On the stage: the revealed cards beside the winner, the banner, confetti while it bursts. */
-export function SevenDeuceStage({ device, award, seats, spot, pot, quiet }: { device: Device; award: SevenDeuceAward; seats: SeatOccupant[]; spot: number; pot: number; quiet: boolean }) {
-  const { phase, still } = useMoment(quiet);
+export function SevenDeuceStage({
+  device,
+  award,
+  seats,
+  spot,
+  pot,
+  quiet,
+  startedAt,
+}: {
+  device: Device;
+  award: SevenDeuceAward;
+  seats: SeatOccupant[];
+  spot: number;
+  pot: number;
+  quiet: boolean;
+  startedAt: number | null;
+}) {
+  const { phase, still } = useMoment(quiet, startedAt);
   const winner = nameOf(seats, award.player_id, award.seat);
   const bp = spotPos(device, spot);
   const up = phase !== "turn";
