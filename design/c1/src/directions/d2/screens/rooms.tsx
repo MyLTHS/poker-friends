@@ -1,612 +1,633 @@
-// Room screens: lobby, create room, invite link.
+// Kính & Ánh Kim (d2) — rooms: lobby, create room, invite link (share + open).
 import type { ReactNode } from "react";
 import {
-  Check as CheckIcon,
-  ClipboardPaste,
-  Eye,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  Clock,
+  Copy,
   Globe,
   Link2,
   Lock,
+  Mail,
+  MessageCircle,
+  Minus,
   Plus,
   Search,
   Share2,
   Sparkles,
+  Users,
   X,
 } from "lucide-react";
 
-import { OWNER, PROFILE, ROOMS, TABLE_TURN } from "../../../shared/data";
+import { OWNER, ROOMS } from "../../../shared/data";
 import type { Device } from "../../../shared/screens";
-import {
-  Avatar,
-  Badge,
-  Brand,
-  Btn,
-  Field,
-  HomeBar,
-  IconBtn,
-  Qr,
-  Root,
-  SecHead,
-  Seg,
-  StatusBar,
-  TabBar,
-  Toggle,
-  TopNav,
-  VariantCap,
-  fmt,
-  signed,
-  toneOf,
-} from "../ui";
+import { jewel, vars } from "../lib";
+import { MBar, Shell } from "../shell";
+import { Avatar, Btn, Eyebrow, Field, Glass, IconBtn, Mark, Pill, QR, Root, Seg, Toggle } from "../ui";
 
 type Room = (typeof ROOMS)[number];
-const TOKEN = OWNER.invite.split("token=")[1];
 
-function SeatDots({ seated, seats }: { seated: number; seats: number }) {
+/* ============================================================ mini table */
+
+const SEATED_NAMES = ["Lym", "An", "Bình", "Chi", "Dũng", "Giang", "Hà", "Khoa", "Mai"];
+
+/** A small felt seen from above with one dot per seat: filled = someone sits there. */
+export function MiniTable({
+  seats,
+  seated,
+  w = 220,
+  label,
+  names = SEATED_NAMES,
+  className = "",
+}: {
+  seats: number;
+  seated: number;
+  w?: number;
+  label?: ReactNode;
+  names?: string[];
+  className?: string;
+}) {
+  const h = w * 0.56;
+  const dot = Math.max(12, Math.round(w * 0.085));
   return (
-    <span className="dots9">
-      {Array.from({ length: seats }, (_, i) => (
-        <i key={i} className={i < seated ? "on" : ""} />
-      ))}
+    <div className={`k-minitable ${className}`} style={vars({ width: w, height: h, "--dot": `${dot}px` })}>
+      <span className="k-minitable-felt">{label}</span>
+      {Array.from({ length: seats }, (_, i) => {
+        const a = Math.PI / 2 + (i * 2 * Math.PI) / seats;
+        const x = 50 + 47 * Math.cos(a);
+        const y = 50 + 44 * Math.sin(a);
+        const on = i < seated;
+        const [j1, j2] = jewel(names[i] ?? "");
+        return (
+          <i
+            key={i}
+            className={on ? "on" : ""}
+            style={vars({ left: `${x}%`, top: `${y}%`, "--j1": j1, "--j2": j2 })}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/* ================================================================== lobby */
+
+function statusPill(r: Room) {
+  return r.status === "Đang chơi" ? (
+    <Pill tone="cyan" icon={<i className="k-live-dot" />}>
+      Đang chơi
+    </Pill>
+  ) : (
+    <Pill tone="glass">Đang mở</Pill>
+  );
+}
+
+function RoomPills({ r }: { r: Room }) {
+  return (
+    <span className="k-room-top">
+      {statusPill(r)}
+      {r.private && (
+        <Pill tone="gold" icon={<Lock size={11} strokeWidth={2.6} />}>
+          Riêng
+        </Pill>
+      )}
+      {r.bonus > 0 && (
+        <Pill tone="mute" icon={<Sparkles size={11} strokeWidth={2.4} />}>
+          7-2 · {r.bonus}
+        </Pill>
+      )}
     </span>
   );
 }
 
-function statusBadge(r: Room) {
-  if (r.seated === r.seats) return <Badge kind="line">Đủ người</Badge>;
-  return r.status === "Đang chơi" ? <Badge kind="ink">{r.status}</Badge> : <Badge kind="sage">{r.status}</Badge>;
-}
-
-function roomAction(r: Room, size: "md" | "sm" = "md") {
-  if (r.owner === "Lym") return <Btn v="ink" s={size}>Vào lại</Btn>;
-  if (r.seated === r.seats)
-    return (
-      <Btn v="ghost" s={size} icon={<Eye size={15} strokeWidth={1.9} />}>
-        Xem
-      </Btn>
-    );
-  return <Btn v="line" s={size}>Vào bàn</Btn>;
-}
-
-const mineIn = (r: Room) => PROFILE.rooms.find((p) => p.name === r.name);
-
-/* ---------- lobby ---------- */
-
-function LobbyDesk() {
+function Fact({ k, v }: { k: string; v: ReactNode }) {
   return (
-    <>
-      <TopNav active="rooms" />
-      <div className="page lobby">
-        <div className="lobby-main">
-          <div className="page-head row">
-            <div>
-              <span className="eyebrow">Sảnh · tối thứ Sáu</span>
-              <h1 className="serif">Chọn một bàn</h1>
-              <p>
-                {ROOMS.length} phòng · {ROOMS.reduce((a, r) => a + r.seated, 0)} người đang ngồi
-              </p>
-            </div>
-            <Btn v="red" s="lg" icon={<Plus size={18} strokeWidth={2} />}>
-              Tạo phòng
-            </Btn>
-          </div>
-          <div className="lobby-tools">
-            <Field icon={<Search size={17} strokeWidth={1.8} />} placeholder="Tìm theo tên phòng hoặc chủ phòng" />
-            <Seg items={["Tất cả · 4", "Công khai · 3", "Của tôi · 1"]} on={0} />
-          </div>
-          <div className="ruled-table rooms-list">
-            <div className="rt-h">
-              <span>Phòng</span>
-              <span>Blind</span>
-              <span>Ghế</span>
-              <span>Thưởng 7-2</span>
-              <span>Trạng thái</span>
-              <span />
-            </div>
-            {ROOMS.map((r) => {
-              const mine = mineIn(r);
-              return (
-                <div key={r.id} className={`rt-r${mine ? " mine" : ""}`}>
-                  <span className="room-n">
-                    <b className="serif">{r.name}</b>
-                    <small>
-                      {r.private ? <Lock size={12} strokeWidth={2} /> : <Globe size={12} strokeWidth={2} />}
-                      {r.private ? "Riêng tư" : "Công khai"} · chủ phòng {r.owner}
-                    </small>
-                  </span>
-                  <span className="mono big">{r.blinds}</span>
-                  <span className="room-seats">
-                    <SeatDots seated={r.seated} seats={r.seats} />
-                    <span className="mono">
-                      {r.seated}/{r.seats}
-                    </span>
-                  </span>
-                  <span className="mono">{r.bonus ? r.bonus : <span className="muted">—</span>}</span>
-                  <span>{statusBadge(r)}</span>
-                  <span className="room-act">
-                    {mine && (
-                      <small>
-                        bạn có <b className="mono">{fmt(mine.balance)}</b>
-                      </small>
-                    )}
-                    {roomAction(r)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <aside className="lobby-aside">
-          <section className="panel">
-            <SecHead title="Có link mời?" />
-            <Field
-              icon={<Link2 size={17} strokeWidth={1.8} />}
-              value={`poker.ban-be.vn/rooms/join?token=${TOKEN.slice(0, 6)}…`}
-              mono
-              state="focus"
-              right={
-                <span className="input-r">
-                  <ClipboardPaste size={16} strokeWidth={1.8} />
-                </span>
-              }
-            />
-            <Btn v="ink" s="md" block>
-              Vào phòng từ link
-            </Btn>
-          </section>
-          <section className="panel">
-            <SecHead title="Chip của bạn" meta="theo phòng" />
-            {PROFILE.rooms.map((r) => (
-              <div key={r.name} className="kv">
-                <span>{r.name}</span>
-                <span className="mono">{fmt(r.balance)}</span>
-                <span className={`mono ${toneOf(r.net)}`}>{signed(r.net)}</span>
-              </div>
-            ))}
-          </section>
-          <section className="panel house">
-            <SecHead title="Luật nhà" />
-            <ul>
-              <li>Chip ảo, không tiền thật, không rake.</li>
-              <li>Chip tính riêng từng phòng, chủ phòng cấp.</li>
-              <li>Mất mạng: đồng hồ vẫn chạy, hết giờ tự check hoặc bỏ.</li>
-            </ul>
-          </section>
-        </aside>
-      </div>
-    </>
+    <span className="k-fact">
+      <small>{k}</small>
+      <b className="k-num">{v}</b>
+    </span>
   );
 }
 
-function LobbyMob() {
+/** The room you sit at: a wide banner on top of the lobby. */
+function FeaturedRoom({ r }: { r: Room }) {
   return (
-    <>
-      <StatusBar />
-      <div className="m-head">
-        <div>
-          <span className="eyebrow">Sảnh · {ROOMS.length} phòng</span>
-          <h1 className="serif">Chọn một bàn</h1>
-        </div>
-        <Avatar name="Lym" size={36} />
+    <Glass className="k-roomfeat">
+      <MiniTable seats={r.seats} seated={r.seated} w={290} label={<Mark size={26} />} />
+      <div className="k-room-body">
+        <RoomPills r={r} />
+        <b className="k-room-n">{r.name}</b>
+        <span className="k-room-meta">
+          <Avatar name={r.owner} size={20} ring="none" />
+          chủ phòng là bạn · ván #37 đang chạy
+        </span>
+        <span className="k-room-facts">
+          <Fact k="Blind" v={r.blinds} />
+          <Fact k="Ghế" v={`${r.seated}/${r.seats}`} />
+          <Fact k="Mỗi lượt" v="20 giây" />
+          <Fact k="Chip của bạn" v="1.460" />
+        </span>
       </div>
-      <div className="m-stack lobby-m">
-        <Field icon={<Search size={17} strokeWidth={1.8} />} placeholder="Tìm phòng hoặc chủ phòng" />
-        <div className="paste-row">
-          <Link2 size={16} strokeWidth={1.8} />
-          <span>Dán link mời để vào phòng riêng</span>
-          <Btn v="line" s="sm">
-            Dán
+      <div className="k-roomfeat-r">
+        <span className="k-ticket-av">
+          {SEATED_NAMES.slice(0, r.seated).map((n) => (
+            <Avatar key={n} name={n} size={30} ring="none" />
+          ))}
+        </span>
+        <Btn tone="gold" size="xl" iconRight={<ArrowRight size={18} strokeWidth={2.4} />}>
+          Vào bàn
+        </Btn>
+      </div>
+    </Glass>
+  );
+}
+
+function RoomCard({ r }: { r: Room }) {
+  const full = r.seated >= r.seats;
+  return (
+    <Glass className="k-roomcard">
+      <MiniTable seats={r.seats} seated={r.seated} w={200} names={["Chi", "Khoa", "An", "Mai", "Tùng", "Ngọc"].slice(r.id === 3 ? 0 : 1)} label={<Mark size={18} />} />
+      <RoomPills r={r} />
+      <b className="k-room-n">{r.name}</b>
+      <span className="k-room-meta">
+        <Avatar name={r.owner} size={20} ring="none" />
+        chủ phòng {r.owner}
+      </span>
+      <span className="k-room-facts">
+        <Fact k="Blind" v={r.blinds} />
+        <Fact k="Ghế" v={`${r.seated}/${r.seats}`} />
+        <Btn tone={full ? "glass" : "cyan"} size="sm" iconRight={<ChevronRight size={15} strokeWidth={2.4} />}>
+          {full ? "Xem" : "Ngồi vào"}
+        </Btn>
+      </span>
+    </Glass>
+  );
+}
+
+function Lobby({ device: d }: { device: Device }) {
+  if (d === "desktop")
+    return (
+      <Shell active={0}>
+        <header className="k-pagehead">
+          <span>
+            <Eyebrow>Sảnh</Eyebrow>
+            <h1 className="k-h1">Chào Lym</h1>
+            <p className="k-lead">4 phòng đang mở · 12 người đang ngồi bàn</p>
+          </span>
+          <span className="k-search">
+            <Search size={18} strokeWidth={2} />
+            <span>Tìm theo tên phòng hoặc chủ phòng…</span>
+            <kbd>⌘K</kbd>
+          </span>
+        </header>
+        <div className="k-paste">
+          <span className="k-paste-ic">
+            <Link2 size={18} strokeWidth={2.2} />
+          </span>
+          <span className="k-paste-t">
+            <b>Có link mời?</b>
+            <small>Dán link mời vào đây để vào thẳng phòng riêng</small>
+          </span>
+          <span className="k-paste-in">poker.ban-be.vn/rooms/join?token=…</span>
+          <Btn tone="glass" size="md">
+            Dán & vào
           </Btn>
         </div>
-        <Seg items={["Tất cả", "Công khai", "Của tôi"]} on={0} className="full" />
-        {ROOMS.map((r) => {
-          const mine = mineIn(r);
-          return (
-            <div key={r.id} className={`room-card${mine ? " mine" : ""}`}>
-              <div className="rc-top">
-                <b className="serif">{r.name}</b>
-                {r.private && <Lock size={13} strokeWidth={2} />}
-                <span className="sp" />
-                {statusBadge(r)}
-              </div>
-              <div className="rc-meta">
-                <span className="mono">{r.blinds}</span>
-                <i />
-                <SeatDots seated={r.seated} seats={r.seats} />
-                <span className="mono">
-                  {r.seated}/{r.seats}
-                </span>
-                <i />
-                <span>7-2: {r.bonus ? <span className="mono">{r.bonus}</span> : "tắt"}</span>
-              </div>
-              <div className="rc-bot">
-                <small>
-                  {mine ? (
-                    <>
-                      Bạn có <b className="mono">{fmt(mine.balance)}</b> ở đây
-                    </>
-                  ) : (
-                    <>chủ phòng {r.owner}</>
-                  )}
-                </small>
-                {roomAction(r, "sm")}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <Btn v="red" s="lg" className="fab" icon={<Plus size={18} strokeWidth={2.2} />}>
-        Tạo phòng
-      </Btn>
-      <TabBar active="rooms" />
-    </>
-  );
-}
-
-export function Lobby({ device }: { device: Device }) {
+        <div className="k-lobby-bar">
+          <Seg items={["Tất cả 4", "Của tôi 1", "Công khai 3"]} active={0} />
+          <span className="k-col-note">Sắp xếp: đang chơi trước</span>
+        </div>
+        <FeaturedRoom r={ROOMS[0]} />
+        <div className="k-rooms">
+          {ROOMS.slice(1).map((r) => (
+            <RoomCard key={r.id} r={r} />
+          ))}
+        </div>
+      </Shell>
+    );
+  const sel = ROOMS[0];
   return (
-    <Root device={device} className="paged">
-      {device === "desktop" ? <LobbyDesk /> : <LobbyMob />}
+    <Root device={d}>
+      <MBar title="Sảnh" sub="Chào Lym · 4 phòng" active={0} />
+      <div className="k-mpage k-mlobby">
+        <div className="k-mlist">
+          <div className="k-mtools">
+            <span className="k-search k-search-m">
+              <Search size={16} strokeWidth={2} />
+              <span>Tìm phòng, chủ phòng…</span>
+            </span>
+            <Btn tone="glass" size="md" icon={<Link2 size={16} strokeWidth={2.2} />}>
+              Dán link
+            </Btn>
+          </div>
+          <Seg items={["Tất cả 4", "Của tôi 1", "Công khai 3"]} active={0} small />
+          <div className="k-scroll">
+            {ROOMS.map((r, i) => (
+              <div key={r.id} className={`k-mroom ${i === 0 ? "on" : ""}`}>
+                <MiniTable seats={r.seats} seated={r.seated} w={58} />
+                <span className="k-mroom-t">
+                  <b>
+                    {r.name}
+                    {r.private && <Lock size={11} strokeWidth={2.6} />}
+                  </b>
+                  <small>
+                    <span className="k-num">{r.blinds}</span> · chủ {r.owner === "Lym" ? "bạn" : r.owner}
+                    {r.bonus > 0 && <> · 7-2 {r.bonus}</>}
+                  </small>
+                </span>
+                <span className="k-mroom-r">
+                  <b className="k-num">
+                    {r.seated}/{r.seats}
+                  </b>
+                  <small className={r.status === "Đang chơi" ? "live" : ""}>{r.status}</small>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <Glass className="k-mdetail">
+          <span className="k-room-top">
+            {statusPill(sel)}
+            <Pill tone="gold" icon={<Lock size={11} strokeWidth={2.6} />}>
+              Riêng
+            </Pill>
+          </span>
+          <MiniTable seats={sel.seats} seated={sel.seated} w={176} label={<Mark size={16} />} />
+          <span className="k-ticket-av">
+            {SEATED_NAMES.slice(0, sel.seated).map((n) => (
+              <Avatar key={n} name={n} size={22} ring="none" />
+            ))}
+          </span>
+          <span className="k-mdetail-t">
+            <b>{sel.name}</b>
+            <small>
+              Blind <b className="k-num">{sel.blinds}</b> · <b className="k-num">7/9</b> ghế · 7-2 thưởng <b className="k-num">50</b>
+            </small>
+          </span>
+          <div className="k-row2">
+            <Btn tone="glass" size="md" icon={<Plus size={16} strokeWidth={2.4} />}>
+              Tạo phòng
+            </Btn>
+            <Btn tone="gold" size="md" iconRight={<ArrowRight size={16} strokeWidth={2.4} />}>
+              Vào bàn
+            </Btn>
+          </div>
+        </Glass>
+      </div>
     </Root>
   );
 }
 
-/* ---------- create room ---------- */
+/* ============================================================ create-room */
 
-/** A little drawn board for the preview: stadium + numbered seat markers. */
-function MiniBoard({ w, h, seats }: { w: number; h: number; seats: number }) {
-  const cx = w / 2;
-  const cy = h / 2;
-  const a = w / 2 - 14;
-  const b = h / 2 - 14;
-  const r = h / 2 - 24;
+function Stepper({ value, unit }: { value: string; unit?: string }) {
   return (
-    <svg className="miniboard" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
-      <rect x={24} y={24} width={w - 48} height={h - 48} rx={r} className="mb-felt" />
-      <rect x={32} y={32} width={w - 64} height={h - 64} rx={r - 8} className="mb-in" />
-      <text x={cx} y={cy + 5} textAnchor="middle" className="mb-t">
-        10/20
-      </text>
-      {Array.from({ length: seats }, (_, i) => {
-        const t = Math.PI / 2 + (i * 2 * Math.PI) / seats;
-        const x = cx + a * Math.cos(t);
-        const y = cy + b * Math.sin(t);
-        return (
-          <g key={i}>
-            <circle cx={x} cy={y} r={11} className={i === 0 ? "mb-seat me" : "mb-seat"} />
-            <text x={x} y={y + 3.6} textAnchor="middle" className="mb-n">
-              {i + 1}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <span className="k-stepper k-stepper-box">
+      <span className="k-mini-b">
+        <Minus size={15} strokeWidth={2.4} />
+      </span>
+      <b className="k-num">
+        {value}
+        {unit && <small>{unit}</small>}
+      </b>
+      <span className="k-mini-b">
+        <Plus size={15} strokeWidth={2.4} />
+      </span>
+    </span>
   );
 }
 
-function SevenRow({ compact }: { compact?: boolean }) {
+function Ctl({ label, hint, children, className = "" }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <div className="seven-row">
-      <span className="seven-ic">
-        <Sparkles size={16} strokeWidth={1.9} />
+    <div className={`k-ctl ${className}`}>
+      <span className="k-field-l">{label}</span>
+      {children}
+      {hint && <span className="k-field-hint">{hint}</span>}
+    </div>
+  );
+}
+
+const SeatPick = () => (
+  <span className="k-seatpick">
+    {[2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+      <span key={n} className={`k-num ${n === 9 ? "on" : ""}`}>
+        {n}
       </span>
-      <span className="seven-txt">
+    ))}
+  </span>
+);
+
+const Access = ({ small }: { small?: boolean }) => (
+  <Seg
+    small={small}
+    items={[
+      <>
+        <Globe size={15} strokeWidth={2.2} /> Công khai
+      </>,
+      <>
+        <Lock size={15} strokeWidth={2.2} /> Riêng
+      </>,
+    ]}
+    active={1}
+    className="k-seg-fill"
+  />
+);
+
+function SevenCtl({ d }: { d: Device }) {
+  return (
+    <div className="k-seven">
+      <span className="k-seven-ic">
+        7<i>·</i>2
+      </span>
+      <span className="k-seven-t">
         <b>Thưởng 7-2</b>
-        {!compact && <small>Ăn pot bằng 7-2 khi mọi người bỏ bài → mỗi người đang ngồi trả mức này.</small>}
+        {d === "desktop" && <small>Ai ăn pot bằng 7-2 khi mọi người bỏ bài thì mỗi người trả</small>}
       </span>
-      <span className="seven-amt">
-        <span className="mono">50</span>
-        <small>/người</small>
-      </span>
+      <Stepper value="50" />
       <Toggle on />
     </div>
   );
 }
 
-function Privacy({ compact }: { compact?: boolean }) {
-  const opt = (on: boolean, icon: ReactNode, t: string, s: string) => (
-    <div className={`radio-card${on ? " on" : ""}`}>
-      <span className="radio">
-        <i />
-      </span>
-      {icon}
-      <span>
-        <b>{t}</b>
-        {!compact && <small>{s}</small>}
-      </span>
-    </div>
-  );
-  return (
-    <div className="privacy">
-      {opt(false, <Globe size={17} strokeWidth={1.8} />, "Công khai", "Hiện ở sảnh, ai cũng vào được")}
-      {opt(true, <Lock size={17} strokeWidth={1.8} />, "Riêng tư", "Chỉ người có link mời")}
-    </div>
-  );
-}
-
-function SummaryRows() {
-  const rows: [string, ReactNode][] = [
-    ["Tên", "Bàn thứ Sáu"],
-    ["Blind", <span className="mono">10 / 20</span>],
-    ["Số ghế", <span className="mono">9</span>],
-    ["Suy nghĩ", <><span className="mono">20</span> giây mỗi lượt</>],
-    ["Thưởng 7-2", <><span className="mono">50</span> mỗi người</>],
-    ["Loại", "Riêng tư · vào bằng link"],
+function Preview({ d }: { d: Device }) {
+  const mob = d === "mobile";
+  const facts: [string, ReactNode][] = [
+    ["Blind", <b className="k-num">10/20</b>],
+    ["Số ghế", <b className="k-num">9</b>],
+    ["Mỗi lượt", <b className="k-num">20 giây</b>],
+    ["Thưởng 7-2", <b className="k-num">50 / người</b>],
+    ["Ai được vào", <b>Riêng · có link</b>],
   ];
   return (
-    <div className="summary">
-      {rows.map(([k, v]) => (
-        <div key={k} className="kv">
-          <span>{k}</span>
-          <span className="dots" />
-          <b>{v}</b>
-        </div>
-      ))}
+    <div className={`k-preview ${mob ? "k-preview-m" : ""}`}>
+      <Eyebrow>Xem trước</Eyebrow>
+      <MiniTable
+        seats={9}
+        seated={1}
+        w={mob ? 200 : 300}
+        label={
+          <span className="k-preview-felt">
+            <b>Bàn thứ Sáu</b>
+            <small className="k-num">10/20 · 20 giây</small>
+          </span>
+        }
+      />
+      {!mob && (
+        <ul className="k-facts">
+          {facts.map(([k, v]) => (
+            <li key={k}>
+              <span>{k}</span>
+              {v}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!mob && (
+        <p className="k-note">
+          Bạn sẽ là chủ phòng: cấp chip cho từng người, đổi blind, kick và đóng phòng trong <b>Bảng chủ phòng</b>.
+        </p>
+      )}
+      {mob && (
+        <small className="k-preview-sub">
+          <Lock size={11} strokeWidth={2.6} /> Riêng · 9 ghế · 7-2 thưởng 50
+        </small>
+      )}
+      <Btn tone="gold" size={mob ? "md" : "xl"} block icon={<Plus size={18} strokeWidth={2.6} />}>
+        Tạo phòng
+      </Btn>
     </div>
   );
 }
 
-function CreateDesk() {
-  return (
-    <>
-      <TopNav active="rooms" />
-      <div className="page create">
-        <div className="page-head">
-          <span className="eyebrow">Phòng mới</span>
-          <h1 className="serif">Tạo phòng</h1>
-          <p>Bạn sẽ là chủ phòng: cấp chip, đổi blind, mời ra và đóng phòng.</p>
+function CreateRoom({ device: d }: { device: Device }) {
+  if (d === "desktop")
+    return (
+      <Shell active={0}>
+        <header className="k-pagehead">
+          <span>
+            <span className="k-crumb">
+              Sảnh <ChevronRight size={14} strokeWidth={2.2} /> Phòng mới
+            </span>
+            <h1 className="k-h1">Tạo phòng mới</h1>
+          </span>
+        </header>
+        <div className="k-create">
+          <Glass className="k-card-p k-create-form">
+            <Field label="Tên phòng" value="Bàn thứ Sáu" state="focus" hint="Bạn bè sẽ thấy tên này trong link mời" />
+            <div className="k-row2">
+              <Ctl label="Blind nhỏ">
+                <Stepper value="10" />
+              </Ctl>
+              <Ctl label="Blind lớn" hint="Thường gấp đôi blind nhỏ">
+                <Stepper value="20" />
+              </Ctl>
+            </div>
+            <Ctl label="Số ghế (2–9)">
+              <SeatPick />
+            </Ctl>
+            <div className="k-row2">
+              <Ctl label="Giây suy nghĩ mỗi lượt">
+                <Seg items={["15", "20", "30", "45"]} active={1} className="k-seg-fill" />
+              </Ctl>
+              <Ctl label="Ai được vào" hint="Riêng: chỉ ai có link mới vào được">
+                <Access />
+              </Ctl>
+            </div>
+            <Ctl label="Thưởng 7-2 · mỗi người trả">
+              <SevenCtl d={d} />
+            </Ctl>
+          </Glass>
+          <Glass strong className="k-card-p">
+            <Preview d={d} />
+          </Glass>
         </div>
-        <div className="create-grid">
-          <section className="panel form-panel">
-            <Field label="Tên phòng" value="Bàn thứ Sáu" state="focus" hint="Tối đa 40 ký tự · bạn bè thấy tên này ở sảnh và link mời." />
-            <div className="two">
-              <div className="fgroup">
-                <label className="flabel">Blind nhỏ / lớn</label>
-                <div className="blind-row">
-                  <Field value="10" mono />
-                  <span className="slash">/</span>
-                  <Field value="20" mono />
-                </div>
-                <div className="chips-row">
-                  {["1/2", "5/10", "10/20", "50/100"].map((b) => (
-                    <span key={b} className={`pick mono${b === "10/20" ? " on" : ""}`}>
-                      {b}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="fgroup">
-                <label className="flabel">Giây suy nghĩ</label>
-                <Seg items={["15", "20", "30", "45"]} on={1} mono className="full" />
-                <small className="fhint">Hết giờ: tự check nếu được, không thì bỏ bài.</small>
-              </div>
-            </div>
-            <div className="fgroup">
-              <label className="flabel">Số ghế</label>
-              <Seg items={["2", "3", "4", "5", "6", "7", "8", "9"]} on={7} mono className="full" />
-              <small className="fhint">2 ghế = heads-up. Đổi được trước khi có người ngồi.</small>
-            </div>
-            <SevenRow />
-            <div className="fgroup">
-              <label className="flabel">Ai vào được</label>
-              <Privacy />
-            </div>
-            <div className="form-foot">
-              <Btn v="ghost" s="lg">
-                Huỷ
-              </Btn>
-              <Btn v="red" s="lg">
-                Tạo phòng
-              </Btn>
-            </div>
-          </section>
-          <section className="panel preview">
-            <SecHead title="Xem trước" meta="9 ghế" />
-            <MiniBoard w={392} h={196} seats={9} />
-            <SummaryRows />
-            <p className="note">Thưởng 7-2 và blind đổi được sau trong Bảng chủ phòng (áp từ ván sau).</p>
-          </section>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function CreateMob() {
+      </Shell>
+    );
   return (
-    <>
-      <StatusBar />
-      <div className="mbar">
-        <IconBtn icon={<X size={22} strokeWidth={1.8} />} label="Huỷ" />
-        <b className="serif">Tạo phòng</b>
-        <span className="mbar-sp" />
-      </div>
-      <div className="m-stack create-m">
-        <div className="mini-prev">
-          <MiniBoard w={150} h={88} seats={9} />
-          <div>
-            <b className="serif">Bàn thứ Sáu</b>
-            <small>
-              <span className="mono">10/20</span> · 9 ghế · <span className="mono">20</span>s · 7-2: <span className="mono">50</span>
-            </small>
-            <small>Riêng tư · vào bằng link</small>
+    <Root device={d}>
+      <MBar title="Tạo phòng mới" sub="Bạn sẽ là chủ phòng" right={<IconBtn icon={<X size={18} strokeWidth={2.2} />} className="k-mbar-close" />} />
+      <div className="k-mpage k-mcreate">
+        <Glass className="k-mcard k-mcreate-form">
+          <div className="k-row2">
+            <Field label="Tên phòng" value="Bàn thứ Sáu" state="focus" />
+            <Ctl label="Ai được vào">
+              <Access small />
+            </Ctl>
           </div>
-        </div>
-        <Field label="Tên phòng" value="Bàn thứ Sáu" state="focus" />
-        <div className="fgroup">
-          <label className="flabel">Blind nhỏ / lớn</label>
-          <div className="blind-row">
-            <Field value="10" mono />
-            <span className="slash">/</span>
-            <Field value="20" mono />
+          <div className="k-row2">
+            <Ctl label="Blind nhỏ">
+              <Stepper value="10" />
+            </Ctl>
+            <Ctl label="Blind lớn">
+              <Stepper value="20" />
+            </Ctl>
           </div>
-        </div>
-        <div className="fgroup">
-          <label className="flabel">Số ghế</label>
-          <Seg items={["2", "3", "4", "5", "6", "7", "8", "9"]} on={7} mono className="full" />
-        </div>
-        <div className="fgroup">
-          <label className="flabel">Giây suy nghĩ</label>
-          <Seg items={["15", "20", "30", "45"]} on={1} mono className="full" />
-        </div>
-        <SevenRow compact />
-        <Privacy compact />
+          <div className="k-row2">
+            <Ctl label="Số ghế (2–9)">
+              <Stepper value="9" unit="ghế" />
+            </Ctl>
+            <Ctl label="Giây mỗi lượt">
+              <Seg items={["15", "20", "30"]} active={1} small className="k-seg-fill" />
+            </Ctl>
+          </div>
+          <Ctl label="Thưởng 7-2 · mỗi người trả">
+            <SevenCtl d={d} />
+          </Ctl>
+        </Glass>
+        <Glass strong className="k-mcard">
+          <Preview d={d} />
+        </Glass>
       </div>
-      <div className="m-footbar">
-        <Btn v="red" s="xl" block>
-          Tạo phòng
-        </Btn>
-        <HomeBar />
-      </div>
-    </>
-  );
-}
-
-export function CreateRoom({ device }: { device: Device }) {
-  return (
-    <Root device={device} className="paged">
-      {device === "desktop" ? <CreateDesk /> : <CreateMob />}
     </Root>
   );
 }
 
-/* ---------- invite ---------- */
+/* ================================================================= invite */
 
-const SEATED = TABLE_TURN.seats.filter((s) => s.name).map((s) => s.name!).slice(0, 7);
+const LINK = OWNER.invite.replace("https://", "");
+const AT_TABLE = ["An", "Bình", "Chi", "Dũng", "Giang", "Hà", "Khoa"];
 
-function ShareSide({ compact }: { compact?: boolean }) {
+function Share({ d }: { d: Device }) {
+  const mob = d === "mobile";
   return (
-    <div className="share">
-      <div className="share-h">
-        <span className="eyebrow">Phía chủ phòng</span>
-        <h2 className="serif">Mời bạn vào {OWNER.room}</h2>
-      </div>
-      <div className="link-box">
-        <span className="mono">{OWNER.invite.replace("https://", "")}</span>
-      </div>
-      <div className="share-acts">
-        <Btn v="paper" s={compact ? "md" : "lg"} className="copied" icon={<CheckIcon size={16} strokeWidth={2.4} />}>
-          Đã chép link
+    <div className={`k-share ${mob ? "k-share-m" : ""}`}>
+      <Eyebrow tone="cyan">Người mời chia sẻ</Eyebrow>
+      <b className={mob ? "k-h3" : "k-h2"}>Gọi hội vào Bàn thứ Sáu</b>
+      <div className="k-linkrow">
+        <span className="k-linkbox">
+          <Link2 size={15} strokeWidth={2.2} />
+          <span>{LINK}</span>
+        </span>
+        <Btn tone="gold" size={mob ? "md" : "lg"} icon={<Copy size={16} strokeWidth={2.4} />}>
+          Chép
         </Btn>
-        <Btn v="line" s={compact ? "md" : "lg"} icon={<Share2 size={16} strokeWidth={1.9} />}>
-          Gửi…
-        </Btn>
+        <span className="k-copied">
+          <Check size={12} strokeWidth={3} /> Đã chép!
+        </span>
       </div>
-      <div className="qr-row">
-        <div className="qr-frame">
-          <Qr size={compact ? 112 : 168} seed={TOKEN} />
-        </div>
-        <div className="qr-txt">
-          <b>Quét bằng camera</b>
-          <small>Bạn bè ngồi cạnh mở điện thoại là vào được ngay.</small>
-          {!compact && (
-            <small className="warn-note">Ai có link đều vào được phòng riêng. Lỡ gửi nhầm thì đổi link trong Bảng chủ phòng.</small>
-          )}
-        </div>
+      <div className="k-share-row">
+        <span className="k-qrwrap">
+          <QR size={mob ? 112 : 176} seed={11} />
+          {!mob && <small>Quét bằng camera điện thoại</small>}
+        </span>
+        <span className="k-share-btns">
+          <Btn tone="glass" size={mob ? "md" : "lg"} block icon={<MessageCircle size={17} strokeWidth={2.1} />}>
+            Gửi tin nhắn
+          </Btn>
+          <Btn tone="glass" size={mob ? "md" : "lg"} block icon={<Mail size={17} strokeWidth={2.1} />}>
+            Gửi email
+          </Btn>
+          <Btn tone="glass" size={mob ? "md" : "lg"} block icon={<Share2 size={17} strokeWidth={2.1} />}>
+            Chia sẻ khác…
+          </Btn>
+        </span>
       </div>
+      {!mob && <p className="k-note">Ai có link đều vào được phòng riêng này. Muốn chặn link cũ? Đổi link trong Bảng chủ phòng.</p>}
     </div>
   );
 }
 
-function Facts() {
-  const r = ROOMS[0];
+function Ticket({ d }: { d: Device }) {
+  const mob = d === "mobile";
   return (
-    <div className="facts">
-      <span>
-        <small>Blind</small>
-        <b className="mono">{r.blinds}</b>
-      </span>
-      <span>
-        <small>Ghế</small>
-        <b className="mono">
-          {r.seated}/{r.seats}
-        </b>
-      </span>
-      <span>
-        <small>Suy nghĩ</small>
-        <b className="mono">20s</b>
-      </span>
-      <span>
-        <small>7-2</small>
-        <b className="mono">{r.bonus}</b>
-      </span>
-    </div>
-  );
-}
-
-function ReceiveSide({ compact }: { compact?: boolean }) {
-  return (
-    <div className="receive">
-      <Brand size="sm" />
-      <div className="inv-from">
-        <Avatar name="An" size={compact ? 36 : 44} />
+    <div className={`k-ticket ${mob ? "k-ticket-m" : ""}`}>
+      <Eyebrow>Người nhận mở link</Eyebrow>
+      <span className="k-ticket-from">
+        <Avatar name="An" size={mob ? 26 : 34} ring="gold" />
         <span>
           <b>An</b> mời bạn vào
         </span>
-      </div>
-      <h2 className="serif inv-room">{OWNER.room}</h2>
-      <span className="inv-sub">
-        <Lock size={13} strokeWidth={2} /> Phòng riêng · chip ảo, chủ phòng cấp khi bạn vào
       </span>
-      <Facts />
-      <div className="inv-people">
-        <span className="spec-avs">
-          {SEATED.map((n) => (
-            <Avatar key={n} name={n} size={compact ? 26 : 30} />
+      <b className="k-ticket-room">Bàn thứ Sáu</b>
+      <span className="k-ticket-facts">
+        <span>
+          Blind <b className="k-num">10/20</b>
+        </span>
+        <i />
+        <span>
+          <Clock size={13} strokeWidth={2.2} /> <b className="k-num">20</b> giây
+        </span>
+        <i />
+        <span>
+          7-2 thưởng <b className="k-num">50</b>
+        </span>
+      </span>
+      <MiniTable seats={9} seated={7} names={AT_TABLE} w={mob ? 168 : 280} label={<Mark size={mob ? 14 : 20} />} />
+      <span className="k-ticket-who">
+        <span className="k-ticket-av">
+          {AT_TABLE.map((n) => (
+            <Avatar key={n} name={n} size={mob ? 20 : 26} ring="none" />
           ))}
         </span>
-        <small>{SEATED.slice(0, 3).join(", ")} và {SEATED.length - 3} người khác đang ngồi</small>
-      </div>
-      <Btn v="red" s="xl" block>
+        <small>
+          <Users size={13} strokeWidth={2.2} /> 7 đang ở bàn · còn 2 ghế trống
+        </small>
+      </span>
+      <Btn tone="gold" size={mob ? "md" : "xl"} block iconRight={<ArrowRight size={18} strokeWidth={2.4} />}>
         Vào phòng
       </Btn>
-      <div className="inv-alt">
-        <span className="link">Đăng nhập</span> để giữ chip lâu dài, hoặc <span className="link">vào bằng khách</span>
-      </div>
+      {!mob && (
+        <small className="k-ticket-foot">
+          Vào bằng tài khoản đang đăng nhập · <u>Đổi tài khoản</u>
+        </small>
+      )}
     </div>
   );
 }
 
-export function Invite({ device }: { device: Device }) {
-  if (device === "desktop")
+function Invite({ device: d }: { device: Device }) {
+  if (d === "desktop")
     return (
-      <Root device="desktop" className="paged">
-        <TopNav active="rooms" />
-        <div className="page invite">
-          <div className="page-head">
-            <span className="eyebrow">Link mời</span>
-            <h1 className="serif">Gửi đi, và người nhận thấy gì</h1>
-          </div>
-          <div className="invite-grid">
-            <section className="panel">
-              <ShareSide />
-            </section>
-            <span className="step-arrow">
-              <Link2 size={20} strokeWidth={1.7} />
+      <Shell active={0}>
+        <header className="k-pagehead">
+          <span>
+            <span className="k-crumb">
+              Bàn thứ Sáu <ChevronRight size={14} strokeWidth={2.2} /> Link mời
             </span>
-            <section className="panel letter">
-              <span className="eyebrow">Phía người nhận · mở link</span>
-              <ReceiveSide />
-            </section>
-          </div>
+            <h1 className="k-h1">Link mời</h1>
+          </span>
+          <span className="k-col-note">Chỉ ai có link mới vào được phòng riêng</span>
+        </header>
+        <div className="k-invite">
+          <Glass className="k-card-p">
+            <Share d={d} />
+          </Glass>
+          <span className="k-invite-arrow">
+            <ArrowRight size={18} strokeWidth={2.4} />
+          </span>
+          <Glass strong className="k-card-p k-ticketcard">
+            <Ticket d={d} />
+          </Glass>
         </div>
-      </Root>
+      </Shell>
     );
   return (
-    <Root device="mobile" className="board-2">
-      <div className="half" style={{ left: 0, top: 0, width: 390, height: 421 }}>
-        <StatusBar />
-        <div className="m-share">
-          <ShareSide compact />
-        </div>
-        <VariantCap letter="A">Chủ phòng chia sẻ</VariantCap>
-      </div>
-      <div className="half-rule h" style={{ top: 421 }} />
-      <div className="half letter-bg" style={{ left: 0, top: 423, width: 390, height: 421 }}>
-        <div className="m-receive">
-          <ReceiveSide compact />
-        </div>
-        <VariantCap letter="B">Người nhận mở link</VariantCap>
+    <Root device={d}>
+      <MBar title="Link mời" sub="Bàn thứ Sáu · chỉ ai có link mới vào được" right={<IconBtn icon={<X size={18} strokeWidth={2.2} />} className="k-mbar-close" />} />
+      <div className="k-mpage k-minvite">
+        <Glass className="k-mcard">
+          <Share d={d} />
+        </Glass>
+        <Glass strong className="k-mcard k-ticketcard">
+          <Ticket d={d} />
+        </Glass>
       </div>
     </Root>
   );
+}
+
+/* ================================================================ router */
+
+export function renderRooms(screen: string, device: Device): ReactNode {
+  switch (screen) {
+    case "lobby":
+      return <Lobby device={device} />;
+    case "create-room":
+      return <CreateRoom device={device} />;
+    case "invite":
+      return <Invite device={device} />;
+    default:
+      return null;
+  }
 }

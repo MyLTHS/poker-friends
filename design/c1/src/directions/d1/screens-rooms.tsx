@@ -1,7 +1,7 @@
 import {
+  ArrowRight,
   Check,
   ChevronLeft,
-  Copy,
   Eye,
   Globe,
   Link2,
@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Search,
   Share2,
-  SlidersHorizontal,
   Users,
   X,
 } from "lucide-react";
@@ -30,13 +29,11 @@ import {
   HomeBar,
   IconBtn,
   MobileAppBar,
-  MobileTabBar,
+  MobileRail,
   QR,
   Root,
   Segmented,
-  StatusBar,
   Toggle,
-  Wordmark,
 } from "./kit";
 
 type Room = (typeof ROOMS)[number];
@@ -166,48 +163,45 @@ export function Lobby({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-app">
-        <StatusBar />
-        <header className="m-brandbar">
-          <Wordmark small />
-          <Avatar name="Lym" size={34} />
-        </header>
-        <div className="m-page m-lobby">
-          <div className="m-lobby-title">
-            <h1>Chọn một bàn</h1>
-            <small>
-              {ROOMS.length} phòng · {seatedTotal} người
-            </small>
-          </div>
-          <div className="m-search-row">
+        <MobileRail active="lobby" />
+        <main className="m-main m-lobby">
+          <section className="m-col">
+            <div className="m-title">
+              <h1>Chọn một bàn</h1>
+              <small>
+                {ROOMS.length} phòng · {seatedTotal} người · 3 đang xem
+              </small>
+            </div>
+            <div className="m-scroll room-list">
+              {ROOMS.map((r) => (
+                <RoomRow key={r.id} r={r} />
+              ))}
+            </div>
+          </section>
+          <aside className="m-col m-lobby-side">
+            <span className="eyebrow">Sảnh · tối thứ Sáu</span>
             <span className="input">
               <span className="input-icon">
                 <Search size={17} strokeWidth={1.9} />
               </span>
-              <span className="input-ph">Tìm phòng…</span>
+              <span className="input-ph">Tìm phòng hoặc chủ phòng…</span>
             </span>
-            <span className="square-btn">
-              <SlidersHorizontal size={18} strokeWidth={1.9} />
-            </span>
-          </div>
-          <Segmented items={["Tất cả", "Công khai", "Của tôi"]} active={0} className="seg-fill" />
-          <div className="paste-row">
-            <Link2 size={17} strokeWidth={1.9} />
-            <span>
-              <b>Có link mời?</b> Dán để vào thẳng bàn
-            </span>
-            <span className="paste-btn">Dán</span>
-          </div>
-          <div className="room-list">
-            {ROOMS.map((r) => (
-              <RoomRow key={r.id} r={r} />
-            ))}
-          </div>
-        </div>
-        <span className="fab">
-          <Plus size={20} strokeWidth={2.4} />
-          Tạo phòng
-        </span>
-        <MobileTabBar active="lobby" />
+            <Segmented items={["Tất cả", "Công khai", "Của tôi"]} active={0} className="seg-fill" />
+            <div className="paste-row">
+              <Link2 size={17} strokeWidth={1.9} />
+              <span>
+                <b>Có link mời?</b> Dán để vào thẳng bàn
+              </span>
+              <span className="paste-btn">Dán</span>
+            </div>
+            <p className="m-note">
+              <Lock size={12} /> Phòng riêng chỉ hiện với chủ phòng và người có link mời.
+            </p>
+            <Btn kind="primary" size="lg" block icon={<Plus size={18} strokeWidth={2.4} />}>
+              Tạo phòng
+            </Btn>
+          </aside>
+        </main>
         <HomeBar />
       </Root>
     );
@@ -291,8 +285,8 @@ function CreateFields({ device }: { device: Device }) {
   const d = device === "desktop";
   return (
     <div className="create-fields">
-      <Field className="span-2" label="Tên phòng" value="Bàn thứ Sáu" state="focus" hint={d ? "Bạn bè thấy tên này trong sảnh và trong link mời." : undefined} />
-      <div className="field">
+      <Field className="span-2 f-name" label="Tên phòng" value="Bàn thứ Sáu" state="focus" hint={d ? "Bạn bè thấy tên này trong sảnh và trong link mời." : undefined} />
+      <div className="field f-blind">
         <span className="field-label">Blind nhỏ / lớn</span>
         <span className="blind-pair">
           <span className="input">
@@ -307,18 +301,18 @@ function CreateFields({ device }: { device: Device }) {
         </span>
         {d && <span className="field-hint">Gợi ý cấp mỗi người 100 blind lớn = 2.000 chip.</span>}
       </div>
-      <div className="field">
+      <div className="field f-seats">
         <span className="field-label">
           Số ghế <em>2 ghế = đấu tay đôi</em>
         </span>
         <SeatPicker value={9} />
       </div>
-      <div className="field">
+      <div className="field f-secs">
         <span className="field-label">Giây suy nghĩ mỗi lượt</span>
         <Segmented items={["15", "20", "30", "45", "60"]} active={1} className="seg-fill" />
         {d && <span className="field-hint">Hết giờ: tự check nếu được, không thì bỏ bài. Không có thời gian cộng.</span>}
       </div>
-      <div className="field seven-field span-2">
+      <div className="field seven-field span-2 f-seven">
         <span className="seven-head">
           <span>
             <b>Thưởng 7-2</b>
@@ -339,7 +333,7 @@ function CreateFields({ device }: { device: Device }) {
           </span>
         </span>
       </div>
-      <div className="field">
+      <div className="field f-vis">
         <span className="field-label">Ai thấy phòng này</span>
         <span className="vis-pick">
           <span className="vis">
@@ -389,30 +383,31 @@ export function CreateRoom({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-app">
-        <StatusBar />
         <MobileAppBar
           title="Tạo phòng"
+          sub="Bạn là chủ phòng"
           left={
             <IconBtn>
               <X size={21} />
             </IconBtn>
           }
-          right={<span className="link is-muted">Mặc định</span>}
+          right={
+            <>
+              <span className="link is-muted">Mặc định</span>
+              <Btn kind="primary">Tạo phòng & lấy link mời</Btn>
+            </>
+          }
         />
-        <div className="m-preview">
-          <MiniTable seats={9} seated={1} w={84} h={52} dealer />
-          <span>
-            <b>Bàn thứ Sáu</b>
-            <small>10/20 · 9 ghế · 20s · 7-2: 50 · Riêng</small>
-          </span>
-        </div>
-        <div className="m-page m-create">
+        <div className="m-create">
           <CreateFields device="mobile" />
-        </div>
-        <div className="m-sticky">
-          <Btn kind="primary" size="lg" block>
-            Tạo phòng & lấy link mời
-          </Btn>
+          <div className="m-preview">
+            <MiniTable seats={9} seated={1} w={84} h={52} dealer />
+            <span>
+              <small className="eyebrow">Xem trước</small>
+              <b>Bàn thứ Sáu</b>
+              <small>10/20 · 9 ghế · 20s · 7-2: 50 · Riêng</small>
+            </span>
+          </div>
         </div>
         <HomeBar />
       </Root>
@@ -480,7 +475,7 @@ function ShareCard({ device }: { device: Device }) {
             <span>{OWNER.invite.replace("https://", "")}</span>
           </span>
           <span className="share-actions">
-            <Btn kind="primary" size={d ? "md" : "md"} icon={<Check size={16} strokeWidth={2.6} />}>
+            <Btn kind="primary" size="md" icon={<Check size={16} strokeWidth={2.6} />}>
               Đã chép link
             </Btn>
             {d && (
@@ -489,20 +484,35 @@ function ShareCard({ device }: { device: Device }) {
               </Btn>
             )}
           </span>
-          {d && (
-            <span className="share-note">
-              <RefreshCw size={14} /> Lỡ gửi nhầm? Đổi link trong Bảng chủ phòng — link cũ hết hiệu lực ngay.
-            </span>
-          )}
+          <span className="share-note">
+            <RefreshCw size={14} /> Lỡ gửi nhầm? Đổi link trong Bảng chủ phòng — link cũ hết hiệu lực ngay.
+          </span>
         </div>
         <span className="qr-wrap">
-          <QR size={d ? 168 : 92} />
+          <QR size={d ? 168 : 112} />
           <small>
             <QrCode size={12} /> Quét để vào
           </small>
         </span>
       </div>
     </div>
+  );
+}
+
+/** Red wax seal pressed into the invitation's corner. */
+function SuitSeal() {
+  return (
+    <svg viewBox="0 0 48 48" width="100%" height="100%">
+      <path
+        d="M24 2.5c2.6 0 3.6 2.4 6 3s4.6-.9 6.5.8.6 4.2 1.9 6.3 4 2.6 4.4 5.2-1.9 4-1.9 6.4 2.3 3.9 1.6 6.4-3.4 2.7-4.9 4.8-.5 4.7-2.7 6.2-4.5-.1-7 .9-3.4 3.4-6 3.4-3.5-2.4-6-3.4-4.9.6-7-.9-1.2-4.1-2.7-6.2-4.2-2.3-4.9-4.8 1.6-4 1.6-6.4-2.3-3.9-1.9-6.4 3.1-3.1 4.4-5.2-.4-4.6 1.9-6.3 4.1-.2 6.5-.8 3.4-3 6-3z"
+        className="seal-wax"
+      />
+      <circle cx="24" cy="24" r="13.5" className="seal-ring" />
+      <path
+        d="M24 15.2c-1.7 2.5-5.2 4.4-5.2 7.1 0 1.6 1.2 2.7 2.7 2.7.9 0 1.6-.4 2.1-1-.2 1.2-.7 2-1.5 2.7h3.8c-.8-.7-1.3-1.5-1.5-2.7.5.6 1.2 1 2.1 1 1.5 0 2.7-1.1 2.7-2.7 0-2.7-3.5-4.6-5.2-7.1z"
+        className="seal-mark"
+      />
+    </svg>
   );
 }
 
@@ -514,6 +524,9 @@ function Invitation({ device }: { device: Device }) {
       <span className="inv-corner tr" />
       <span className="inv-corner bl" />
       <span className="inv-corner br" />
+      <span className="inv-seal" aria-hidden>
+        <SuitSeal />
+      </span>
       <Crest size={d ? 52 : 40} />
       <span className="inv-from">
         <Avatar name="An" size={d ? 26 : 22} />
@@ -539,14 +552,12 @@ function Invitation({ device }: { device: Device }) {
         <i className="dot is-live" /> Đang chơi ván #37 · 3 người xem
       </span>
       <span className="inv-actions">
-        <Btn kind="felt" size="lg" block={!d} icon={<Users size={17} />}>
+        <Btn kind="felt" size="lg" icon={<Users size={17} />}>
           Vào phòng
         </Btn>
-        {d && (
-          <Btn kind="paper" size="lg" icon={<Eye size={17} />}>
-            Chỉ xem
-          </Btn>
-        )}
+        <Btn kind="paper" size="lg" icon={<Eye size={17} />}>
+          Chỉ xem
+        </Btn>
       </span>
       <small className="inv-who">
         Bạn đang đăng nhập là <b>Lym</b> · <span>đổi tài khoản</span>
@@ -559,26 +570,24 @@ export function Invite({ device }: { device: Device }) {
   if (device === "mobile") {
     return (
       <Root device="mobile" className="bg-app">
-        <StatusBar />
         <MobileAppBar
           title="Link mời"
+          sub="Một link cho cả hội"
           left={
             <IconBtn>
               <ChevronLeft size={22} />
             </IconBtn>
           }
-          right={
-            <IconBtn>
-              <Copy size={19} />
-            </IconBtn>
-          }
         />
-        <div className="m-page m-invite">
+        <div className="m-invite">
           <ShareCard device="mobile" />
           <div className="m-connector">
             <MessageCircle size={14} strokeWidth={2.2} />
             Người nhận mở link sẽ thấy
+            <ArrowRight size={14} strokeWidth={2.2} />
           </div>
+        </div>
+        <div className="m-invite-stage">
           <Invitation device="mobile" />
         </div>
         <HomeBar />

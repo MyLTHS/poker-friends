@@ -4,19 +4,20 @@ import { createRoot } from "react-dom/client";
 import d1 from "./directions/d1";
 import d2 from "./directions/d2";
 import d3 from "./directions/d3";
+import d4 from "./directions/d4";
 import type { Direction } from "./shared/direction";
 import { Frame } from "./shared/Frame";
 import { FRAME, SCREENS, type Device, type ScreenId } from "./shared/screens";
 import "./gallery.css";
 
-const DIRECTIONS: Direction[] = [d1, d2, d3];
+const DIRECTIONS: Direction[] = [d1, d2, d3, d4];
 const byId = (id: string) => DIRECTIONS.find((d) => d.id === id);
 
 /**
  * Routes (hash, so the built files work from any folder):
- *   #/                          compare the three directions
+ *   #/                          compare the four directions
  *   #/d1                        every screen of one direction, small
- *   #/compare/<screen>          one screen in all three directions
+ *   #/compare/<screen>          one screen in all four directions
  *   #/d1/<screen>/<device>      ONE artboard at its exact size, nothing else (for Figma import)
  */
 function useRoute() {
@@ -65,11 +66,11 @@ function Home() {
   return (
     <main className="gallery">
       <header>
-        <p className="eyebrow">POKER FRIENDS · C1 · 3 HƯỚNG THIẾT KẾ</p>
+        <p className="eyebrow">POKER FRIENDS · C1 · 4 HƯỚNG THIẾT KẾ</p>
         <h1>Chọn một hướng</h1>
         <p className="lead">
-          Ba hướng vẽ cùng {SCREENS.length} màn với cùng dữ liệu, mỗi màn có bản desktop 1440×900 và điện thoại dọc
-          390×844. Bấm vào một hướng để xem hết các màn; "So từng màn" để đặt ba hướng cạnh nhau. Mỗi khung có link
+          Bốn hướng vẽ cùng {SCREENS.length} màn với cùng dữ liệu, mỗi màn có bản desktop 1440×900 và điện thoại
+          xoay ngang 844×390. Bấm vào một hướng để xem hết các màn; "So từng màn" để đặt bốn hướng cạnh nhau. Mỗi khung có link
           riêng đúng kích thước để đưa vào Figma (xem docs/c1-thiet-ke.md).
         </p>
       </header>
@@ -77,10 +78,10 @@ function Home() {
         {DIRECTIONS.map((d) => (
           <article key={d.id} className="direction-card">
             <a href={`#/${d.id}`} className="preview">
-              <Frame device="desktop" scale={0.27}>
+              <Frame device="desktop" scale={0.46}>
                 {d.render("table-turn", "desktop")}
               </Frame>
-              <Frame device="mobile" scale={0.27}>
+              <Frame device="mobile" scale={0.46}>
                 {d.render("table-turn", "mobile")}
               </Frame>
             </a>
@@ -115,7 +116,7 @@ function DirectionPage({ direction }: { direction: Direction }) {
     <main className="gallery">
       <header>
         <p className="eyebrow">
-          <a href="#/">← Ba hướng</a>
+          <a href="#/">← Bốn hướng</a>
         </p>
         <h1>{direction.name}</h1>
         <p className="lead">{direction.description}</p>
@@ -130,7 +131,7 @@ function DirectionPage({ direction }: { direction: Direction }) {
           <div className="frames">
             {(["desktop", "mobile"] as Device[]).map((device) => (
               <a key={device} href={`#/${direction.id}/${s.id}/${device}`} title="Mở khung đúng kích thước">
-                <Frame device={device} scale={device === "desktop" ? 0.5 : 0.62}>
+                <Frame device={device} scale={device === "desktop" ? 0.5 : 0.75}>
                   {direction.render(s.id, device)}
                 </Frame>
                 <small>{FRAME[device].label} ↗</small>
@@ -149,7 +150,7 @@ function ComparePage({ screen }: { screen: ScreenId }) {
     <main className="gallery">
       <header>
         <p className="eyebrow">
-          <a href="#/">← Ba hướng</a>
+          <a href="#/">← Bốn hướng</a>
         </p>
         <h1>{spec?.title}</h1>
         <p className="lead">{spec?.brief}</p>
@@ -160,7 +161,7 @@ function ComparePage({ screen }: { screen: ScreenId }) {
           <div className="compare">
             {DIRECTIONS.map((d) => (
               <a key={d.id} href={`#/${d.id}/${screen}/${device}`}>
-                <Frame device={device} scale={device === "desktop" ? 0.31 : 0.5}>
+                <Frame device={device} scale={device === "desktop" ? 0.24 : 0.4}>
                   {d.render(screen, device)}
                 </Frame>
                 <small>{d.name} ↗</small>

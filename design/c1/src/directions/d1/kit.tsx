@@ -1,16 +1,7 @@
-// Primitives for direction d1 "Nỉ & Đồng thau": frame root, mobile chrome, cards, chips,
+// Primitives for direction d1 "Nỉ & Đồng thau": frame root, phone chrome, cards, chips,
 // avatars, buttons, fields, navigation. Everything is static (no state, no effects).
 import type { CSSProperties, ReactNode } from "react";
-import {
-  BatteryFull,
-  Bell,
-  ChevronDown,
-  History,
-  LayoutGrid,
-  Signal,
-  UserRound,
-  Wifi,
-} from "lucide-react";
+import { Bell, ChevronDown, History, LayoutGrid, UserRound } from "lucide-react";
 
 import { isRed, type Card, type Suit } from "../../shared/data";
 import { FRAME, type Device } from "../../shared/screens";
@@ -36,20 +27,7 @@ export function Root({ device, className = "", children }: { device: Device; cla
   );
 }
 
-/** iPhone-style status bar for the 390×844 frames. */
-export function StatusBar({ dim = false }: { dim?: boolean }) {
-  return (
-    <div className={`statusbar${dim ? " is-dim" : ""}`}>
-      <span className="sb-time">21:06</span>
-      <span className="sb-icons">
-        <Signal size={15} strokeWidth={2.4} />
-        <Wifi size={15} strokeWidth={2.4} />
-        <BatteryFull size={20} strokeWidth={1.8} />
-      </span>
-    </div>
-  );
-}
-
+/** Home indicator of the landscape phone (iOS hides the status bar in landscape). */
 export function HomeBar() {
   return <div className="homebar" />;
 }
@@ -79,6 +57,10 @@ export function SuitIcon({ suit, className = "" }: { suit: Suit; className?: str
   );
 }
 
+const COURT = ["K", "Q", "J"];
+
+/** A printed card: corner index, a large centre pip (or a framed court panel for K Q J); from
+ *  52px wide it also gets the mirrored bottom index of a real card. Backs carry the club crest. */
 export function PlayingCard({
   card,
   w = 44,
@@ -93,12 +75,27 @@ export function PlayingCard({
   style?: CSSProperties;
 }) {
   const base: CSSProperties = { ...cssVars({ "--w": `${w}px` }), transform: rotate ? `rotate(${rotate}deg)` : undefined, ...style };
-  if (card === "back") return <div className={`pc pc-back ${className}`} style={base} />;
+  const size = w >= 52 ? "pc-lg" : w < 28 ? "pc-xs" : "";
+  if (card === "back") return <div className={`pc pc-back ${size} ${className}`} style={base} />;
+  const index = (flip: boolean) => (
+    <span className={`pc-idx${flip ? " is-flip" : ""}`}>
+      <b>{card.rank}</b>
+      <SuitIcon suit={card.suit} />
+    </span>
+  );
   return (
-    <div className={`pc ${isRed(card) ? "pc-red" : "pc-black"} ${card.rank === "10" ? "pc-ten" : ""} ${className}`} style={base}>
-      <span className="pc-rank">{card.rank}</span>
-      <SuitIcon suit={card.suit} className="pc-s1" />
-      <SuitIcon suit={card.suit} className="pc-s2" />
+    <div className={`pc ${isRed(card) ? "pc-red" : "pc-black"} ${card.rank === "10" ? "pc-ten" : ""} ${size} ${className}`} style={base}>
+      {index(false)}
+      {COURT.includes(card.rank) ? (
+        <span className="pc-court">
+          <SuitIcon suit={card.suit} />
+          <b>{card.rank}</b>
+          <SuitIcon suit={card.suit} />
+        </span>
+      ) : (
+        <SuitIcon suit={card.suit} className="pc-pip" />
+      )}
+      {w >= 52 && index(true)}
     </div>
   );
 }
@@ -172,7 +169,7 @@ export function Avatar({ name, size = 40, className = "" }: { name: string; size
   return (
     <span
       className={`av ${className}`}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.5), background: AVATAR_TONES[hash(name) % AVATAR_TONES.length] }}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.5), backgroundColor: AVATAR_TONES[hash(name) % AVATAR_TONES.length] }}
     >
       {name[0]}
     </span>
@@ -376,33 +373,42 @@ export function DesktopNav({ active }: { active?: NavKey }) {
   );
 }
 
-export function MobileTabBar({ active }: { active?: NavKey }) {
+/** Landscape phone: a narrow rail on the left (inside the 44px notch inset) for the three tabs. */
+export function MobileRail({ active }: { active?: NavKey }) {
   const items: { key: NavKey; label: string; icon: ReactNode }[] = [
-    { key: "lobby", label: "Sảnh", icon: <LayoutGrid size={22} strokeWidth={1.7} /> },
-    { key: "history", label: "Lịch sử", icon: <History size={22} strokeWidth={1.7} /> },
-    { key: "profile", label: "Hồ sơ", icon: <UserRound size={22} strokeWidth={1.7} /> },
+    { key: "lobby", label: "Sảnh", icon: <LayoutGrid size={21} strokeWidth={1.7} /> },
+    { key: "history", label: "Lịch sử", icon: <History size={21} strokeWidth={1.7} /> },
+    { key: "profile", label: "Hồ sơ", icon: <UserRound size={21} strokeWidth={1.7} /> },
   ];
   return (
-    <nav className="tabbar">
-      {items.map((it) => (
-        <span key={it.key} className={`tab${active === it.key ? " is-active" : ""}`}>
-          {it.icon}
-          <span>{it.label}</span>
-        </span>
-      ))}
+    <nav className="navrail">
+      <Crest size={36} />
+      <span className="navrail-tabs">
+        {items.map((it) => (
+          <span key={it.key} className={`navrail-tab${active === it.key ? " is-active" : ""}`}>
+            {it.icon}
+            <span>{it.label}</span>
+          </span>
+        ))}
+      </span>
+      <IconBtn label="Thông báo" badge={1}>
+        <Bell size={19} strokeWidth={1.8} />
+      </IconBtn>
+      <Avatar name="Lym" size={34} />
     </nav>
   );
 }
 
+/** Landscape phone: a compact top bar (48px) for pages below a tab: back, title, actions. */
 export function MobileAppBar({ title, left, right, sub }: { title: ReactNode; left?: ReactNode; right?: ReactNode; sub?: ReactNode }) {
   return (
     <header className="appbar">
-      <span className="appbar-side">{left}</span>
+      {left}
       <span className="appbar-title">
         <b>{title}</b>
         {sub && <small>{sub}</small>}
       </span>
-      <span className="appbar-side is-right">{right}</span>
+      {right && <span className="appbar-right">{right}</span>}
     </header>
   );
 }

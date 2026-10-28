@@ -1,11 +1,12 @@
-// The 14 screens every design direction draws, each at both sizes. Same list, same data:
+// The 17 screens every design direction draws, each at both sizes. Same list, same data:
 // only the look and the layout differ between directions, so Lym compares like with like.
+// The phone is landscape only (Lym, 27/10/2026): no portrait layouts.
 
 export type Device = "desktop" | "mobile";
 
 export const FRAME: Record<Device, { width: number; height: number; label: string }> = {
   desktop: { width: 1440, height: 900, label: "Desktop 1440×900" },
-  mobile: { width: 390, height: 844, label: "Điện thoại dọc 390×844" },
+  mobile: { width: 844, height: 390, label: "Điện thoại ngang 844×390" },
 };
 
 export type ScreenId =
@@ -46,7 +47,7 @@ export const SCREENS: ScreenSpec[] = [
     id: "forgot",
     group: "Tài khoản",
     title: "Quên / đặt lại mật khẩu",
-    brief: "Ô email + nút gửi link; bên cạnh (hoặc bên dưới trên mobile) là màn đặt mật khẩu mới từ link.",
+    brief: "Ô email + nút gửi link; bên cạnh là màn đặt mật khẩu mới từ link (trên điện thoại ngang: hai khung cạnh nhau hoặc hai bước).",
   },
   {
     id: "upgrade",
@@ -112,7 +113,7 @@ export const SCREENS: ScreenSpec[] = [
     id: "chat",
     group: "Xã hội",
     title: "Chat + người xem",
-    brief: "Chat bên bàn (desktop: cột cạnh bàn; mobile: tấm kéo lên), emoji nhanh, danh sách người đang xem.",
+    brief: "Chat bên bàn (desktop: cột cạnh bàn; điện thoại ngang: ngăn trượt từ cạnh phải, bàn vẫn thấy), emoji nhanh, danh sách người đang xem.",
   },
   {
     id: "history",

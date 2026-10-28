@@ -1,6 +1,6 @@
 // Kẹo Đêm (d3) — rooms: lobby, create room, invite link.
 import type { ReactNode } from "react";
-import { Check, Copy, Link2, Mail, MessageCircle, Minus, Plus, Search, Share2, X } from "lucide-react";
+import { Check, Copy, Link2, Mail, MessageCircle, Minus, Plus, Search, Share2 } from "lucide-react";
 
 import { OWNER, ROOMS } from "../../../shared/data";
 import type { Device } from "../../../shared/screens";
@@ -11,15 +11,12 @@ import {
   Eyebrow,
   Field,
   HomeBar,
-  IconBtn,
-  Logo,
   MHead,
+  MRail,
   QR,
   Root,
   Seg,
-  StatusBar,
   Sticker,
-  TabBar,
   Toggle,
 } from "../ui";
 
@@ -66,38 +63,35 @@ function DeskLobby() {
 function MobLobby() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <div className="mlobby-head">
-        <Logo size={20} />
-        <span className="mlobby-me">
-          <Avatar name="Lym" size={36} />
-        </span>
-      </div>
-      <div className="mpage mlobby">
-        <div className="mlobby-hi">
+      <MRail active={0} />
+      <div className="mpage mpage-rail mlobby">
+        <section className="mlobby-side">
           <h1 className="h-m">Chào Lym 👋</h1>
-          <Btn tone="pink" size="sm" icon={<Plus size={17} strokeWidth={3.4} />}>
-            Tạo phòng
-          </Btn>
-        </div>
-        <div className="m-search">
+          <p className="lead">Tối nay chơi bàn nào? Có {ROOMS.length} phòng đang mở cho bạn.</p>
           <div className="searchbox">
             <Search size={18} strokeWidth={3} />
-            <span>Tìm phòng…</span>
+            <span>Tìm phòng, chủ phòng…</span>
           </div>
-          <span className="m-paste">
+          <div className="pastebox">
             <Link2 size={18} strokeWidth={3} />
-            Dán link
-          </span>
-        </div>
-        <Seg items={["Tất cả 4", "Của tôi 1", "Công khai 3"]} active={0} tone="lime" className="seg-m" />
-        <div className="mlobby-list">
-          {ROOMS.map((r, i) => (
-            <Ticket key={r.id} room={r} i={i} mobile />
-          ))}
-        </div>
+            <span>Dán link mời</span>
+            <Btn tone="sky" size="sm">
+              Vào
+            </Btn>
+          </div>
+          <Btn tone="pink" size="lg" block icon={<Plus size={20} strokeWidth={3.4} />}>
+            Tạo phòng
+          </Btn>
+        </section>
+        <section className="mlobby-main">
+          <Seg items={["Tất cả 4", "Của tôi 1", "Công khai 3"]} active={0} tone="lime" className="seg-m" />
+          <div className="mscroll">
+            {ROOMS.map((r, i) => (
+              <Ticket key={r.id} room={r} i={i} mobile />
+            ))}
+          </div>
+        </section>
       </div>
-      <TabBar active={0} />
       <HomeBar />
     </Root>
   );
@@ -141,13 +135,13 @@ function Ctl({ label, children, hint, wide }: { label: string; children: ReactNo
   );
 }
 
-function SevenRow({ mobile }: { mobile?: boolean }) {
+function SevenRow() {
   return (
-    <div className={`seven-row ${mobile ? "seven-row-m" : ""}`}>
+    <div className="seven-row">
       <span className="seven-ic">7·2</span>
       <span className="seven-t">
         <b>Thưởng 7-2</b>
-        <small>{mobile ? "mỗi người trả" : "Ai ăn pot bằng 7-2 khi mọi người bỏ bài thì mỗi người trả"}</small>
+        <small>Ai ăn pot bằng 7-2 khi mọi người bỏ bài thì mỗi người trả</small>
       </span>
       <Stepper value="50" />
       <Toggle on />
@@ -245,60 +239,63 @@ function DeskCreate() {
 function MobCreate() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <MHead
-        title="Tạo phòng"
-        back={false}
-        right={
-          <IconBtn size={42}>
-            <X size={20} strokeWidth={3} />
-          </IconBtn>
-        }
-      />
       <div className="mpage mcreate">
-        <div className="mprev">
+        <section className="mcreate-form">
+          <MHead title="Tạo phòng mới" sub="Bạn sẽ là chủ phòng" close />
+          <div className="mgrid2">
+            <Field label="Tên phòng" value="Bàn thứ Sáu" state="focus" />
+            <Ctl label="Ai được vào">
+              <Seg items={["🌐 Công khai", "🔒 Riêng"]} active={1} tone="lime" className="seg-fill" />
+            </Ctl>
+            <Ctl label="Blind nhỏ">
+              <Stepper value="10" />
+            </Ctl>
+            <Ctl label="Blind lớn">
+              <Stepper value="20" />
+            </Ctl>
+          </div>
+          <Ctl label="Số ghế (2–9)" wide>
+            <SeatChips />
+          </Ctl>
+          <div className="mgrid2">
+            <Ctl label="Giây suy nghĩ mỗi lượt">
+              <Seg items={["10", "15", "20", "30", "45"]} active={2} tone="sky" className="seg-num seg-fill" />
+            </Ctl>
+            <Ctl label="Thưởng 7-2 · mỗi người trả">
+              <span className="m72">
+                <span className="seven-ic">7·2</span>
+                <Stepper value="50" />
+                <Toggle on />
+              </span>
+            </Ctl>
+          </div>
+        </section>
+        <section className="card mcard mcreate-prev">
+          <Eyebrow tone="lime">Xem trước</Eyebrow>
           <PreviewTable small />
-          <div className="mprev-tags">
+          <div className="preview-tags">
             <Sticker tone="white" tilt={-3}>
-              10/20
+              Blind 10/20
             </Sticker>
             <Sticker tone="sky" tilt={2}>
               9 ghế
             </Sticker>
             <Sticker tone="lime" tilt={-2}>
-              20s
+              20 giây / lượt
             </Sticker>
-            <Sticker tone="sun" tilt={3}>
+            <Sticker tone="pink" tilt={3}>
+              7-2 · mỗi người 50
+            </Sticker>
+            <Sticker tone="sun" tilt={-4}>
               🔒 Riêng
             </Sticker>
           </div>
-        </div>
-        <Field label="Tên phòng" value="Bàn thứ Sáu" state="focus" />
-        <div className="ctl-row">
-          <Ctl label="Blind nhỏ">
-            <Stepper value="10" />
-          </Ctl>
-          <Ctl label="Blind lớn">
-            <Stepper value="20" />
-          </Ctl>
-        </div>
-        <Ctl label="Số ghế" wide>
-          <SeatChips />
-        </Ctl>
-        <Ctl label="Giây suy nghĩ" wide>
-          <Seg items={["10", "15", "20", "30", "45"]} active={2} tone="sky" className="seg-num seg-fill" />
-        </Ctl>
-        <SevenRow mobile />
-        <Ctl label="Ai được vào" wide>
-          <Seg items={["🌐 Công khai", "🔒 Riêng"]} active={1} tone="lime" className="seg-fill" />
-        </Ctl>
+          <Btn tone="pink" size="xl" block icon={<Check size={22} strokeWidth={3.4} />}>
+            Tạo phòng
+          </Btn>
+        </section>
       </div>
-      <div className="mfoot">
-        <Btn tone="pink" size="xl" block icon={<Check size={22} strokeWidth={3.4} />}>
-          Tạo phòng
-        </Btn>
-        <HomeBar />
-      </div>
+      <HomeBar />
     </Root>
   );
 }
@@ -414,10 +411,11 @@ function DeskInvite() {
 function MobInvite() {
   return (
     <Root device="mobile" className="bg-party">
-      <StatusBar />
-      <MHead title="Link mời" sub="Bàn thứ Sáu" />
-      <div className="mpage minvite">
-        <ShareCard mobile />
+      <div className="mpage mpair minvite">
+        <section className="mcol">
+          <MHead title="Link mời" sub="Bàn thứ Sáu · chỉ ai có link mới vào được" />
+          <ShareCard mobile />
+        </section>
         <InviteTicket mobile />
       </div>
       <HomeBar />

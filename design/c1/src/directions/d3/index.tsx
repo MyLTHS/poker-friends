@@ -24,7 +24,7 @@ const direction: Direction = {
     { name: "Hướng dương", value: "#FFC93C" },
     { name: "Bạc hà (mặt bàn)", value: "#17B998" },
   ],
-  fonts: ["Baloo 2", "Nunito"],
+  fonts: ["M PLUS Rounded 1c", "Plus Jakarta Sans"],
   render: (screen, device) => {
     const node = renderPlay(screen, device) ?? renderRooms(screen, device) ?? renderAccount(screen, device) ?? renderSocial(screen, device);
     if (node) return node;

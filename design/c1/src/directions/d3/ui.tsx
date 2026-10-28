@@ -1,6 +1,6 @@
 // Kẹo Đêm (d3) — primitives: cards, chips, blob avatars, chunky buttons, stickers, fields.
 import type { CSSProperties, ReactNode } from "react";
-import { BatteryFull, ChevronLeft, House, History, Signal, User, Wifi } from "lucide-react";
+import { Bell, ChevronLeft, House, History, User, X } from "lucide-react";
 
 import type { Card, Suit } from "../../shared/data";
 import { FRAME, type Device } from "../../shared/screens";
@@ -122,7 +122,11 @@ export function ChipStack({ size = 18 }: { size?: number }) {
 export function ChipPill({ n, tone = "sun", label, className = "" }: { n: number; tone?: Tone; label?: string; className?: string }) {
   return (
     <span className={`cpill ${className}`}>
-      <Token tone={tone} size={16} />
+      <span className="cpill-stack">
+        <Token tone={tone} size={16} />
+        <Token tone={tone} size={16} />
+        <Token tone={tone} size={16} />
+      </span>
       {label && <span className="cpill-l">{label}</span>}
       <b className="num">{fmt(n)}</b>
     </span>
@@ -150,6 +154,45 @@ export function TimerRing({ size, pct, tone = "lime" }: { size: number; pct: num
   );
 }
 
+const INK = "#16123a";
+
+/** A tiny illustrated face. `mood` picks the eyes and mouth; "sleep" is for folded / away players. */
+function Face({ mood }: { mood: number | "sleep" }) {
+  const sleep = mood === "sleep";
+  const m = sleep ? 0 : mood;
+  const eye = (cx: number, wink?: boolean) =>
+    sleep ? (
+      <path d={`M${cx - 3.2} 18.5 q3.2 2.8 6.4 0`} stroke={INK} strokeWidth="2.4" fill="none" strokeLinecap="round" />
+    ) : wink || m === 1 ? (
+      <path d={`M${cx - 3.2} 19 q3.2 -4 6.4 0`} stroke={INK} strokeWidth="2.6" fill="none" strokeLinecap="round" />
+    ) : (
+      <g>
+        <ellipse cx={cx} cy="18" rx="2.7" ry="3.5" fill={INK} />
+        <circle cx={cx + 0.9} cy="16.6" r="1" fill="#fff" />
+      </g>
+    );
+  return (
+    <svg className="av-face" viewBox="0 0 40 40" aria-hidden>
+      <ellipse cx="8.5" cy="24.5" rx="4" ry="2.6" fill="#ff5fa8" opacity="0.42" />
+      <ellipse cx="31.5" cy="24.5" rx="4" ry="2.6" fill="#ff5fa8" opacity="0.42" />
+      {eye(13.5)}
+      {eye(26.5, m === 3)}
+      {sleep ? (
+        <path d="M17 27.5 h6" stroke={INK} strokeWidth="2.4" strokeLinecap="round" />
+      ) : m === 1 ? (
+        <g>
+          <path d="M14 24.5 h12 q0 6.5 -6 6.5 q-6 0 -6 -6.5z" fill={INK} />
+          <path d="M16.6 28.6 q3.4 -2.2 6.8 0 q-1.4 2.2 -3.4 2.2 q-2 0 -3.4 -2.2z" fill="#ff6f91" />
+        </g>
+      ) : m === 2 ? (
+        <ellipse cx="20" cy="27.2" rx="2.6" ry="3" fill={INK} />
+      ) : (
+        <path d="M15 25.2 q5 5 10 0" stroke={INK} strokeWidth="2.6" fill="none" strokeLinecap="round" />
+      )}
+    </svg>
+  );
+}
+
 export function Avatar({
   name,
   size = 48,
@@ -165,7 +208,8 @@ export function Avatar({
   badge?: ReactNode;
   className?: string;
 }) {
-  const blob = BLOBS[(name.charCodeAt(0) + name.length) % BLOBS.length];
+  const h = name.charCodeAt(0) + name.length;
+  const blob = BLOBS[h % BLOBS.length];
   return (
     <span className={`av ${dim ? "av-dim" : ""} ${className}`} style={{ width: size, height: size }}>
       {ring && (
@@ -174,7 +218,7 @@ export function Avatar({
         </span>
       )}
       <span className="av-blob" style={{ background: colorOf(name), borderRadius: blob, fontSize: Math.round(size * 0.48) }}>
-        {initial(name)}
+        {size >= 34 ? <Face mood={dim ? "sleep" : (h * 7) % 4} /> : <span className="av-ini">{initial(name)}</span>}
       </span>
       {badge}
     </span>
@@ -380,67 +424,59 @@ export function QR({ size = 160, seed = 7 }: { size?: number; seed?: number }) {
   );
 }
 
-/* --------------------------------------------------------- mobile chrome */
+/* ---------------------------------------------------- phone chrome (landscape) */
 
-export function StatusBar({ dark }: { dark?: boolean }) {
-  return (
-    <div className={`sbar ${dark ? "sbar-dark" : ""}`}>
-      <b>21:06</b>
-      <span>
-        <Signal size={15} strokeWidth={2.6} />
-        <Wifi size={15} strokeWidth={2.6} />
-        <BatteryFull size={20} strokeWidth={2.2} />
-      </span>
-    </div>
-  );
-}
-
+/** iOS home indicator: landscape hides the status bar but keeps this bar at the bottom. */
 export const HomeBar = () => <div className="homebar" />;
 
+/** Page head for phone sub-pages: back (or close) button, title and one line of context. */
 export function MHead({
   title,
   sub,
   right,
-  back = true,
-  center,
+  close,
 }: {
   title: ReactNode;
   sub?: ReactNode;
   right?: ReactNode;
-  back?: boolean;
-  center?: boolean;
+  close?: boolean;
 }) {
   return (
-    <div className={`mhead ${center ? "mhead-center" : ""}`}>
-      {back && (
-        <IconBtn size={42}>
-          <ChevronLeft size={22} strokeWidth={3} />
-        </IconBtn>
-      )}
+    <div className="mhead">
+      <IconBtn size={44}>{close ? <X size={20} strokeWidth={3} /> : <ChevronLeft size={22} strokeWidth={3} />}</IconBtn>
       <div className="mhead-t">
         <b>{title}</b>
         {sub && <span>{sub}</span>}
       </div>
-      <div className="mhead-r">{right}</div>
+      {right && <div className="mhead-r">{right}</div>}
     </div>
   );
 }
 
-export function TabBar({ active }: { active: 0 | 1 | 2 }) {
+/** Left navigation rail of the phone app pages: height is scarce in landscape, width is not. */
+export function MRail({ active }: { active: 0 | 1 | 2 }) {
   const items = [
-    { icon: <House size={22} strokeWidth={2.6} />, label: "Sảnh" },
-    { icon: <History size={22} strokeWidth={2.6} />, label: "Lịch sử" },
-    { icon: <User size={22} strokeWidth={2.6} />, label: "Hồ sơ" },
+    { icon: <House size={21} strokeWidth={2.6} />, label: "Sảnh" },
+    { icon: <History size={21} strokeWidth={2.6} />, label: "Lịch sử" },
+    { icon: <User size={21} strokeWidth={2.6} />, label: "Hồ sơ" },
   ];
   return (
-    <div className="tabbar">
-      {items.map((it, i) => (
-        <span key={it.label} className={i === active ? "on" : ""}>
-          {it.icon}
-          {it.label}
-        </span>
-      ))}
-    </div>
+    <nav className="mrail">
+      <span className="logo-blob mrail-logo">
+        <SuitIcon suit="♠" size={22} />
+      </span>
+      <div className="mrail-tabs">
+        {items.map((it, i) => (
+          <span key={it.label} className={i === active ? "on" : ""}>
+            {it.icon}
+            {it.label}
+          </span>
+        ))}
+      </div>
+      <IconBtn size={44} badge={1}>
+        <Bell size={19} strokeWidth={2.8} />
+      </IconBtn>
+    </nav>
   );
 }
 

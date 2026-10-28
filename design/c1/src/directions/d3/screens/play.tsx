@@ -30,9 +30,9 @@ import {
   DTopBar,
   DeskTable,
   EmojiRow,
-  MFelt,
-  MOpponents,
-  MTableHead,
+  MDock,
+  MTable,
+  MTableBar,
   Pot,
   RailTabs,
   RoomChips,
@@ -49,7 +49,6 @@ import {
   Pill,
   Root,
   Seg,
-  StatusBar,
   Sticker,
   TimerRing,
   Token,
@@ -219,11 +218,11 @@ function TurnDock() {
   );
 }
 
-function TurnCenter() {
+function TurnCenter({ size = "lg" as CardSize }) {
   return (
     <>
       <Pot n={T.pot} />
-      <Board cards={T.board} />
+      <Board cards={T.board} size={size} />
     </>
   );
 }
@@ -252,70 +251,106 @@ function DeskTurn() {
   );
 }
 
-function MHero({ cards, children, dim }: { cards: Card[]; children: ReactNode; dim?: boolean }) {
+/** You, under the felt on the phone: big hole cards resting on the rail, then your pill. */
+function MMe({
+  cards,
+  stack = ME.stack!,
+  turn,
+  dim,
+  sticker,
+  tag,
+}: {
+  cards: Card[];
+  stack?: number;
+  turn?: boolean;
+  dim?: boolean;
+  sticker?: ReactNode;
+  tag?: ReactNode;
+}) {
   return (
-    <div className="mhero">
+    <div className={`mme ${turn ? "mme-turn" : ""}`}>
       <HeroCards cards={cards} size="lg" dim={dim} />
-      <div className="mhero-info">{children}</div>
+      <div className="mme-pill">
+        <Avatar
+          name="Lym"
+          size={44}
+          ring={turn ? { pct: 14 / 20 } : undefined}
+          badge={turn ? <span className="av-time num">14</span> : undefined}
+        />
+        <span className="mme-t">
+          <b>
+            Lym <em>bạn</em>
+          </b>
+          <span className="mme-stack">
+            <Token size={13} />
+            <b className="num">{fmt(stack)}</b>
+          </span>
+        </span>
+      </div>
+      {sticker}
+      {tag}
     </div>
   );
 }
 
-function MeLine({ ring, stack = ME.stack!, note }: { ring?: boolean; stack?: number; note?: ReactNode }) {
+const MeTurn = () => (
+  <MMe
+    cards={ME.cards!}
+    turn
+    sticker={
+      <Sticker tone="lime" tilt={-4} className="mme-stk">
+        Lượt của bạn
+      </Sticker>
+    }
+    tag={
+      <Sticker tone="sky" tilt={3} className="mme-tag">
+        Chờ sảnh
+      </Sticker>
+    }
+  />
+);
+
+/** Betting dock, top to bottom: the clock, raise sizes, then the three big buttons under the thumb. */
+function MBetDock() {
   return (
-    <div className="meline">
-      <Avatar name="Lym" size={46} ring={ring ? { pct: 14 / 20 } : undefined} badge={ring ? <span className="av-time num">14</span> : undefined} />
-      <span className="meline-t">
-        <b>
-          Lym <em>bạn</em>
-        </b>
-        <span className="meline-stack">
-          <Token size={13} />
-          <b className="num">{fmt(stack)}</b>
+    <MDock>
+      <div className="mtimer">
+        <span className="nextcount-ring">
+          <TimerRing size={50} pct={14 / 20} tone="lime" />
+          <b className="num">14</b>
         </span>
-      </span>
-      {note}
-    </div>
+        <span className="mtimer-t">
+          <b>Lượt của bạn</b>
+          <small>còn 14 giây để chọn</small>
+          <i>
+            <u style={{ width: "70%" }} />
+          </i>
+        </span>
+      </div>
+      <Presets mobile />
+      <Slider mobile />
+      <Btn tone="lime" size="xl" block>
+        Tố lên <span className="num">{RAISE}</span>
+      </Btn>
+      <div className="mbtns">
+        <Btn tone="ghost" size="xl" className="m-fold">
+          Bỏ bài
+        </Btn>
+        <Btn tone="sky" size="xl" className="m-call">
+          Theo <span className="num">{T.toCall}</span>
+        </Btn>
+      </div>
+    </MDock>
   );
 }
 
 function MobTurn() {
   return (
-    <Root device="mobile" className="bg-party mtable">
-      <StatusBar />
-      <MTableHead hand={T.handNo} />
-      <MOpponents seats={T.seats} />
-      <MFelt>
-        <Pot n={T.pot} />
-        <Board cards={T.board} size="md" />
-      </MFelt>
-      <MHero cards={ME.cards!}>
-        <MeLine ring />
-        <div className="mhero-tags">
-          <Sticker tone="lime" tilt={-3}>
-            Lượt của bạn
-          </Sticker>
-          <Sticker tone="sky" tilt={2}>
-            Chờ sảnh
-          </Sticker>
-        </div>
-      </MHero>
-      <div className="msheet msheet-act">
-        <Presets mobile />
-        <Slider mobile />
-        <div className="mbtns">
-          <Btn tone="ghost" size="xl" className="m-fold">
-            Bỏ
-          </Btn>
-          <Btn tone="sky" size="xl" className="m-call">
-            Theo <span className="num">{T.toCall}</span>
-          </Btn>
-          <Btn tone="lime" size="xl" className="m-raise">
-            Tố <span className="num">{RAISE}</span>
-          </Btn>
-        </div>
-        <HomeBar />
-      </div>
+    <Root device="mobile" className="bg-party">
+      <MTable seats={T.seats} center={<TurnCenter size="md" />} me={<MeTurn />} />
+      <MTableBar hand={T.handNo} />
+      <MBetDock />
+      <HomeBar />
     </Root>
   );
 }
@@ -431,11 +466,12 @@ function DeskShowdown() {
   );
 }
 
-function SpecStrip({ big }: { big?: boolean }) {
+function SpecStrip({ big, compact }: { big?: boolean; compact?: boolean }) {
   return (
     <div className={`specstrip ${big ? "specstrip-big" : ""}`}>
       <span className="specstrip-l">
-        <Eye size={15} strokeWidth={3} /> Đang xem
+        <Eye size={15} strokeWidth={3} />
+        {compact ? null : " Đang xem"}
       </span>
       {SD.spectators.map((n) => (
         <span key={n} className="specstrip-p">
@@ -448,58 +484,68 @@ function SpecStrip({ big }: { big?: boolean }) {
 }
 
 function MobShowdown() {
+  const chi = SD.seats.find((s) => s.name === "Chi")!;
   return (
-    <Root device="mobile" className="bg-party mtable">
-      <StatusBar />
-      <MTableHead hand={SD.handNo} />
-      <MOpponents
+    <Root device="mobile" className="bg-party">
+      <MTable
         seats={SD.seats}
+        center={<ShowCenter size="md" />}
+        print=""
         faceUp={[4]}
         stickers={{
           4: (
-            <Sticker tone="sun" tilt={-4}>
-              🏆 +{fmt(SD.winner.amount)}
+            <Sticker tone="sun" tilt={-5} className="mseat-stk mseat-stk-big">
+              🏆 Thắng +{fmt(SD.winner.amount)}
             </Sticker>
           ),
         }}
-        extras={{ 4: <span className="mseat-crown">👑</span> }}
-      />
-      <MFelt className="mfelt-show">
-        <ShowCenter size="md" />
-      </MFelt>
-      <MHero cards={SD_ME.cards!}>
-        <MeLine />
-        <div className="mhero-tags">
-          <Sticker tone="white" tilt={-3}>
+        extras={{ 4: <span className="mseat-hand mseat-hand-win">{chi.hand}</span> }}
+        me={
+          <MMe
+            cards={SD_ME.cards!}
+            sticker={
+              <Sticker tone="pink" tilt={-4} className="mme-stk">
+                −400
+              </Sticker>
+            }
+            tag={<span className="mseat-hand mme-hand">{SD_ME.hand}</span>}
+          />
+        }
+        className="mzone-show"
+      >
+        <Confetti seed={38} n={18} className="mwin-confetti" />
+      </MTable>
+      <MTableBar hand={SD.handNo} unread={5} />
+      <MDock>
+        <SpecBar className="specbar-m" />
+        <div className="mres">
+          <span className="dock-lbl">Bài của bạn</span>
+          <Sticker tone="white" tilt={-2}>
             {SD_ME.hand}
           </Sticker>
-          <Sticker tone="pink" tilt={2}>
-            −400
-          </Sticker>
+          <span className="dock-result">
+            Ván này <Money n={-400} />
+          </span>
         </div>
-      </MHero>
-      <div className="msheet msheet-next">
-        <SpecBar />
-        <div className="mnext">
+        <div className="nextcount mnext">
           <span className="nextcount-ring">
             <TimerRing size={54} pct={0.8} tone="sky" />
             <b className="num">4</b>
           </span>
           <span>
             <b>Ván #39 sắp chia</b>
-            <small>Chi thắng với {SD.seats[3].hand}</small>
+            <small>Chip của Chi đã được cộng. Bạn còn {fmt(SD_ME.stack!)}.</small>
           </span>
         </div>
-        <div className="mbtns">
-          <Btn tone="ghost" size="lg" icon={<Moon size={18} strokeWidth={3} />}>
-            Nghỉ ván sau
-          </Btn>
-          <Btn tone="sky" size="lg" icon={<Play size={18} strokeWidth={3} />}>
-            Xem lại
-          </Btn>
-        </div>
-        <HomeBar />
-      </div>
+        <EmojiRow />
+        <Btn tone="ghost" size="lg" block icon={<Moon size={18} strokeWidth={3} />}>
+          Nghỉ ván sau
+        </Btn>
+        <Btn tone="sky" size="lg" block icon={<Play size={18} strokeWidth={3} />}>
+          Xem lại ván
+        </Btn>
+      </MDock>
+      <HomeBar />
     </Root>
   );
 }
@@ -526,21 +572,21 @@ function payStickers(mobile?: boolean) {
     const p = S7.payments.find((x) => x.name === s.name);
     if (p)
       out[s.seat] = (
-        <Sticker tone="pink" tilt={s.seat % 2 ? -6 : 5} className={mobile ? "" : "dseat-stk dseat-stk-pay"}>
+        <Sticker tone="pink" tilt={s.seat % 2 ? -6 : 5} className={mobile ? "mseat-stk mseat-stk-pay" : "dseat-stk dseat-stk-pay"}>
           <span className="fly-tok" />−{p.amount}
           {p.note && !mobile && <small>{p.note}</small>}
         </Sticker>
       );
     else if (s.name === "Hà")
       out[s.seat] = (
-        <Sticker tone="mute" tilt={-3} className={mobile ? "" : "dseat-stk"}>
-          {mobile ? "0 chip" : "Hết chip · không trả"}
+        <Sticker tone="mute" tilt={-3} className={mobile ? "mseat-stk" : "dseat-stk"}>
+          Hết chip · không trả
         </Sticker>
       );
     else if (s.name === "Bình")
       out[s.seat] = (
-        <Sticker tone="lime" tilt={-5} className={mobile ? "" : "dseat-stk dseat-stk-big"}>
-          {mobile ? "" : "👑 "}+{S7.total}
+        <Sticker tone="lime" tilt={-5} className={mobile ? "mseat-stk mseat-stk-big" : "dseat-stk dseat-stk-big"}>
+          {"👑 "}+{S7.total}
         </Sticker>
       );
   }
@@ -555,8 +601,8 @@ function SevenCard({ mobile }: { mobile?: boolean }) {
       </span>
       <div className="s7-body">
         <div className="s7-cards">
-          <PCard c={S7.cards[0]} size={mobile ? "lg" : "lg"} tilt={-9} />
-          <PCard c={S7.cards[1]} size={mobile ? "lg" : "lg"} tilt={8} />
+          <PCard c={S7.cards[0]} size={mobile ? "md" : "lg"} tilt={-9} />
+          <PCard c={S7.cards[1]} size={mobile ? "md" : "lg"} tilt={8} />
           <Sticker tone="sky" tilt={-4} className="s7-auto">
             Tự lật cho cả bàn
           </Sticker>
@@ -632,7 +678,7 @@ function DeskSeven() {
         top={<DTopBar room={T.room} sub={<RoomChips hand={37} extra={<Pill tone="sun">🎉 Thưởng 7-2</Pill>} />} />}
         stage={
           <DStage seats={S7_SEATS} center={null} faceUp={[3]} stickers={payStickers()} className="stage-seven">
-            <Confetti seed={72} n={64} className="s7-confetti" />
+            <Confetti seed={72} n={96} className="s7-confetti" />
             <div className="s7-board">
               <Pot n={S7.pot} label="Bình ăn" />
               <Board cards={REPLAY.board} size="sm" />
@@ -690,43 +736,51 @@ function DeskSeven() {
 
 function MobSeven() {
   const st = payStickers(true);
+  // The phone keeps the pay sticker short and hangs the note under the seat instead.
+  const notes: Record<number, ReactNode> = {};
+  for (const s of S7_SEATS) {
+    const note = S7.payments.find((p) => p.name === s.name)?.note;
+    if (note) notes[s.seat] = <span className="mseat-hand">{note}</span>;
+  }
   return (
-    <Root device="mobile" className="bg-party mtable">
-      <StatusBar />
-      <MTableHead hand={37} />
-      <MOpponents
+    <Root device="mobile" className="bg-party">
+      <MTable
         seats={S7_SEATS}
+        center={
+          <>
+            <Pot n={S7.pot} label="Bình ăn" />
+            <Board cards={REPLAY.board} size="sm" />
+          </>
+        }
+        print=""
         faceUp={[3]}
         stickers={st}
-        extras={{ 3: <span className="mseat-crown">👑</span> }}
-      />
-      <MFelt>
-        <Pot n={S7.pot} label="Bình ăn" />
-        <Board cards={REPLAY.board} size="md" />
-      </MFelt>
-      <Confetti seed={27} n={36} className="m7-confetti" />
-      <div className="msheet msheet-seven">
+        extras={notes}
+        me={<MMe cards={REPLAY.players[0].cards} stack={1410} dim sticker={st[1]} />}
+        className="mzone-seven"
+      >
+        <div className="s7-burst m7-burst" />
+        <Confetti seed={72} n={46} className="m7-confetti" />
+        <span className="floaty mf1">😎</span>
+        <span className="floaty mf2">🔥</span>
+        <Sticker tone="sun" tilt={8} className="floaty-stk mfs1">
+          GG!
+        </Sticker>
+      </MTable>
+      <MTableBar hand={37} unread={6} />
+      <MDock className="mdock-seven">
+        <Confetti seed={27} n={26} className="m7-dock-confetti" />
         <SevenCard mobile />
-        <div className="m7-pay">
-          {S7.payments.map((p) => (
-            <span key={p.name} className={`m7-chip ${p.note ? "m7-chip-note" : ""}`}>
-              <Avatar name={p.name} size={26} />
-              <b>{p.name === "Lym" ? "Bạn" : p.name}</b>
-              <em className="num">−{p.amount}</em>
-              {p.note && <small>{p.note}</small>}
-            </span>
-          ))}
-        </div>
-        <div className="m7-actions">
-          <EmojiRow active={3} />
-          <Btn tone="lime" size="lg" className="m7-ok">
-            Tiếp tục
-          </Btn>
-        </div>
-        <HomeBar />
-      </div>
-      <span className="floaty mf1">🔥</span>
-      <span className="floaty mf2">😎</span>
+        <span className="react-lbl">Thả cảm xúc cho Bình</span>
+        <EmojiRow active={3} />
+        <span className="next-mini">
+          Ván #38 chia sau <b className="num">6</b> giây
+        </span>
+        <Btn tone="sky" size="lg" block icon={<Play size={18} strokeWidth={3} />}>
+          Xem lại ván
+        </Btn>
+      </MDock>
+      <HomeBar />
     </Root>
   );
 }
@@ -748,7 +802,9 @@ function ReconnectCard({ mobile }: { mobile?: boolean }) {
           <WifiOff size={34} strokeWidth={2.8} />
         </span>
         <span>
-          <b className="rc-title">Đang kết nối lại…</b>
+          <b className="rc-title">
+            Đang kết nối lại<span className="ell">…</span>
+          </b>
           <span className="rc-sub">Ghế và chip của bạn vẫn giữ nguyên. Lần thử 2 · tự thử lại sau 3 giây.</span>
         </span>
       </div>
@@ -838,22 +894,21 @@ function DeskReconnect() {
 
 function MobReconnect() {
   return (
-    <Root device="mobile" className="bg-party mtable">
-      <StatusBar />
-      <MTableHead hand={T.handNo} />
-      <MOpponents seats={T.seats} />
-      <MFelt>
-        <Pot n={T.pot} />
-        <Board cards={T.board} size="md" />
-      </MFelt>
+    <Root device="mobile" className="bg-party mdim">
+      <MTable seats={T.seats} center={<TurnCenter size="md" />} me={<MMe cards={ME.cards!} turn />} />
+      <MTableBar hand={T.handNo} />
+      <MBetDock />
       <div className="mscrim" />
-      <div className="m-variant-b">
-        <PausedCard mobile />
-      </div>
-      <div className="msheet msheet-rc">
+      <div className="mrc">
         <ReconnectCard mobile />
-        <HomeBar />
       </div>
+      <div className="mpaused">
+        <PausedCard mobile />
+        <Btn tone="ghost" size="md" block>
+          Về sảnh trong lúc chờ
+        </Btn>
+      </div>
+      <HomeBar />
     </Root>
   );
 }
@@ -1006,26 +1061,33 @@ function DeskOwner() {
 
 function MobOwner() {
   return (
-    <Root device="mobile" className="bg-party mtable">
-      <StatusBar />
-      <MTableHead hand={T.handNo} />
-      <MOpponents seats={T.seats} />
+    <Root device="mobile" className="bg-party mdim">
+      <MTable seats={T.seats} center={<TurnCenter size="md" />} me={<MeTurn />} />
+      <MTableBar hand={T.handNo} />
+      <MBetDock />
       <div className="mscrim" />
-      <div className="msheet msheet-owner">
-        <span className="grab" />
+      <aside className="msheet msheet-owner">
         <div className="own-mhead">
           <Sticker tone="sun" tilt={-4}>
             <Crown size={14} strokeWidth={3} /> Chủ phòng
           </Sticker>
           <b>{OWNER.room}</b>
-          <IconBtn size={38}>
-            <X size={18} strokeWidth={3} />
+          <IconBtn size={44}>
+            <X size={20} strokeWidth={3} />
           </IconBtn>
         </div>
-        <OwnerPlayers mobile />
-        <OwnerSettings mobile />
-        <HomeBar />
-      </div>
+        <section className="own-pane">
+          <div className="drawer-sec-h">
+            <b>Người chơi & chip</b>
+            <small>bấm + / − để cấp hoặc trừ</small>
+          </div>
+          <OwnerPlayers mobile />
+        </section>
+        <section className="own-pane own-pane-set">
+          <OwnerSettings mobile />
+        </section>
+      </aside>
+      <HomeBar />
     </Root>
   );
 }
@@ -1091,21 +1153,23 @@ function DeskChat() {
 
 function MobChat() {
   return (
-    <Root device="mobile" className="bg-party mtable">
-      <StatusBar />
-      <MTableHead hand={T.handNo} unread={0} />
-      <MOpponents seats={T.seats} extras={{ 2: <span className="react mr-an">😂</span>, 4: <span className="react mr-chi">🔥</span> }} />
+    <Root device="mobile" className="bg-party">
+      <MTable seats={T.seats} center={<TurnCenter size="md" />} me={<MeTurn />}>
+        <span className="react mr-an">😂</span>
+        <span className="react mr-chi">🔥</span>
+        <span className="bubble-say mb-an">ai bluff kìa 😏</span>
+      </MTable>
+      <MTableBar hand={T.handNo} unread={0} />
+      <MBetDock />
       <div className="mscrim mscrim-soft" />
-      <div className="msheet msheet-chat">
-        <span className="grab" />
+      <aside className="msheet msheet-chat">
         <div className="mchat-tabs">
           <Seg items={["💬 Chat 5", "👀 Đang xem 3"]} active={0} tone="sky" />
-          <IconBtn size={38}>
-            <X size={18} strokeWidth={3} />
+          <IconBtn size={44}>
+            <X size={20} strokeWidth={3} />
           </IconBtn>
         </div>
-        <EmojiRow big active={1} />
-        <SpecStrip />
+        <SpecStrip compact />
         <div className="chatlog chatlog-m">
           <ChatLog />
           <div className="typing">
@@ -1118,9 +1182,10 @@ function MobChat() {
             </span>
           </div>
         </div>
+        <EmojiRow active={1} />
         <Composer text="gg 🙏" focus />
-        <HomeBar />
-      </div>
+      </aside>
+      <HomeBar />
     </Root>
   );
 }
