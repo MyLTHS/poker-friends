@@ -24,6 +24,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from apps.games.models import User
 
 from . import ratelimit
+from .middleware import request_origin
 
 MODEL_BACKEND = "django.contrib.auth.backends.ModelBackend"
 VERIFY_SALT = "accounts.verify-email"
@@ -105,7 +106,10 @@ def _check_unique(email: str, username: str | None, exclude: User | None = None)
 
 def web_link(path: str, **params: str) -> str:
     query = f"?{urlencode(params)}" if params else ""
-    return f"{settings.FRONTEND_URL}{path}{query}"
+    base = settings.FRONTEND_URL
+    if settings.FRONTEND_URL_FROM_REQUEST:
+        base = request_origin.get() or base
+    return f"{base}{path}{query}"
 
 
 def _send(user: User, subject: str, template: str, link: str, max_age: int) -> None:

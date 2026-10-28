@@ -317,6 +317,35 @@ class TestOrigin:
 
         run_async(body)
 
+    def test_with_a_wildcard_host_only_our_own_tunnel_may_open_a_socket(self, settings):
+        """Playing from home every *.trycloudflare.com host is allowed; another person's quick
+        tunnel must still not open a socket to ours."""
+        from channels.testing import WebsocketCommunicator
+
+        from config.asgi import websocket_application
+
+        settings.ALLOWED_HOSTS = [".trycloudflare.com", "localhost"]
+        application = websocket_application()
+        room, a, b = heads_up_room()
+        ours = b"our-words.trycloudflare.com"
+
+        async def body():
+            for origin, expected in (
+                (b"https://our-words.trycloudflare.com", True),
+                (b"https://evil-words.trycloudflare.com", False),
+            ):
+                conn = WebsocketCommunicator(
+                    application,
+                    f"/ws/rooms/{room.pk}/",
+                    headers=[(b"origin", origin), (b"host", ours)],
+                )
+                connected, _ = await conn.connect()
+                assert connected is expected, origin
+                if connected:
+                    await conn.disconnect()
+
+        run_async(body)
+
 
 class TestSmallFixes:
     def test_a_seat_conflict_in_the_database_is_a_409_not_a_500(self, monkeypatch):

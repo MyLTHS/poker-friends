@@ -6,11 +6,13 @@ mục "Hệ quả".
 """
 
 import os
+from urllib.parse import urlparse
 
 import django
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.security.websocket import AllowedHostsOriginValidator
+from channels.security.websocket import AllowedHostsOriginValidator, WebsocketDenier
+from django.conf import settings
 from django.core.asgi import get_asgi_application
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -20,14 +22,39 @@ http_application = get_asgi_application()
 
 from apps.games.routing import websocket_urlpatterns  # noqa: E402  (after django.setup())
 
+
+class WildcardOriginMustBeThisHost:
+    """A wildcard host (".trycloudflare.com", playing from home) lets in every quick tunnel, an
+    attacker's too. For an Origin allowed only by such an entry, the page must come from the very
+    host the socket connects to. Exact hosts (localhost, the dev web app on another port) keep the
+    usual ALLOWED_HOSTS check below."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        headers = dict(scope.get("headers", []))
+        origin = (urlparse(headers.get(b"origin", b"").decode("latin1")).hostname or "").lower()
+        host = headers.get(b"host", b"").decode("latin1").rsplit(":", 1)[0].lower()
+        exact = {h.lower() for h in settings.ALLOWED_HOSTS if not h.startswith(".")}
+        if origin and origin not in exact and "*" not in exact and origin != host:
+            return await WebsocketDenier()(scope, receive, send)
+        return await self.app(scope, receive, send)
+
+
+def websocket_application():
+    """AllowedHostsOriginValidator reads ALLOWED_HOSTS once, when built: tests build their own."""
+    return WildcardOriginMustBeThisHost(
+        AllowedHostsOriginValidator(AuthMiddlewareStack(URLRouter(websocket_urlpatterns)))
+    )
+
+
 application = ProtocolTypeRouter(
     {
         "http": http_application,
         # Origin must be one of ALLOWED_HOSTS: another site cannot open a socket with our
         # visitors' cookies. Browsers always send Origin; scripts must set it. Opening the dev
         # app from a LAN address (a phone) needs that address in DJANGO_ALLOWED_HOSTS.
-        "websocket": AllowedHostsOriginValidator(
-            AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
-        ),
+        "websocket": websocket_application(),
     }
 )

@@ -19,11 +19,12 @@ from .conftest import PASSWORD, last_link_params, make_verified_user
 pytestmark = pytest.mark.django_db
 
 
-def signup(client, email="binh@example.com", username="binh", password=PASSWORD):
+def signup(client, email="binh@example.com", username="binh", password=PASSWORD, **extra):
     return client.post(
         "/api/auth/signup/",
         {"email": email, "username": username, "password": password},
         format="json",
+        **extra,
     )
 
 
