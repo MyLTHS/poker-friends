@@ -13,12 +13,13 @@ import { Coffee, Crown, Hourglass } from "lucide-react";
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
 import { Button, ButtonLink, CardText, D1Root, Spinner, ToastProvider, fmt, signed } from "@/ui";
 
-import { IdleBar, PreAction, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
+import { IdleBar, PreAction, PreActions, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
 import { Countdown, secondsLeft, useRecent, type TurnClock } from "./clock";
 import { useDevice } from "./device";
 import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
 import { ConnStrip, PausedCard, ReconnectCard } from "./Overlays";
+import { canPreAct, facingBet } from "./reducer";
 import { describeAction, raisePresets, tableView, type SeatView } from "./seatView";
 import { SevenDeuceStage, SevenLedger, SevenMedal } from "./SevenDeuce";
 import {
@@ -218,6 +219,9 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       }
     : undefined;
   const toggleSit = () => dispatch({ type: "sit", out: !sittingOut, commandId: newCommandId() });
+  const pre = canPreAct(model) && !celebration ? (
+    <PreActions device={device} choice={model.preAction?.kind ?? null} facingBet={facingBet(model)} disabled={!online} onChoose={(kind) => dispatch({ type: "pre.select", kind, commandId: newCommandId() })} />
+  ) : null;
 
   const turnProps = legal && hand
     ? {
@@ -336,6 +340,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
             </div>
           )}
           {idle.mine && <span className="ip-me">{idle.mine}</span>}
+          {pre}
           {seatError && <span className="ip-error" role="alert">{seatError}</span>}
           <Spectators device="mobile" spectators={model.spectators} />
           <div className="ip-actions">
@@ -398,6 +403,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       <TurnBar key={decisionKey} {...turnProps} device="desktop" />
     ) : (
       <IdleBar
+        className={pre ? "abar-pre" : ""}
         left={
           <span className="idle-hand">
             <small>{idle.eyebrow}</small>
@@ -422,6 +428,8 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
                 <b>{idle.win}</b> {idle.winSub}
               </span>
             </span>
+          ) : pre && !seatError ? (
+            pre
           ) : (
             <span className="idle-msg is-quiet">{seatError ?? idle.center}</span>
           )

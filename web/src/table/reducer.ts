@@ -57,6 +57,18 @@ export type PendingCommand = {
 
 export type Notice = { id: number; text: string };
 
+/** What to do when my turn comes, chosen before it (design "Chọn trước"). */
+export type PreActionKind = "check_fold" | "check" | "call_any";
+
+export type PreAction = {
+  kind: PreActionKind;
+  /** Made once when choosing (one intent, one command_id: ws-protocol.md §5). */
+  commandId: string;
+  handId: number;
+  /** Board length when chosen: a new street drops the choice. */
+  street: number;
+};
+
 export type TableModel = {
   status: "connecting" | "open" | "reconnecting";
   table: TableState | null;
@@ -72,6 +84,8 @@ export type TableModel = {
   /** server_time minus local time when the message arrived. */
   clockOffsetMs: number;
   pending: PendingCommand | null;
+  /** Only an intention kept here: sent as one command.act when my turn comes, if still legal. */
+  preAction: PreAction | null;
   outbox: ClientMessage[];
   notice: Notice | null;
   chat: ChatMessage[];
@@ -102,6 +116,7 @@ export type TableAction =
   | { type: "socket.closed" }
   | { type: "server"; message: ServerMessage; receivedAt: number }
   | { type: "act"; kind: "fold" | "check" | "call" | "raise"; amount?: number; commandId: string }
+  | { type: "pre.select"; kind: PreActionKind | null; commandId: string }
   | { type: "outbox.sent"; count: number; now: number }
   | { type: "tick"; now: number }
   | { type: "dismiss.celebration" }
@@ -122,6 +137,7 @@ export const initialModel = (): TableModel => ({
   celebration: null,
   clockOffsetMs: 0,
   pending: null,
+  preAction: null,
   outbox: [],
   notice: null,
   chat: [],
@@ -167,14 +183,20 @@ export function reduce(model: TableModel, action: TableAction): TableModel {
         pending: model.pending && { ...model.pending, sentAt: null },
       };
     case "server": {
-      const next = onServer({ ...model, clockOffsetMs: Date.parse(action.message.server_time) - action.receivedAt }, action.message);
+      const next = firePreAction(onServer({ ...model, clockOffsetMs: Date.parse(action.message.server_time) - action.receivedAt }, action.message));
       const suspended = next.table?.room.status === "suspended";
       const suspendedAt = suspended ? (model.table?.room.status === "suspended" ? model.suspendedAt : action.receivedAt) : null;
       const celebrationAt = next.celebration ? (next.celebration === model.celebration ? model.celebrationAt : action.receivedAt) : null;
       return suspendedAt === next.suspendedAt && celebrationAt === next.celebrationAt ? next : { ...next, suspendedAt, celebrationAt };
     }
     case "act":
-      return onIntent(model, action);
+      return onIntent({ ...model, preAction: null }, action);
+    case "pre.select": {
+      if (action.kind === null) return { ...model, preAction: null };
+      const hand = model.table?.hand;
+      if (!canPreAct(model) || !hand) return model;
+      return { ...model, preAction: { kind: action.kind, commandId: action.commandId, handId: hand.hand_id, street: hand.board.length } };
+    }
     case "outbox.sent": {
       const sent = model.outbox.slice(0, action.count);
       const pending = model.pending;
@@ -218,6 +240,38 @@ export function reduce(model: TableModel, action: TableAction): TableModel {
       return { ...model, outbox: [...model.outbox, message] };
     }
   }
+}
+
+/** Whether "Chọn trước" applies now: I hold cards and chips in a running hand, and it is not my turn. */
+export function canPreAct(model: TableModel): boolean {
+  const table = model.table;
+  const hand = table?.hand;
+  if (!table || !hand || hand.complete || table.room.status === "suspended" || model.pending) return false;
+  const me = hand.players.find((p) => p.player_id === table.you.player_id);
+  return !!me && me.in_hand && me.stack > 0 && hand.actor !== me.player_id;
+}
+
+/** "Check" means nothing while facing a bet. */
+export function facingBet(model: TableModel): boolean {
+  const hand = model.table?.hand;
+  const me = hand?.players.find((p) => p.player_id === model.table?.you.player_id);
+  return !!hand && !!me && hand.players.some((p) => p.bet > me.bet);
+}
+
+/** Drop a choice that no longer applies; on my turn, send it once if legal_actions still allow it. */
+function firePreAction(model: TableModel): TableModel {
+  const pre = model.preAction;
+  if (!pre || model.awaitingSnapshot) return model;
+  const hand = model.table?.hand;
+  if (!hand || hand.complete || hand.hand_id !== pre.handId || hand.board.length !== pre.street) return { ...model, preAction: null };
+  const me = hand.players.find((p) => p.player_id === model.table!.you.player_id);
+  if (!me?.in_hand) return { ...model, preAction: null };
+  const legal = hand.legal_actions;
+  if (hand.actor !== me.player_id || !legal) return model;
+  const kind = pre.kind === "check_fold" ? (legal.can_check ? "check" : "fold") : pre.kind === "check" ? (legal.can_check ? "check" : null) : legal.can_check ? "check" : "call";
+  const cleared = { ...model, preAction: null };
+  if (kind === null || (kind === "fold" && !legal.can_fold)) return cleared;
+  return onIntent(cleared, { type: "act", kind, commandId: pre.commandId });
 }
 
 function onIntent(model: TableModel, intent: Extract<TableAction, { type: "act" }>): TableModel {
@@ -368,7 +422,9 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
         : model.lastActions;
       const action = event.payload.action;
       const lastActions = street && action.kind !== "fold" ? kept : { ...kept, [action.seat]: action };
-      return { ...model, table: { ...table, hand, turn }, lastAction: action, lastActions };
+      // Someone bet or raised: "Check" no longer means anything (Check / Bỏ and Theo bất kỳ stay).
+      const raisedOver = action.kind === "raise" && action.player_id !== table.you.player_id && model.preAction?.kind === "check";
+      return { ...model, table: { ...table, hand, turn }, lastAction: action, lastActions, preAction: raisedOver ? null : model.preAction };
     }
     case "turn.deadline":
       return { ...model, table: { ...table, turn: event.payload.turn } };
