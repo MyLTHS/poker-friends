@@ -2,152 +2,338 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Eye, Link2, Lock, Plus, RotateCw, Search } from "lucide-react";
 
-import { createAuthApi, type Me } from "@/account/api";
-import { errorText, type Notice } from "@/account/messages";
-import { Card, Field, formValues, NoticeBox, Shell, Submit, useSubmit } from "@/account/ui";
+import { errorText } from "@/account/messages";
+import { Button, ButtonLink, EmptyState, ErrorState, Loading, MiniTable, PageHead, Panel, SkeletonCard, Tabs, TextField } from "@/ui";
 
-import { createRoomsApi, type LobbyRoom } from "./api";
+import { createRoomsApi, type LobbyRoom, type RoomsApi } from "./api";
+import { useClientValue, useMe, usePhone, useReloadWhenOnline } from "./hooks";
+import { filterCount, filterRooms, inviteToken, isMine, roomCta, type LobbyFilter } from "./lobby";
+import { PasteInvite, RoomBadges } from "./RoomBits";
+import { RoomsShell } from "./RoomsShell";
+import { blindsText } from "./rules";
 
-/** /rooms — the lobby and the "create a room" form (B7 test page). */
+type Load = { rooms: LobbyRoom[] } | { error: string; tries: number; at: string } | null;
+
+/** The next state after a lobby call. A failed background refresh keeps the list it has. */
+function next(prev: Load, result: Awaited<ReturnType<RoomsApi["lobby"]>>, quiet: boolean): Load {
+  if (result.ok) return { rooms: result.data.rooms };
+  if (quiet && prev && "rooms" in prev) return prev;
+  const text = result.error.code === "network_error" ? "Mạng đang chập chờn. Bàn và chip của bạn vẫn an toàn." : errorText(result.error);
+  return { error: text, tries: (prev && "tries" in prev ? prev.tries : 0) + 1, at: nowClock() };
+}
+
+const WEEKDAYS = ["Chủ nhật", "thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy"];
+
+/** "tối thứ Sáu": the lobby's eyebrow, like the design's. */
+function dayPart(now: Date) {
+  const h = now.getHours();
+  const part = h < 11 ? "sáng" : h < 14 ? "trưa" : h < 18 ? "chiều" : h < 23 ? "tối" : "khuya";
+  return `${part} ${WEEKDAYS[now.getDay()]}`;
+}
+
+const nowClock = () => new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+/** /rooms — the lobby (D1 "lobby"): rooms the viewer may see, search, filters, invite link. */
 export function LobbyScreen() {
-  const rooms = useMemo(() => createRoomsApi(), []);
-  const auth = useMemo(() => createAuthApi(), []);
-  const [list, setList] = useState<LobbyRoom[] | null>(null);
-  const [me, setMe] = useState<Me | null>(null);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const api = useMemo(() => createRoomsApi(), []);
+  const { me } = useMe();
+  const phone = usePhone();
+  const [load, setLoad] = useState<Load>(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<LobbyFilter>("all");
+  const [pasteOpen, setPasteOpen] = useState(false);
+  // The server (and hydration) say "Sảnh"; the day part is the browser's clock.
+  const eyebrow = useClientValue(() => `Sảnh · ${dayPart(new Date())}`, "Sảnh");
 
+  const fetchRooms = useCallback((quiet: boolean) => api.lobby().then((result) => setLoad((prev) => next(prev, result, quiet))), [api]);
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await auth.config(); // csrftoken cookie
-      const [lobby, who] = [await rooms.lobby(), await auth.me()];
-      if (cancelled) return;
-      if (lobby.ok) setList(lobby.data.rooms);
-      else setNotice({ kind: "error", text: errorText(lobby.error) });
-      setMe(who.ok ? who.data : null);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [auth, rooms]);
+    void fetchRooms(false);
+    const timer = window.setInterval(() => void fetchRooms(true), 20000);
+    return () => window.clearInterval(timer);
+  }, [fetchRooms]);
+  const online = useReloadWhenOnline(useCallback(() => void fetchRooms(false), [fetchRooms]));
 
-  return (
-    <Shell title="Lobby" section="PHÒNG" wide>
-      <NoticeBox notice={notice} />
-      <Card>
-        <h2 className="font-[family-name:var(--font-display)] text-xl">Phòng đang mở</h2>
-        {list === null ? (
-          <p className="mt-3 text-sm text-[var(--muted)]">Đang tải…</p>
-        ) : list.length === 0 ? (
-          <p className="mt-3 text-sm text-[var(--muted)]">Chưa có phòng nào. Tạo một phòng bên dưới.</p>
-        ) : (
-          <ul className="mt-4 grid gap-2">
-            {list.map(({ room, is_private, owner_name, seated }) => (
-              <li key={room.room_id}>
-                <Link
-                  href={`/rooms/${room.room_id}`}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line)] px-4 py-3 hover:border-[var(--accent)]"
-                >
-                  <span className="font-bold">
-                    {room.name} {is_private && <span className="pill pill-gold">RIÊNG</span>}
-                  </span>
-                  <span className="text-sm text-[var(--muted)]">
-                    {room.small_blind}/{room.big_blind} · {seated}/{room.max_seats} ghế · chủ {owner_name ?? "?"}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-      {me ? (
-        <CreateRoom rooms={rooms} />
-      ) : (
-        <Card>
-          <p className="text-sm text-[var(--muted)]">
-            Muốn tạo phòng thì <Link href="/account" className="text-[var(--accent)] underline">đăng nhập hoặc chơi bằng khách</Link> trước.
+  const myName = me?.username ?? null;
+  const rooms = load && "rooms" in load ? load.rooms : [];
+  const shown = filterRooms(rooms, { query, filter, myName });
+  const seatedTotal = rooms.reduce((a, r) => a + r.seated, 0);
+  const counts = phone ? `${rooms.length} phòng · ${seatedTotal} người` : `${rooms.length} phòng · ${seatedTotal} người đang ngồi`;
+
+  const counted = !phone && load !== null && "rooms" in load;
+  const tabs = [
+    { value: "all" as const, label: "Tất cả", count: counted ? rooms.length : undefined },
+    { value: "public" as const, label: "Công khai", count: counted ? filterCount(rooms, "public", myName) : undefined },
+    { value: "mine" as const, label: "Của tôi", count: counted ? filterCount(rooms, "mine", myName) : undefined },
+    ...(phone ? [] : [{ value: "open" as const, label: "Còn ghế" }]),
+  ];
+  const tabsEl = <Tabs id="lobby-filter" label="Lọc phòng" items={tabs} value={filter} onChange={setFilter} fill={phone} />;
+  const search = (
+    <TextField
+      className="search"
+      aria-label="Tìm phòng"
+      type="search"
+      placeholder={phone ? "Tìm phòng hoặc chủ phòng…" : "Tìm theo tên phòng hoặc chủ phòng…"}
+      icon={<Search size={17} strokeWidth={1.9} aria-hidden />}
+      value={query}
+      onChange={(e) => setQuery(e.target.value)}
+    />
+  );
+
+  const body =
+    load === null ? (
+      <Loading label="Đang tải danh sách phòng…" className={phone ? "room-list" : "room-grid"}>
+        {[0, 1, 2, 3].map((i) => (
+          <SkeletonCard key={i} compact={phone} />
+        ))}
+      </Loading>
+    ) : "error" in load ? (
+      <Panel phone={phone} className="state-panel is-center">
+        <ErrorState
+          title="Không tải được danh sách phòng"
+          text={online ? load.error : "Máy đang mất mạng. Có mạng lại là sảnh tự tải lại."}
+          actions={
+            <Button kind="primary" size={phone ? "sm" : "md"} icon={<RotateCw size={15} strokeWidth={2.2} aria-hidden />} onClick={() => (setLoad(null), void fetchRooms(false))}>
+              Thử lại
+            </Button>
+          }
+          meta={phone ? undefined : `Đã thử ${load.tries} lần · lần cuối ${load.at}`}
+        />
+      </Panel>
+    ) : rooms.length === 0 ? (
+      <Panel phone={phone} className="state-panel is-center">
+        <EmptyState
+          art={<MiniTable seats={6} seated={0} w={phone ? 96 : 180} h={phone ? 58 : 104} />}
+          badge={<Plus size={phone ? 15 : 18} strokeWidth={2.4} />}
+          title="Sảnh còn trống"
+          text="Chưa có phòng nào. Mở bàn đầu tiên rồi gửi link cho hội bạn."
+          actions={
+            <>
+              <ButtonLink kind="primary" size={phone ? "sm" : "md"} href="/rooms/new" icon={<Plus size={15} strokeWidth={2.4} aria-hidden />}>
+                Tạo phòng
+              </ButtonLink>
+              <Button kind="ghost" size={phone ? "sm" : "md"} icon={<Link2 size={15} aria-hidden />} onClick={() => (phone ? setPasteOpen(true) : document.getElementById("paste-invite")?.focus())}>
+                {phone ? "Dán link" : "Dán link mời"}
+              </Button>
+            </>
+          }
+        />
+      </Panel>
+    ) : shown.length === 0 ? (
+      <Panel phone={phone} className="state-panel is-center">
+        <EmptyState
+          title="Không có phòng nào khớp"
+          text={query ? `Không thấy phòng hay chủ phòng nào tên "${query}".` : "Thử bộ lọc khác."}
+          actions={
+            <Button kind="ghost" size="sm" onClick={() => (setQuery(""), setFilter("all"))}>
+              Xoá tìm và lọc
+            </Button>
+          }
+        />
+      </Panel>
+    ) : phone ? (
+      <div className="room-list" role="list" aria-label="Các phòng">
+        {shown.map((r, i) => (
+          <RoomRow key={r.room.room_id} r={r} myName={myName} index={i} />
+        ))}
+      </div>
+    ) : (
+      <div className="room-grid" role="list" aria-label="Các phòng">
+        {shown.map((r, i) => (
+          <RoomCard key={r.room.room_id} r={r} myName={myName} index={i} />
+        ))}
+      </div>
+    );
+
+  if (phone) {
+    return (
+      <RoomsShell active="lobby" me={me} className="m-lobby">
+        <section className="m-col">
+          <div className="m-title">
+            <h1>Chọn một bàn</h1>
+            {load && "rooms" in load && <small>{counts}</small>}
+          </div>
+          {body}
+        </section>
+        <aside className="m-col m-lobby-side">
+          <span className="eyebrow" suppressHydrationWarning>
+            {eyebrow}
+          </span>
+          {search}
+          {tabsEl}
+          <PhonePaste open={pasteOpen} onOpen={() => setPasteOpen(true)} />
+          <p className="m-note">
+            <Lock size={12} aria-hidden /> Phòng riêng chỉ hiện với chủ phòng và người có link mời.
           </p>
-        </Card>
-      )}
-    </Shell>
+          <ButtonLink kind="primary" size="lg" block href="/rooms/new" icon={<Plus size={18} strokeWidth={2.4} aria-hidden />}>
+            Tạo phòng
+          </ButtonLink>
+        </aside>
+      </RoomsShell>
+    );
+  }
+  return (
+    <RoomsShell active="lobby" me={me}>
+      <PageHead
+        eyebrow={<span suppressHydrationWarning>{eyebrow}</span>}
+        title="Chọn một bàn"
+        sub={load && "rooms" in load ? counts : "Bàn của hội bạn, chip ảo."}
+        actions={
+          <ButtonLink kind="primary" size="lg" href="/rooms/new" icon={<Plus size={18} strokeWidth={2.4} aria-hidden />}>
+            Tạo phòng
+          </ButtonLink>
+        }
+      />
+      <div className="toolbar">
+        {search}
+        {tabsEl}
+        <PasteInvite inputId="paste-invite" />
+      </div>
+      <div id={`lobby-filter-panel-${filter}`} role="tabpanel" aria-labelledby={`lobby-filter-tab-${filter}`}>
+        {body}
+      </div>
+      <p className="page-foot">
+        <Lock size={13} aria-hidden /> Phòng riêng chỉ hiện với chủ phòng và người có link mời.
+      </p>
+      <MockServerLinks />
+    </RoomsShell>
   );
 }
 
-function CreateRoom({ rooms }: { rooms: ReturnType<typeof createRoomsApi> }) {
+const enter = (index: number) => ({ "--i": Math.min(index, 8) }) as CSSProperties;
+
+function RoomCard({ r, myName, index }: { r: LobbyRoom; myName: string | null; index: number }) {
   const router = useRouter();
-  const submit = useSubmit();
+  const cta = roomCta(r, myName);
+  const mine = isMine(r, myName);
+  const href = `/rooms/${r.room.room_id}`;
+  // The whole card opens the room for a mouse; keyboards and screen readers use its button.
   return (
-    <Card>
-      <form
-        className="grid gap-4 sm:grid-cols-2"
-        onSubmit={async (event) => {
-          const values = formValues(event);
-          const number = (key: string) => Number(values[key]);
-          const result = await submit.run(() =>
-            rooms.create({
-              name: values.name,
-              small_blind: number("small_blind"),
-              big_blind: number("big_blind"),
-              max_seats: number("max_seats"),
-              think_time_seconds: number("think_time_seconds"),
-              seven_deuce_bonus: number("seven_deuce_bonus"),
-              is_private: values.is_private === "on",
-            }),
-          );
-          if (result.ok) router.push(`/rooms/${result.data.room.room_id}`);
+    <article
+      className={`room-card${mine ? " is-mine" : ""}`}
+      role="listitem"
+      style={enter(index)}
+      aria-label={r.room.name}
+      onClick={(e) => {
+        if (!(e.target as HTMLElement).closest("a")) router.push(href);
+      }}
+    >
+      {mine && <span className="room-ribbon">Bàn của bạn</span>}
+      <MiniTable seats={r.room.max_seats} seated={r.seated} w={168} h={100} dealer={r.room.status === "playing"} />
+      <div className="rc-body">
+        <h3>{r.room.name}</h3>
+        <RoomBadges room={r.room} isPrivate={r.is_private} />
+        <dl className="rc-meta">
+          <span>
+            <dt>Blind</dt>
+            <dd>{blindsText(r.room)}</dd>
+          </span>
+          <span>
+            <dt>Ghế</dt>
+            <dd>
+              {r.seated}/{r.room.max_seats}
+            </dd>
+          </span>
+          <span>
+            <dt>Chủ phòng</dt>
+            <dd>{r.owner_name ?? "—"}</dd>
+          </span>
+        </dl>
+        <div className="rc-foot">
+          <small>{cta.note}</small>
+          <ButtonLink
+            kind={cta.kind}
+            size="sm"
+            href={href}
+            icon={cta.watch ? <Eye size={15} aria-hidden /> : undefined}
+            className="rc-cta"
+            aria-label={`${cta.label}: ${r.room.name}`}
+          >
+            {cta.label}
+          </ButtonLink>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function RoomRow({ r, myName, index }: { r: LobbyRoom; myName: string | null; index: number }) {
+  const cta = roomCta(r, myName);
+  const mine = isMine(r, myName);
+  return (
+    <Link href={`/rooms/${r.room.room_id}`} className={`room-row${mine ? " is-mine" : ""}`} role="listitem" style={enter(index)} aria-label={`${r.room.name}: ${cta.label}`}>
+      <MiniTable seats={r.room.max_seats} seated={r.seated} w={70} h={44} />
+      <span className="rr-body">
+        <span className="rr-top">
+          <b>{r.room.name}</b>
+          {r.is_private && <Lock size={12} strokeWidth={2.4} className="rr-lock" aria-label="Riêng" />}
+        </span>
+        <span className="rr-meta">
+          {blindsText(r.room)} · {r.seated}/{r.room.max_seats} ghế · {mine ? "của bạn" : `chủ ${r.owner_name ?? "?"}`}
+        </span>
+        <span className="rr-badges">
+          <span className={`rr-status${r.room.status === "playing" ? " is-live" : r.room.status === "closed" || r.room.status === "suspended" ? " is-off" : ""}`}>
+            {r.room.status === "playing" ? "Đang chơi" : r.room.status === "open" ? "Đang mở" : r.room.status === "closed" ? "Đã đóng" : "Tạm dừng"}
+          </span>
+          {r.room.seven_deuce_bonus > 0 && <span className="rr-seven">7-2 · {r.room.seven_deuce_bonus}</span>}
+        </span>
+      </span>
+      <span className={`rr-cta is-${cta.kind}`} aria-hidden>
+        {cta.short}
+      </span>
+    </Link>
+  );
+}
+
+/** The phone's dashed "Có link mời?" row: reads the clipboard when allowed, else opens a box. */
+function PhonePaste({ open, onOpen }: { open: boolean; onOpen: () => void }) {
+  const router = useRouter();
+  if (open) return <PasteInvite inputId="paste-invite" compact autoFocus />;
+  return (
+    <div className="paste-row">
+      <Link2 size={17} strokeWidth={1.9} aria-hidden />
+      <span>
+        <b>Có link mời?</b> Dán để vào thẳng bàn
+      </span>
+      <button
+        type="button"
+        className="paste-btn"
+        onClick={async () => {
+          const text = await navigator.clipboard?.readText().catch(() => "");
+          const token = text ? inviteToken(text) : null;
+          if (token) router.push(`/rooms/join?token=${encodeURIComponent(token)}`);
+          else onOpen();
         }}
       >
-        <h2 className="font-[family-name:var(--font-display)] text-xl sm:col-span-2">Tạo phòng</h2>
-        <div className="sm:col-span-2">
-          <NoticeBox notice={submit.notice} />
-        </div>
-        <div className="sm:col-span-2">
-          <Field label="Tên phòng" name="name" errors={submit.fields.name} />
-        </div>
-        <NumberField label="Small blind" name="small_blind" value={5} errors={submit.fields.small_blind} />
-        <NumberField label="Big blind" name="big_blind" value={10} errors={submit.fields.big_blind} />
-        <NumberField label="Số ghế (2–9)" name="max_seats" value={9} errors={submit.fields.max_seats} />
-        <NumberField label="Giây suy nghĩ (5–120)" name="think_time_seconds" value={30} errors={submit.fields.think_time_seconds} />
-        <NumberField label="Thưởng 7-2 (0 = tắt)" name="seven_deuce_bonus" value={0} errors={submit.fields.seven_deuce_bonus} />
-        <label className="flex items-center gap-2 self-end pb-3 text-sm">
-          <input type="checkbox" name="is_private" /> Phòng riêng (chỉ ai có link mời)
-        </label>
-        <div className="sm:col-span-2">
-          <Submit busy={submit.busy}>Tạo phòng</Submit>
-        </div>
-      </form>
-    </Card>
+        Dán
+      </button>
+    </div>
   );
 }
 
-export function NumberField({
-  label,
-  name,
-  value,
-  errors,
-}: {
-  label: string;
-  name: string;
-  value?: number;
-  errors?: string[];
-}) {
+// Players of the mock server's scenario (docs/api/fixtures/scenarios/three-friends.json): the
+// old home page's shortcuts, kept for development only.
+const MOCK_PLAYERS = [
+  { id: "1", name: "Lym" },
+  { id: "2", name: "An" },
+  { id: "3", name: "Bình" },
+];
+
+function MockServerLinks() {
+  if (process.env.NODE_ENV === "production") return null;
   return (
-    <label className="grid gap-1.5 text-sm">
-      <span className="font-bold">{label}</span>
-      <input
-        name={name}
-        type="number"
-        defaultValue={value}
-        required
-        className="w-full rounded-xl border border-[var(--line)] bg-[var(--canvas)] px-4 py-3 text-[var(--ink)]"
-      />
-      {errors?.map((error) => (
-        <span key={error} className="text-xs text-[#ff8787]">
-          {error}
-        </span>
+    <nav className="mock-links" aria-label="Mock server (chỉ khi dev)">
+      <span>Mock server:</span>
+      {MOCK_PLAYERS.map((p) => (
+        <Link key={p.id} href={`/table?player=${p.id}`} className="link is-muted">
+          {p.name}
+        </Link>
       ))}
-    </label>
+      <Link href="/table" className="link is-muted">
+        Chỉ xem
+      </Link>
+    </nav>
   );
 }
