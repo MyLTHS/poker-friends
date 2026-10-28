@@ -1,7 +1,7 @@
 "use client";
 
 // The two pages opened from an email link: /account/verify?token=… and /account/reset?uid=…&token=….
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BadgeCheck, MailWarning } from "lucide-react";
 
 import { ButtonLink, LoadingLine } from "@/ui";
@@ -17,12 +17,19 @@ type Outcome = { ok: true; email: string } | { ok: false; text: string };
 export function VerifyScreen({ token }: { token: string }) {
   const api = useMemo(() => createAuthApi(), []);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // One POST per link: when React runs the effect twice (StrictMode in development) the second
+  // run waits for the first answer instead of sending the token again.
+  const sent = useRef<{ token: string; result: ReturnType<typeof api.verifyEmail> } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    if (sent.current?.token !== token) {
+      const result = api.config().then(() => api.verifyEmail({ token })); // config sets the csrftoken cookie
+      sent.current = { token, result };
+    }
+    const request = sent.current.result;
     (async () => {
-      await api.config(); // sets the csrftoken cookie
-      const result = await api.verifyEmail({ token });
+      const result = await request;
       if (cancelled) return;
       setOutcome(result.ok ? { ok: true, email: result.data.email ?? "" } : { ok: false, text: errorText(result.error, result.retryAfter) });
     })();
