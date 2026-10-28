@@ -3034,6 +3034,8 @@
     color: var(--ivory-3);
   }
   .d1 .rp-panel .speed {
+    justify-content: center;
+    min-width: 44px;
     height: 44px;
     padding: 0 12px;
   }
@@ -3080,6 +3082,10 @@
   .d1 .rp-panel .transport {
     justify-content: space-between;
     gap: 4px;
+  }
+  .d1 .rp-panel .tp-btn,
+  .d1 .rp-panel .speed {
+    flex: none;
   }
   .d1 .rp-panel .tp-btn {
     width: 44px;
@@ -3195,6 +3201,10 @@
   }
   .d1.tbl-mobile .rp-panel {
     overflow: hidden;
+  }
+  /* the replay column holds five 44 px transport buttons in a row (design: 304 px wide) */
+  .d1.tbl-mobile:has(.rp-panel) {
+    --pw: calc(260px + var(--safe-r));
   }
   .d1 .rp-panel-head b,
   .d1 .rp-panel-head small {
@@ -3314,9 +3324,10 @@
   .d1 .slider-input {
     position: absolute;
     left: 0;
-    top: -14px;
+    /* 44 px to grab (the drawn track is 6 px) */
+    top: -19px;
     width: 100%;
-    height: calc(100% + 28px);
+    height: calc(100% + 38px);
     margin: 0;
     opacity: 0;
     cursor: pointer;
@@ -3376,6 +3387,8 @@
   .d1 .composer-field {
     flex: 1;
     min-width: 0;
+    /* the whole 44 px box (border included) takes the tap, not just the line of text */
+    height: 44px;
     border: 0;
     background: none;
     color: var(--ivory);
@@ -3407,6 +3420,11 @@
       content: "";
       position: absolute;
       inset: -8px;
+    }
+    .d1 .drawer-tabs button:not(.iconbtn)::before {
+      content: "";
+      position: absolute;
+      inset: -5px -2px;
     }
     .d1 .composer-field {
       font-size: 16px;

@@ -1001,6 +1001,8 @@
     font-size: var(--fs-md);
     color: var(--ivory-3);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .d1 .ml-net {
     display: flex;
@@ -1179,6 +1181,8 @@
     font-size: var(--fs-sm);
     color: var(--ivory-3);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .d1 .op-stack {
     min-width: 58px;
@@ -1879,7 +1883,14 @@
       height: 44px;
     }
     .d1 .create-form .sp {
+      position: relative;
       height: 44px;
+    }
+    /* eight seats in a narrow column: the taps take the gaps between them */
+    .d1 .create-form .sp::before {
+      content: "";
+      position: absolute;
+      inset: 0 -2px;
     }
     .d1 .create-form .seg-item {
       height: 36px;
@@ -2086,6 +2097,26 @@
       grid-column: 1;
       grid-row: 2;
     }
+    /* five think times are too many beside the label for 44 px taps: they take their own row */
+    .d1 .owner .owner-two .os-think .seg {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      display: flex;
+    }
+    .d1 .owner .owner-two .os-think .seg-item {
+      flex: 1;
+    }
+    /* the whole box, border and padding, takes the tap */
+    .d1 .owner .input input {
+      height: calc(100% + 2px);
+      margin-block: -1px;
+    }
+    .d1 .owner .blind-pair .input {
+      padding: 0;
+    }
+    .d1 .owner .blind-pair .input input {
+      padding: 0 12px;
+    }
     .d1 .owner .seg-item {
       height: 36px;
     }
@@ -2203,6 +2234,40 @@
   @keyframes rooms-fade {
     from {
       opacity: 0;
+    }
+  }
+}
+
+/* C5: small landscape phones (iPhone SE, 667×375): the owner's sheet starts at the notch margin
+   so the players column keeps room for a name, the stack and its buttons. */
+@layer components {
+  @media (orientation: landscape) and (max-height: 500px) and (max-width: 760px) {
+    .d1 .sheet:has(.owner) {
+      left: var(--safe-l);
+    }
+    .d1 .owner {
+      grid-template-columns: minmax(0, 1fr) 272px;
+      column-gap: 14px;
+    }
+    /* create room: two columns leave eight seat buttons 24 px wide; one column, scrolling down */
+    .d1 .panel.create-form {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "name" "blind" "seats" "secs" "seven" "vis" "prev";
+    }
+    /* room page: the invitation (312 px) has no room beside the 384 px share column: one
+       column, the invitation under it, scrolling down */
+    .d1 .room-page .invite-grid,
+    .d1 .room-loading .invite-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .d1 .room-page .invite-stage {
+      position: static;
+      min-height: 0;
+    }
+    /* history: the ledger beside a 284 px hand list leaves names no room; one column */
+    .d1 .m-history,
+    .d1 .history-grid.is-loading {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 }
