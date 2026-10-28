@@ -2,7 +2,7 @@
 // through the links in the emails like a player would: Django prints each email, mailbox.ts reads
 // the link. Phone sizes, overflow, 44px targets and the accessibility checks are in checks.ts.
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 
 import { PHONES, a11yProblems, layoutProblems, smallTargets } from "./checks";
 import { linkFromEmail } from "./mailbox";
@@ -39,9 +39,17 @@ async function logIn(page: Page, email: string, password: string) {
 }
 
 test.describe("flows through the email links", () => {
-  test("a guest upgrades, cannot log in before verifying, opens the link, then logs in", async ({ page }) => {
+  test("a guest with chips upgrades and keeps them, verifies the email from the link, then logs in", async ({ page }) => {
     await playAsGuest(page);
+    // The guest opens a table, sits and is granted chips: the upgrade must carry them over.
+    const guest = await api(page, "GET", "/api/auth/me/");
+    const created = await api(page, "POST", "/api/rooms/", { name: "Bàn của khách", small_blind: 1, big_blind: 2 });
+    const roomId = created.room.room_id;
+    await api(page, "POST", `/api/rooms/${roomId}/seats/`, { seat: 1 });
+    await api(page, "POST", `/api/rooms/${roomId}/chips/`, { player_id: String(guest.id), amount: 750 });
+    await page.reload();
     await expect(page.getByRole("heading", { name: "Trở thành thành viên" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Chip của bạn ở các phòng" })).toContainText(/Bàn của khách\s*750/);
 
     const email = `e2e-${unique()}@example.com`;
     await page.getByLabel("Email").fill(email);
@@ -52,6 +60,7 @@ test.describe("flows through the email links", () => {
     await expect(page.getByText(email).first()).toBeVisible();
     await expect(page.getByText("Chưa xác minh")).toBeVisible();
     await expect(page.getByText(/Đã nâng cấp\. Mở email/)).toBeVisible();
+    await expect(page.getByRole("link", { name: /Bàn của khách/ })).toContainText("Còn 750 chip");
 
     await page.getByRole("button", { name: "Đăng xuất" }).click();
     await expect(page.getByRole("heading", { name: "Chào mừng trở lại" }).first()).toBeVisible();
@@ -96,6 +105,7 @@ test.describe("flows through the email links", () => {
     await page.goto((await linkFromEmail(email, "/account/verify")).href);
     await expect(page.getByRole("heading", { name: "Email đã xác minh" })).toBeVisible();
     await expect(page.getByText(email)).toBeVisible();
+    await expect(page).toHaveURL(/\/account\/verify$/); // the token left the address bar
     await page.getByRole("link", { name: "Đăng nhập" }).click();
     await logIn(page, email, PASSWORD);
     await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
@@ -116,8 +126,22 @@ test.describe("flows through the email links", () => {
     await expect(page.getByText(`Đã gửi tới q•••@example.com`)).toBeVisible();
 
     await page.goto((await linkFromEmail(email, "/account/reset")).href);
+    await expect(page).toHaveURL(/\/account\/reset$/); // the token left the address bar
+    await hydrated(page);
+    // Two different passwords: "Lưu" says why under "Nhập lại" and sends nothing.
+    const resets: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("/api/auth/password/reset/")) resets.push(request.method());
+    });
     await page.getByLabel("Mật khẩu mới").fill(fresh);
-    await page.getByLabel("Nhập lại").fill(fresh);
+    await page.getByLabel("Nhập lại").fill("khac-han-roi-99");
+    await page.getByRole("button", { name: "Lưu mật khẩu mới" }).click();
+    const again = page.getByLabel("Nhập lại");
+    await expect(again).toBeFocused();
+    await expect(again).toHaveAccessibleDescription("Hai mật khẩu chưa khớp");
+    expect(resets).toEqual([]);
+
+    await again.fill(fresh);
     await page.getByRole("button", { name: "Lưu mật khẩu mới" }).click();
     await expect(page.getByText("Đã đổi mật khẩu")).toBeVisible();
 
@@ -145,6 +169,62 @@ test("a wrong password shows the error on the form and moves the focus to it", a
   await expect(page.getByRole("alert").filter({ hasText: "Sai email hoặc mật khẩu." })).toBeVisible();
   await expect(page.locator(":focus")).toContainText("Sai email hoặc mật khẩu.");
   await expect(page.getByRole("heading", { name: "Chào mừng trở lại" }).first()).toBeVisible();
+});
+
+test("only the last action's error shows: a refused guest after a wrong password", async ({ page }) => {
+  await page.route("**/api/auth/guest/", (route) =>
+    route.fulfill({ status: 429, headers: { "Retry-After": "120" }, json: { code: "rate_limited", message: "Too many." } }),
+  );
+  await page.goto("/account");
+  await logIn(page, `nobody-${unique()}@example.com`, "wrong-password-1");
+  await expect(page.getByRole("alert").filter({ hasText: "Sai email hoặc mật khẩu." })).toBeVisible();
+
+  await page.getByRole("button", { name: "Chơi ngay bằng khách" }).click();
+  await expect(page.locator(":focus")).toContainText("Bạn thử quá nhiều lần. Đợi khoảng 2 phút");
+  await expect(page.getByText("Sai email hoặc mật khẩu.")).toHaveCount(0);
+});
+
+test("the signup and forgot forms wait for the CSRF cookie before sending", async ({ page }) => {
+  for (const [path, button] of [["/account/signup", "Tạo tài khoản"], ["/account/forgot", "Gửi link đặt lại"]]) {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const slowConfig = async (route: Route) => {
+      await held;
+      await route.continue();
+    };
+    await page.route("**/api/auth/config/", slowConfig);
+    await page.goto(path);
+    const send = page.getByRole("button", { name: button });
+    await expect(send).toBeDisabled();
+    await expect(send).toHaveAttribute("aria-busy", "true");
+    release();
+    await expect(send).toBeEnabled();
+    await page.unroute("**/api/auth/config/", slowConfig);
+  }
+});
+
+test("a guest who opens the signup is sent to the upgrade, which keeps the chips", async ({ page }) => {
+  await playAsGuest(page);
+  await page.goto("/account/signup");
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(page.getByRole("heading", { name: "Trở thành thành viên" })).toBeVisible();
+});
+
+test("the strength bar never praises a password the server will refuse", async ({ page }) => {
+  await page.goto("/account/signup");
+  await page.getByLabel("Email").fill("lym.nguyen@gmail.com");
+  await page.getByLabel("Tên ở bàn").fill("Lym");
+  const password = page.getByLabel("Mật khẩu", { exact: true });
+  const rule = page.getByRole("listitem").filter({ hasText: "Không phổ biến, không giống tên hay email" });
+
+  await password.fill("Password1234");
+  await expect(page.getByText("Yếu: quá phổ biến, dễ đoán")).toBeVisible();
+  await expect(rule).toContainText("(chưa đạt)");
+  await password.fill("Nguyen2026!");
+  await expect(page.getByText("Yếu: giống tên hoặc email")).toBeVisible();
+  await password.fill("ban-ni-xanh-2026");
+  await expect(page.getByText("Rất mạnh")).toBeVisible();
+  await expect(rule).toContainText("(đạt)");
 });
 
 test("forgot password confirms without saying whether the email has an account", async ({ page }) => {
@@ -226,7 +306,15 @@ test.describe("accessibility", () => {
       await expect(box).toHaveAccessibleDescription("Chưa điền ô này.");
     }
     await expect(page.getByLabel("Mật khẩu", { exact: true })).toHaveAttribute("aria-invalid", "true");
+    // the focus reads the first error; the others wait for their box (not three alerts at once)
+    await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
     expect(await a11yProblems(page)).toEqual([]);
+
+    // Typing in a box with an error keeps every keystroke (the passwords are controlled boxes).
+    const password = page.getByLabel("Mật khẩu", { exact: true });
+    await password.fill("ban-ni-xanh-2026");
+    await expect(password).toHaveValue("ban-ni-xanh-2026");
+    await expect(password).not.toHaveAttribute("aria-invalid");
 
     // A wrong email: its own message; typing clears the error of that box only.
     await email.fill("lym-o-dau");
