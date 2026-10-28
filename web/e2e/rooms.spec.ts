@@ -71,6 +71,30 @@ test("lobby → create a room → invite link → a new visitor joins and sits; 
   await expect(row.locator(".op-stack")).toHaveText("500");
   const seats = await api(an, "GET", `/api/rooms/${roomId}/snapshot/`);
   expect(seats.table.seats[0].stack).toBe(500);
+
+  // At the table, "Mời bạn" gives the owner the same invite link. Bình is not the owner of this
+  // private room, so the server keeps the link from them and the sheet says to ask Lan.
+  await an.goto(`/rooms/${roomId}/table`);
+  await an.getByRole("button", { name: "Mời bạn" }).click();
+  const ownerInvite = an.getByRole("dialog", { name: "Mời bạn vào bàn" });
+  await expect(ownerInvite.getByTestId("invite-link")).toHaveAttribute("title", shown!);
+  await binh.goto(`/rooms/${roomId}/table`);
+  await binh.getByRole("button", { name: "Mời bạn" }).click();
+  const guestInvite = binh.getByRole("dialog", { name: "Mời bạn vào bàn" });
+  await expect(guestInvite).toContainText("chỉ chủ phòng có link mời");
+  await expect(guestInvite.getByTestId("invite-link")).toHaveCount(0);
+});
+
+test("at the table of a public room anyone may pass on the room's page", async ({ browser }) => {
+  const owner = await newGuest(browser, "Hoa");
+  const room = await api(owner, "POST", "/api/rooms/", { name: "Bàn E2E công khai", small_blind: 10, big_blind: 20, is_private: false });
+  const roomId = room.room.room_id;
+  const khai = await newGuest(browser, "Khải");
+  await khai.goto(`/rooms/${roomId}/table`);
+  await khai.getByRole("button", { name: "Mời bạn" }).click();
+  const sheet = khai.getByRole("dialog", { name: "Mời bạn vào bàn" });
+  await expect(sheet.getByTestId("invite-link")).toHaveAttribute("title", new RegExp(`/rooms/${roomId}$`));
+  await expect(sheet).toContainText("Link phòng công khai");
 });
 
 test("a wrong invite link says so and leads back to the lobby", async ({ browser }) => {
