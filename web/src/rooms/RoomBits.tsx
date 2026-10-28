@@ -141,8 +141,22 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-/** The owner's share card: the link, copy / share, the QR to scan from across the table. */
-export function ShareCard({ detail, onCopied, rotateHint = true }: { detail: RoomDetail; onCopied?: (ok: boolean) => void; rotateHint?: boolean }) {
+/** The owner's share card: the link, copy / share, the QR to scan from across the table.
+ *  `path` shares another link of this site instead of the invite (a public room's page, which
+ *  any player may pass on). */
+export function ShareCard({
+  detail,
+  onCopied,
+  rotateHint = true,
+  path,
+  eyebrow = "Chủ phòng chia sẻ",
+}: {
+  detail: RoomDetail;
+  onCopied?: (ok: boolean) => void;
+  rotateHint?: boolean;
+  path?: string;
+  eyebrow?: string;
+}) {
   const phone = usePhone();
   const origin = useOrigin();
   const [copied, setCopied] = useState(false);
@@ -152,17 +166,17 @@ export function ShareCard({ detail, onCopied, rotateHint = true }: { detail: Roo
     const timer = window.setTimeout(() => setCopied(false), 2500);
     return () => window.clearTimeout(timer);
   }, [copied]);
-  const link = detail.invite_token ? inviteUrl(origin, detail.invite_token) : "";
+  const link = path ? `${origin}${path}` : detail.invite_token ? inviteUrl(origin, detail.invite_token) : "";
   // the matrix only changes with the link (a re-render every poll would rebuild it)
   const modules = useMemo(() => (link ? qrModules(link) : []), [link]);
-  if (!detail.invite_token || !origin) return null;
+  if (!link || !origin) return null;
   const shown = link.replace(/^https?:\/\//, "");
   const room = detail.room;
   return (
-    <section className="share" aria-label="Link mời">
+    <section className="share" aria-label={path ? "Link phòng" : "Link mời"}>
       <div className="share-head">
         <span>
-          <span className="eyebrow">Chủ phòng chia sẻ</span>
+          <span className="eyebrow">{eyebrow}</span>
           <b>{room.name}</b>
         </span>
         <VisibilityBadge isPrivate={detail.is_private} />
@@ -204,7 +218,7 @@ export function ShareCard({ detail, onCopied, rotateHint = true }: { detail: Roo
           )}
         </div>
         <span className="qr-wrap">
-          <QR modules={modules} size={phone ? 112 : 168} label={`Mã QR của link mời vào ${room.name}`} />
+          <QR modules={modules} size={phone ? 112 : 168} label={`Mã QR của ${path ? "link phòng" : "link mời vào"} ${room.name}`} />
           <small>
             <QrCode size={12} aria-hidden /> Quét để vào
           </small>

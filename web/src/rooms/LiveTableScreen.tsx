@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Lock } from "lucide-react";
 
 import { errorText } from "@/account/messages";
-import { TableScreen, type OwnerSlot } from "@/table/TableScreen";
+import { TableScreen, type InviteSlot, type OwnerSlot } from "@/table/TableScreen";
 import "@/table/table.css";
-import { ButtonLink, D1Root, ErrorState, Spinner } from "@/ui";
+import { ButtonLink, D1Root, ErrorState, Sheet, Spinner, useToast } from "@/ui";
 
 import { createRoomsApi, roomSocketUrl, type RoomDetail, type RoomsApi } from "./api";
 import { OwnerSheet } from "./OwnerPanel";
+import { ShareCard } from "./RoomBits";
 
 const SOCKET_BASE = process.env.NEXT_PUBLIC_DJANGO_WS ?? "ws://localhost:8000";
 
@@ -16,7 +18,8 @@ const SOCKET_BASE = process.env.NEXT_PUBLIC_DJANGO_WS ?? "ws://localhost:8000";
  * /rooms/<id>/table — the real table. One REST snapshot first: it gives a first-time visitor
  * their guest session cookie (a WebSocket handshake cannot) and checks they may see the room.
  * Then the same TableScreen as the mock, on Django's WebSocket, with the room's REST calls
- * (chat history, take/leave a seat) and, for the owner, the owner's sheet over the table.
+ * (chat history, take/leave a seat), the "Mời bạn" sheet and, for the owner, the owner's sheet
+ * over the table.
  */
 export function LiveTableScreen({ roomId }: { roomId: number }) {
   const rooms = useMemo(() => createRoomsApi(), []);
@@ -45,6 +48,8 @@ export function LiveTableScreen({ roomId }: { roomId: number }) {
     (slot: OwnerSlot) => detail && <TableOwnerSheet {...slot} detail={detail} reload={reloadDetail} rooms={rooms} />,
     [detail, reloadDetail, rooms],
   );
+  // always offered: when the first read of the room failed, opening the sheet reads it again
+  const invite = useCallback((slot: InviteSlot) => <TableInviteSheet {...slot} detail={detail} reload={reloadDetail} roomId={roomId} />, [detail, reloadDetail, roomId]);
 
   const loadChat = useCallback(async () => {
     const result = await rooms.chat(roomId);
@@ -73,6 +78,7 @@ export function LiveTableScreen({ roomId }: { roomId: number }) {
         onTakeSeat={onTakeSeat}
         onLeaveSeat={onLeaveSeat}
         owner={detail?.is_owner ? owner : undefined}
+        invite={invite}
         replayHref={(handId) => `/hands/${handId}`}
       />
     );
@@ -98,4 +104,34 @@ function TableOwnerSheet({ open, onClose, seats, inHand, detail, reload, rooms }
     if (open) void reload();
   }, [open, reload]);
   return <OwnerSheet open={open} onClose={onClose} detail={detail} seats={seats} inHand={inHand} onChanged={() => void reload()} rooms={rooms} />;
+}
+
+/**
+ * "Mời bạn": the owner gets the invite link (it lets a friend into a private room too); anyone
+ * else may pass on a public room's page. Only the owner has a private room's invite link (the
+ * server keeps it from the others), so there the sheet says to ask the owner.
+ */
+function TableInviteSheet({ open, onClose, detail, reload, roomId }: InviteSlot & { detail: RoomDetail | null; reload: () => Promise<void>; roomId: number }) {
+  const toast = useToast();
+  // the owner may have changed the link in the owner's sheet since the table opened
+  useEffect(() => {
+    if (open) void reload();
+  }, [open, reload]);
+  const onCopied = (ok: boolean) =>
+    toast(ok ? { kind: "success", title: "Đã chép link" } : { kind: "danger", title: "Không chép được", text: "Trình duyệt chặn bộ nhớ tạm. Bấm giữ vào link để chép." });
+  return (
+    <Sheet open={open} onClose={onClose} title="Mời bạn vào bàn">
+      {!detail ? (
+        <Spinner size={40} />
+      ) : detail.invite_token ? (
+        <ShareCard detail={detail} onCopied={onCopied} />
+      ) : !detail.is_private ? (
+        <ShareCard detail={detail} onCopied={onCopied} path={`/rooms/${roomId}`} eyebrow="Link phòng công khai" rotateHint={false} />
+      ) : (
+        <p className="share-note">
+          <Lock size={14} aria-hidden /> Phòng riêng: chỉ chủ phòng có link mời. Nhờ chủ phòng bấm Mời bạn rồi gửi link cho bạn của bạn.
+        </p>
+      )}
+    </Sheet>
+  );
 }
