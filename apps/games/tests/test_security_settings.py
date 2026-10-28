@@ -66,3 +66,17 @@ class TestHttpsBehindTheProxy:
         env = {"DJANGO_DEBUG": "true"}
         assert settings_value("SECURE_HSTS_SECONDS", **env) == "0"
         assert settings_value("SECURE_SSL_REDIRECT", **env) == "False"
+
+
+def test_redis_channel_layer_outlasts_its_own_blocking_read():
+    # channels_redis blocks 5 s waiting for a message; a read timeout of 5 s (redis-py's default)
+    # killed every WebSocket quiet for that long.
+    code = (
+        "import config.settings as s; "
+        "print(s.CHANNEL_LAYERS['default']['CONFIG']['hosts'][0]['socket_timeout'])"
+    )
+    result = run(
+        ["-c", code], DJANGO_SECRET_KEY=STRONG_SECRET, REDIS_URL="redis://localhost:6379/0"
+    )
+    assert result.returncode == 0, result.stderr
+    assert float(result.stdout) > 5

@@ -89,9 +89,16 @@ DATABASES = {
 }
 
 REDIS_URL = os.environ.get("REDIS_URL")
+# redis-py times a read out after 5 seconds by default, exactly how long channels_redis blocks
+# waiting for a message, so every socket quiet for 5 seconds died with 1011. Any longer read
+# timeout fixes it; a socket_timeout in REDIS_URL's query string still wins over this one.
+REDIS_SOCKET_TIMEOUT = 15
 CHANNEL_LAYERS = {
     "default": (
-        {"BACKEND": "channels_redis.core.RedisChannelLayer", "CONFIG": {"hosts": [REDIS_URL]}}
+        {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [{"address": REDIS_URL, "socket_timeout": REDIS_SOCKET_TIMEOUT}]},
+        }
         if REDIS_URL
         else {"BACKEND": "channels.layers.InMemoryChannelLayer"}
     )
