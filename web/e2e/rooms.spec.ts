@@ -86,13 +86,13 @@ test("lobby → create a room → invite link → a new visitor joins and sits; 
 });
 
 test("at the table of a public room anyone may pass on the room's page", async ({ browser }) => {
-  const owner = await newGuest(browser, "Chi");
+  const owner = await newGuest(browser, "Hoa");
   const room = await api(owner, "POST", "/api/rooms/", { name: "Bàn E2E công khai", small_blind: 10, big_blind: 20, is_private: false });
   const roomId = room.room.room_id;
-  const dung = await newGuest(browser, "Dũng");
-  await dung.goto(`/rooms/${roomId}/table`);
-  await dung.getByRole("button", { name: "Mời bạn" }).click();
-  const sheet = dung.getByRole("dialog", { name: "Mời bạn vào bàn" });
+  const khai = await newGuest(browser, "Khải");
+  await khai.goto(`/rooms/${roomId}/table`);
+  await khai.getByRole("button", { name: "Mời bạn" }).click();
+  const sheet = khai.getByRole("dialog", { name: "Mời bạn vào bàn" });
   await expect(sheet.getByTestId("invite-link")).toHaveAttribute("title", new RegExp(`/rooms/${roomId}$`));
   await expect(sheet).toContainText("Link phòng công khai");
 });
