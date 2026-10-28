@@ -50,6 +50,17 @@ Cookie, token trong link và bài đã bị xoá trước khi lưu (chỗ đó g
 và xoá được, không sửa. Lỗi phía server (bàn tạm dừng, lệch chip) vẫn nằm trong log, xem các mục
 dưới.
 
+**Dọn lỗi cũ** sau buổi beta, rồi mỗi tháng một lần: lệnh dưới xoá lỗi trình duyệt không gặp lại
+trong 30 ngày (`--days 7` nếu muốn ngắn hơn). Phản hồi của người chơi không bao giờ bị xoá.
+
+```bash
+dc exec backend python manage.py prune_client_errors
+```
+
+Bảng lỗi nhận tối đa 1000 lỗi **mới** mỗi 24 giờ (lỗi lặp lại chỉ cộng `Count`). Quá mức đó trình
+duyệt bị từ chối, log server ghi `Too Many Requests: /api/client-errors/`: thường là một trang lỗi
+lặp vòng, hoặc có người cố tình gửi rác. Xem các dòng mới nhất trong admin để biết là cái nào.
+
 ## Server sập
 
 Dấu hiệu: trang web không vào được, hoặc vào được nhưng bàn báo mất kết nối mãi.
