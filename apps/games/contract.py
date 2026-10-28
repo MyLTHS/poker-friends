@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from jsonschema import Draft202012Validator
+from pokerkit import StandardHighHand
 from referencing import Registry, Resource
 
 API_DIR = Path(__file__).resolve().parents[2] / "docs" / "api"
@@ -217,6 +218,39 @@ def _settlement_errors(payload: dict[str, Any]) -> list[str]:
     return found
 
 
+RANKS = "23456789TJQKA"
+STRAIGHTS = frozenset({"straight", "straight_flush"})
+
+
+def _in_reading_order(category: str, cards: list[str]) -> bool:
+    """Cards as clients read them (docs/api/ws-protocol.md): bigger groups first, then higher
+    ranks; a five-high straight puts its ace last. Written apart from the engine on purpose."""
+    ranks = [card[0] for card in cards]
+    if category in STRAIGHTS and set(ranks) == set("A2345"):
+        return ranks == list("5432A")
+    keys = [(-ranks.count(r), -RANKS.index(r)) for r in ranks]
+    return keys == sorted(keys)
+
+
+def _made_hand_errors(entry: dict[str, Any], hole: list[str], board: list[str]) -> list[str]:
+    """The named hand is what its five cards make, the best the player has, in reading order.
+    Recomputed with PokerKit from the cards alone, not with the engine's code."""
+    where = f"showdown/{entry['player_id']}"
+    cards = entry["cards"]
+    made = StandardHighHand("".join(cards))
+    best = StandardHighHand.from_game("".join(hole), "".join(board))
+    found = []
+    if made.entry.label.name.lower() != entry["category"]:
+        found.append(
+            f"{where}: the cards make {made.entry.label.name.lower()}, not {entry['category']}"
+        )
+    if made.entry != best.entry:
+        found.append(f"{where}: not the best hand of the player's cards and the board")
+    if not _in_reading_order(entry["category"], cards):
+        found.append(f"{where}: cards are not in reading order (bigger groups, higher ranks first)")
+    return found
+
+
 def _showdown_errors(payload: dict[str, Any], viewer: str) -> list[str]:
     """A hand name only for cards everyone sees face up after a showdown, and for all of them."""
     found = []
@@ -245,6 +279,8 @@ def _showdown_errors(payload: dict[str, Any], viewer: str) -> list[str]:
             found.append(f"{where}: seat does not match the hand")
         if not set(entry["cards"]) <= set(player["cards"]) | set(hand["board"]):
             found.append(f"{where}: cards are not the player's shown cards and the board")
+        elif len(hand["board"]) == 5:
+            found += _made_hand_errors(entry, player["cards"], hand["board"])
     if payload["seven_deuce"] is None:
         for pid, player in players.items():
             shown = player["cards"] and HIDDEN not in player["cards"]

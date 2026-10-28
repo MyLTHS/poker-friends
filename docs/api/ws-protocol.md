@@ -198,8 +198,9 @@ vẫn đúng hình dạng, nên vẫn qua schema. Hai lớp chặn thật, theo 
    nhầm người; `hand.completed` làm sinh/mất chip (tổng `hand_net` khác 0, tổng `seven_deuce_net`
    khác 0, `seven_deuce.total` khác tổng `payments`, `stack` không khớp kết quả ván); `showdown`
    đặt tên bộ bài cho người không còn bài ngửa, dùng lá không phải bài ngửa của họ hay bài chung,
-   có khi ván thắng vì mọi người bỏ bài (7-2) hoặc khi chưa đủ 5 lá chung, hay bỏ sót người có
-   bài ngửa (trừ chính người nhận).
+   có khi ván thắng vì mọi người bỏ bài (7-2) hoặc khi chưa đủ 5 lá chung, bỏ sót người có
+   bài ngửa (trừ chính người nhận), hoặc đặt tên sai: tự tính lại bằng PokerKit từ 5 lá (đúng hạng,
+   đúng bộ mạnh nhất của người đó) và kiểm thứ tự lá mà client đọc.
 
 Ví dụ những message đúng schema mà phải bị chặn: [`fixtures/server/leaks/`](fixtures/server/leaks/)
 (người nhận của từng file ghi trong [`fixtures/server/viewers.json`](fixtures/server/viewers.json)).
