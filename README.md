@@ -13,7 +13,7 @@ những gì đổi so với kế hoạch ban đầu ở [roadmap, mục "Đổi 
 
 **Đang ở:** A tới E đã xong và đã gộp vào `main`. **F (beta với bạn bè) đang chuẩn bị**: server chạy
 trên máy Mac của chủ dự án qua Cloudflare Tunnel ([choi-online.md](docs/choi-online.md)), sổ tay
-buổi chơi ở [beta-f.md](docs/beta-f.md), nút "Gửi phản hồi" và tự báo lỗi trình duyệt đang chờ review.
+buổi chơi ở [beta-f.md](docs/beta-f.md), nút "Gửi phản hồi" và tự báo lỗi trình duyệt (#31).
 Chủ dự án đã duyệt A và B1; cổng duyệt và bài tập từ B2 trở đi còn để dành, làm theo
 [sổ bài học](docs/learning/README.md).
 
@@ -24,9 +24,9 @@ Chủ dự án đã duyệt A và B1; cổng duyệt và bài tập từ B2 tr�
 | B2–B8 | Dữ liệu, hợp đồng API, bàn chơi realtime, độ bền, tài khoản, phòng và quyền, xã hội | ✅ Xong (#5–#14, sửa sau kiểm tra toàn bộ ở #16) |
 | C1 | Thiết kế | ✅ Chọn **D1 Nỉ & Đồng thau** trong bốn hướng; điện thoại chỉ xoay ngang (#15, #18, #21) |
 | C2–C5 | Frontend theo D1 | ✅ Xong: nền D1, bàn chơi, các màn phòng và tài khoản, điện thoại ngang, trợ năng (#23–#25, #27, #28) |
-| D | Kiểm thử tổng thể | ✅ Xong: 19 cách tấn công thử, bot chơi thử nhiều giờ (#19, #22) |
+| D | Kiểm thử tổng thể | ✅ Xong: 19 cách tấn công thử, bot chơi thử hàng trăm ván (#19, #22) |
 | E | Vận hành | ✅ Xong theo kế hoạch đã đổi: chơi online từ máy Mac, sao lưu/khôi phục có diễn tập, bỏ Redis (#17, #20, #26) |
-| F | Beta với bạn bè | 🟡 Đang chuẩn bị: phản hồi + lỗi trình duyệt phía server (#29), phía web chờ review |
+| F | Beta với bạn bè | 🟡 Đang chuẩn bị: phản hồi + lỗi trình duyệt (#29, #31), xác minh email hộ và lệnh `links`/`verify`/`admin` cho buổi chơi (#30) |
 | G | Nhìn lại | ⬜ |
 
 ### A. Nền móng codebase
@@ -167,7 +167,7 @@ Chủ dự án đã duyệt A và B1; cổng duyệt và bài tập từ B2 tr�
 
 - [x] D. 19 cách tấn công thử, mỗi cách một test (`apps/games/tests/test_attacks.py`,
   [biên bản](docs/collab/d-tan-cong-thu.md)); bấm đúp, nhiều tab, rút mạng giữa lệnh (#22)
-- [x] D. Bot chơi thử với server thật nhiều giờ: `manage.py soak` ([choi-thu-bang-bot.md](docs/choi-thu-bang-bot.md)) (#19)
+- [x] D. Bot chơi thử với server thật (hàng trăm ván, cả qua tunnel thật): `manage.py soak` ([choi-thu-bang-bot.md](docs/choi-thu-bang-bot.md)) (#19)
 - [x] E. `check_ledger`, sao lưu/khôi phục (`scripts/backup.sh`, `restore.sh`), diễn tập khôi phục trong
   CI, compose production, [runbook](docs/runbook.md) (#17)
 - [x] E. Chơi online từ máy Mac qua Cloudflare Tunnel: `scripts/play-online.sh` (#20)
@@ -175,12 +175,12 @@ Chủ dự án đã duyệt A và B1; cổng duyệt và bài tập từ B2 tr�
 - Không làm (đổi kế hoạch): Sentry (thay bằng tự báo lỗi trình duyệt vào admin, F), CD production
   theo tag (chưa có VPS; [runbook](docs/runbook.md) có cách đổi bản và quay về bản trước bằng tay)
 - [ ] F. Beta: 2–3 buổi chơi thật; một buổi 2 giờ không sai chip, không lộ bài, không crash
-  ([sổ tay](docs/beta-f.md)). Đã có: phản hồi và lỗi trình duyệt phía server (#29); phía web chờ review
+  ([sổ tay](docs/beta-f.md)). Đã có: phản hồi và lỗi trình duyệt (#29, #31); xác minh email hộ, lọc link email, tạo admin (#30)
 - [ ] G. Nhìn lại: retrospective, sổ bài học, chọn hướng tiếp
 
 ### Việc còn lại cho D và E
 
-Từ đợt kiểm tra chỉ-đọc toàn bộ B (trước C), đã làm ở D (#22):
+Từ đợt kiểm tra chỉ-đọc toàn bộ B (trước C), đã làm ở D (#22) và dọn nốt ở #32:
 
 - [x] `DJANGO_DEBUG` mặc định tắt; production đặt `DJANGO_DEBUG=false` rõ ràng. `manage.py` tự bật
   debug khi thiếu `DJANGO_SECRET_KEY` (cho dev) và in cảnh báo ra stderr.

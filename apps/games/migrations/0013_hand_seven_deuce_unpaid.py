@@ -17,18 +17,23 @@ from django.db import migrations
 
 
 def fill_in_unpaid_seven_deuce(apps, schema_editor):
-    # The engine is plain Python (pokerkit, no Django models): safe to import in a migration.
-    from apps.games.engine.hand import HandEngine
-
     Hand = apps.get_model("games", "Hand")
     HandCommand = apps.get_model("games", "HandCommand")
     LedgerEntry = apps.get_model("games", "LedgerEntry")
     with_entries = LedgerEntry.objects.filter(kind="seven_deuce", hand__isnull=False)
-    hands = Hand.objects.filter(seven_deuce__isnull=True, completed_at__isnull=False).exclude(
-        pk__in=with_entries.values("hand_id")
-    )
+    hands = Hand.objects.filter(
+        seven_deuce__isnull=True,
+        completed_at__isnull=False,
+        config__seven_deuce_bonus__gt=0,
+    ).exclude(pk__in=with_entries.values("hand_id"))
+    if not hands.exists():
+        return  # a fresh database, and every real one so far: nothing to replay
+    # Imported only when there is work: a later rename of the engine must not break `migrate` on
+    # a fresh database. The engine is plain Python (pokerkit, no Django models).
+    from apps.games.engine.hand import HandEngine
+
     for hand in hands.iterator():
-        if (hand.result or {}).get("voided") or not hand.config.get("seven_deuce_bonus"):
+        if (hand.result or {}).get("voided"):
             continue
         commands = HandCommand.objects.filter(hand_id=hand.pk).order_by("sequence")
         record = {
@@ -40,11 +45,14 @@ def fill_in_unpaid_seven_deuce(apps, schema_editor):
         }
         try:
             engine = HandEngine.replay(record)
-        except Exception:  # an engine change since: leave the hand as it is
+        except Exception:  # an engine change since: leave the hand for a person to look at
+            print(f"  0013: hand {hand.pk} no longer replays, left as it is")
             continue
         winner = engine.seven_deuce_bluff_winner()
         if winner is None:
             continue
+        # Whoever folds still has chips, so this means the ledger and the hand disagree: name it.
+        print(f"  0013: hand {hand.pk}: 7-2 bluff by {winner} with no payment recorded")
         hand.seven_deuce = {
             "player_id": winner,
             "bonus": engine.config.seven_deuce_bonus,
