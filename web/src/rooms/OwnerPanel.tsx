@@ -433,7 +433,7 @@ function RulesForm({
             {errors.small_blind ?? (blindChanged ? <>Đang {blindsText(room)} · {playing ? "áp từ ván sau" : "áp cho ván tới"}</> : playing ? "Áp từ ván sau" : "Áp cho ván tới")}
           </span>
         </section>
-        <section className="owner-sec">
+        <section className="owner-sec os-think">
           <h4 id="owner-secs">Giây suy nghĩ</h4>
           <Choices
             labelledBy="owner-secs"

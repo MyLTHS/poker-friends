@@ -1610,6 +1610,20 @@
       font-size: max(16px, var(--fs-base));
     }
   }
+  /* phone: the box's border is part of the tap (44 px box, 42 px inside it) */
+  @media (orientation: landscape) and (max-height: 500px), (pointer: coarse) {
+    .d1 .input input,
+    .d1 .input select {
+      height: calc(100% + 2px);
+      margin-block: -1px;
+    }
+    .d1 .navrail-home {
+      display: grid;
+      place-items: center;
+      min-width: 44px;
+      min-height: 44px;
+    }
+  }
 
   /* phone: everything a finger presses is at least 44×44, even where the drawing is smaller
      (segments 38px, toggles 27px, checkboxes 18px): an invisible ::before widens the hit area */

@@ -95,10 +95,10 @@ export function Invitation({
       {meta && (
         <dl className="inv-meta">
           {meta.map(([k, v]) => (
-            <span key={k}>
+            <div key={k}>
               <dt>{k}</dt>
               <dd>{v}</dd>
-            </span>
+            </div>
           ))}
         </dl>
       )}

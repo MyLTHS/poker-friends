@@ -226,20 +226,20 @@ function RoomCard({ r, myName, index }: { r: LobbyRoom; myName: string | null; i
         <h3>{r.room.name}</h3>
         <RoomBadges room={r.room} isPrivate={r.is_private} />
         <dl className="rc-meta">
-          <span>
+          <div>
             <dt>Blind</dt>
             <dd>{blindsText(r.room)}</dd>
-          </span>
-          <span>
+          </div>
+          <div>
             <dt>Ghế</dt>
             <dd>
               {r.seated}/{r.room.max_seats}
             </dd>
-          </span>
-          <span>
+          </div>
+          <div>
             <dt>Chủ phòng</dt>
             <dd>{r.owner_name ?? "—"}</dd>
-          </span>
+          </div>
         </dl>
         <div className="rc-foot">
           <small>{cta.note}</small>

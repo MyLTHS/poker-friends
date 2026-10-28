@@ -5,7 +5,7 @@
 // who is watching. Chat goes through the table's own socket (chat.send → chat.message).
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ChevronLeft, Coffee, Crown, Eye, LogOut, MessageCircle, Send, Smile, X } from "lucide-react";
+import { ChevronLeft, Coffee, Crown, Ellipsis, Eye, LogOut, MessageCircle, Send, Settings, Smile, X } from "lucide-react";
 
 import type { ChatMessage, Spectator } from "@/api/protocol";
 import { Avatar, IconButton, fmt } from "@/ui";
@@ -56,7 +56,8 @@ export function TableTools({
   canSit,
   online,
   onSitToggle,
-  ownerHref,
+  owner,
+  onSettings,
   leave,
 }: {
   watchers: number;
@@ -64,29 +65,34 @@ export function TableTools({
   canSit: boolean;
   online: boolean;
   onSitToggle: () => void;
-  ownerHref?: string;
+  /** room owner: the crown opens the owner's sheet */
+  owner?: { open: boolean; onOpen: () => void };
+  onSettings: () => void;
   leave?: { onLeave: () => void; label: string };
 }) {
   return (
     <>
       <span className="tbar-watch" title="Người đang xem">
-        <Eye size={16} strokeWidth={1.9} />
+        <Eye size={16} strokeWidth={1.9} aria-hidden />
         {watchers} đang xem
       </span>
       {canSit && (
         <button type="button" className={`tbar-btn${sittingOut ? " is-on" : ""}`} aria-pressed={sittingOut} onClick={onSitToggle} disabled={!online}>
-          <Coffee size={15} strokeWidth={1.9} />
+          <Coffee size={15} strokeWidth={1.9} aria-hidden />
           {sittingOut ? "Đang nghỉ · quay lại" : "Nghỉ ván sau"}
         </button>
       )}
-      {ownerHref && (
-        <Link className="iconbtn" href={ownerHref} title="Bảng chủ phòng" aria-label="Bảng chủ phòng">
-          <Crown size={17} strokeWidth={1.9} />
-        </Link>
+      {owner && (
+        <IconButton label="Bảng chủ phòng" active={owner.open} aria-haspopup="dialog" onClick={owner.onOpen}>
+          <Crown size={17} strokeWidth={1.9} aria-hidden />
+        </IconButton>
       )}
+      <IconButton label="Cài đặt bàn" aria-haspopup="dialog" onClick={onSettings}>
+        <Settings size={17} strokeWidth={1.9} aria-hidden />
+      </IconButton>
       {leave && (
         <button type="button" className="tbar-btn is-quiet" onClick={leave.onLeave}>
-          <LogOut size={15} strokeWidth={1.9} />
+          <LogOut size={15} strokeWidth={1.9} aria-hidden />
           {leave.label}
         </button>
       )}
@@ -111,16 +117,24 @@ export function MobileTableBar({ backHref, title, sub, right }: { backHref: stri
   );
 }
 
-export function MobileTools({ watchers, unread, onChat }: { watchers: number; unread: number; onChat: () => void }) {
+export function MobileTools({ watchers, unread, onChat, owner, onMore }: { watchers: number; unread: number; onChat: () => void; owner?: () => void; onMore: () => void }) {
   // id: the chat drawer gives focus back to this button when it closes
   return (
     <>
-      <span className="tbar-m-watch" title="Người đang xem">
-        <Eye size={15} strokeWidth={2} />
+      <span className="tbar-m-watch" title="Người đang xem" aria-label={`${watchers} người đang xem`}>
+        <Eye size={15} strokeWidth={2} aria-hidden />
         {watchers}
       </span>
       <IconButton id="tbl-chat-btn" label="Chat" badge={unread > 0 ? unread : undefined} onClick={onChat}>
-        <MessageCircle size={20} strokeWidth={1.9} />
+        <MessageCircle size={20} strokeWidth={1.9} aria-hidden />
+      </IconButton>
+      {owner && (
+        <IconButton label="Bảng chủ phòng" aria-haspopup="dialog" onClick={owner}>
+          <Crown size={19} strokeWidth={1.9} aria-hidden />
+        </IconButton>
+      )}
+      <IconButton label="Thêm tuỳ chọn" aria-haspopup="dialog" onClick={onMore}>
+        <Ellipsis size={20} strokeWidth={2} aria-hidden />
       </IconButton>
     </>
   );
@@ -378,13 +392,16 @@ export function ChatDrawer({
     <>
       <div className={`scrim scrim-soft drawer-scrim${open ? " is-open" : ""}`} onClick={onClose} aria-hidden />
       <div ref={panel} className={`drawer chat-drawer${open ? " is-open" : ""}`} role="dialog" aria-modal={false} aria-label="Chat và người xem" tabIndex={-1} inert={!open}>
-        <div className="drawer-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "chat"} className={tab === "chat" ? "is-active" : ""} onClick={() => setTab("chat")}>
-            Chat <i>{messages.length}</i>
-          </button>
-          <button type="button" role="tab" aria-selected={tab === "watch"} className={tab === "watch" ? "is-active" : ""} onClick={() => setTab("watch")}>
-            Người xem <i>{spectators.length}</i>
-          </button>
+        <div className="drawer-tabs">
+          {/* the close button is not a tab: only the two tabs sit in the tablist */}
+          <span className="drawer-tablist" role="tablist" aria-label="Chat hoặc người xem">
+            <button type="button" role="tab" aria-selected={tab === "chat"} className={tab === "chat" ? "is-active" : ""} onClick={() => setTab("chat")}>
+              Chat <i>{messages.length}</i>
+            </button>
+            <button type="button" role="tab" aria-selected={tab === "watch"} className={tab === "watch" ? "is-active" : ""} onClick={() => setTab("watch")}>
+              Người xem <i>{spectators.length}</i>
+            </button>
+          </span>
           <IconButton label="Đóng" onClick={onClose}>
             <X size={18} />
           </IconButton>

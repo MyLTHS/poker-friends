@@ -5,7 +5,7 @@
 
 import { expect, test, type Browser, type BrowserContext, type Page, type WebSocketRoute } from "@playwright/test";
 
-const WEB = "http://localhost:3100";
+const WEB = process.env.E2E_WEB ?? "http://localhost:3100";
 
 type Player = { name: string; context: BrowserContext; page: Page; id: string };
 

@@ -190,10 +190,10 @@ export function CreateRoomScreen() {
           </div>
           <dl className="summary">
             {rulesSummary(preview).map(([k, v]) => (
-              <span key={k}>
+              <div key={k}>
                 <dt>{k}</dt>
                 <dd>{v}</dd>
-              </span>
+              </div>
             ))}
           </dl>
           <div className="preview-note">
