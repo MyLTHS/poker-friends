@@ -1,7 +1,7 @@
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
-from django.contrib.auth.forms import BaseUserCreationForm
+from django.utils.html import format_html
 
 from apps.accounts import services
 
@@ -32,13 +32,15 @@ class ViewOnlyAdmin(admin.ModelAdmin):
         return False
 
 
-class PlayerCreationForm(BaseUserCreationForm):
-    """ "Add user" makes a player who can log in at once: players log in with email + password,
-    and the email must be verified (services.create_player vouches for it)."""
+class PlayerCreationForm(forms.ModelForm):
+    """ "Add user" makes a player: an email and a table name. The player gets an invitation
+    email and sets their own password from it (services.create_player); staff never choose it."""
 
-    email = forms.EmailField(label="Email", help_text="Người chơi đăng nhập bằng email này.")
+    email = forms.EmailField(
+        label="Email", help_text="Thư mời gửi tới đây; người chơi đăng nhập bằng email này."
+    )
 
-    class Meta(BaseUserCreationForm.Meta):
+    class Meta:
         model = User
         fields = ("email", "username")
         labels = {"username": "Tên ở bàn"}
@@ -61,13 +63,39 @@ class PlayerCreationForm(BaseUserCreationForm):
     def save(self, commit=True):
         data = self.cleaned_data
         try:
-            return services.create_player(data["email"], data["username"], data["password1"])
+            user, invitation = services.create_player(data["email"], data["username"])
         except services.AccountError as error:  # lost a race with another sign-up
             field, message = self.MESSAGES.get(error.code, (None, error.message))
             raise forms.ValidationError({field: message} if field else message) from error
+        self.invitation = invitation  # shown by PokerUserAdmin.response_add: one link, not two
+        return user
 
     def save_m2m(self):
         """Nothing to add: the admin calls this after save()."""
+
+
+def invitation_sent(user: User, invitation: services.Invitation):
+    """What staff see after inviting: the link itself, to send by chat when the email is lost
+    or could not be sent."""
+    days = services.INVITE_MAX_AGE // (24 * 60 * 60)
+    link = format_html('<a href="{}">{}</a>', invitation.link, invitation.link)
+    if invitation.sent:
+        return format_html(
+            "Đã gửi thư mời tới {}. Nếu thư không tới, gửi link này cho {} qua Zalo/Messenger "
+            "(dùng một lần, trong {} ngày): {}",
+            user.email,
+            user.username,
+            days,
+            link,
+        )
+    return format_html(
+        "Không gửi được thư mời tới {}. Gửi link này cho {} qua Zalo/Messenger "
+        "(dùng một lần, trong {} ngày): {}",
+        user.email,
+        user.username,
+        days,
+        link,
+    )
 
 
 @admin.register(User)
@@ -76,19 +104,7 @@ class PokerUserAdmin(UserAdmin):
     list_display = ("username", "email", "date_joined", "approved", "is_guest", "is_staff")
     list_filter = ("approved", "is_guest", "is_staff", "is_active")
     ordering = ("-date_joined",)
-    actions = ["approve", "withdraw_approval"]
-    add_form = PlayerCreationForm
-    add_fieldsets = (
-        (
-            "Người chơi mới",
-            {
-                "description": "Tạo xong là đăng nhập được ngay bằng email và mật khẩu này "
-                "(email coi như đã xác minh, tài khoản coi như đã duyệt, không gửi thư). Người "
-                "chơi tự đổi mật khẩu được bằng “Quên mật khẩu”.",
-                "fields": ("email", "username", "password1", "password2"),
-            },
-        ),
-    )
+    actions = ["approve", "withdraw_approval", "invite_again"]
 
     @admin.action(description="Duyệt (cho vào chơi, xác minh luôn email)")
     def approve(self, request, queryset):
@@ -112,6 +128,59 @@ class PokerUserAdmin(UserAdmin):
         for user_id in ids:  # out of every table now, even one only watching
             async_to_sync(drop_player_everywhere)(user_id, LOGIN_REQUIRED_CLOSE_CODE)
         self.message_user(request, f"Đã bỏ duyệt {count} tài khoản.")
+
+    add_form = PlayerCreationForm
+    add_fieldsets = (
+        (
+            "Người chơi mới",
+            {
+                "description": "Nhập email và tên ở bàn. Người chơi nhận thư mời, tự đặt mật khẩu "
+                "từ link trong thư rồi đăng nhập bằng email này. Link mời cũng hiện ở đây sau "
+                "khi lưu, để gửi qua tin nhắn nếu thư không tới.",
+                "fields": ("email", "username"),
+            },
+        ),
+    )
+
+    def response_add(self, request, obj, post_url_continue=None):
+        self.message_user(request, *self._invitation_message(obj, request.player_invitation))
+        return super().response_add(request, obj, post_url_continue)
+
+    def save_form(self, request, form, change):
+        obj = super().save_form(request, form, change)  # the add form's save() invites
+        if not change:
+            # Kept on the request, not on this admin (one instance serves every request).
+            request.player_invitation = form.invitation
+        return obj
+
+    @staticmethod
+    def _invitation_message(user: User, invitation: services.Invitation):
+        level = messages.SUCCESS if invitation.sent else messages.WARNING
+        return invitation_sent(user, invitation), level
+
+    @admin.action(description="Gửi lại thư mời (người chơi chưa đặt mật khẩu)")
+    def invite_again(self, request, queryset):
+        for user in queryset.order_by("pk"):
+            if user.is_guest or not user.email:
+                self.message_user(
+                    request, f"{user.username} không có email nên không gửi được.", messages.WARNING
+                )
+            elif not user.approved:
+                self.message_user(
+                    request,
+                    f"{user.username} chưa được duyệt; duyệt trước rồi mới gửi thư mời.",
+                    messages.WARNING,
+                )
+            elif user.has_usable_password():
+                self.message_user(
+                    request,
+                    f"{user.username} đã tự đặt mật khẩu; quên thì dùng “Quên mật khẩu”.",
+                    messages.WARNING,
+                )
+            else:
+                self.message_user(
+                    request, *self._invitation_message(user, services.invite_player(user))
+                )
 
     def has_delete_permission(self, request, obj=None):
         # Deleting cascades to seats, bans and memberships behind the table actor's back, and

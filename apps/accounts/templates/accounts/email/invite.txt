@@ -1,0 +1,13 @@
+{% autoescape off %}Chào {{ user.username }},
+
+Bạn được mời vào Poker Friends, bàn poker chip ảo của nhóm bạn. Tài khoản của bạn đã có sẵn:
+
+Email đăng nhập: {{ user.email }}
+Tên ở bàn: {{ user.username }}
+
+Bấm link dưới đây để tự đặt mật khẩu, rồi đăng nhập bằng email này là vào chơi được:
+
+{{ link }}
+
+Link dùng được một lần, trong {% widthratio hours 24 1 %} ngày. Hết hạn thì nhờ người mời gửi lại, hoặc
+dùng "Quên mật khẩu" ở trang đăng nhập.{% endautoescape %}

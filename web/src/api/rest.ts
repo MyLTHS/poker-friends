@@ -425,6 +425,8 @@ export interface paths {
         /**
          * Đặt mật khẩu mới bằng link trong email
          * @description Thành công thì email của tài khoản cũng được coi là đã xác minh. Không tự đăng nhập.
+         *     Cũng dùng cho thư mời của tài khoản quản trị viên tạo trong admin (link có thêm `moi=1`):
+         *     token mời sống 7 ngày thay vì 1 giờ, và cũng chỉ dùng được một lần.
          */
         post: operations["resetPassword"];
         delete?: never;
