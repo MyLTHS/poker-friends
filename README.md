@@ -13,7 +13,7 @@ Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đo�
 **Đang ở:** A và B1 đã được chủ dự án duyệt. B2 tới B8 (kể cả B4b nối trang React với backend
 thật, E2E Playwright) đã gộp vào `main`, chờ duyệt; staging của B5 chờ VPS. Đã sửa các điểm phải
 sửa trước C của đợt kiểm tra chỉ-đọc toàn bộ B; phần để lại ghi ở [Việc còn lại](#việc-còn-lại-cho-d-và-e).
-**C1: ba hướng thiết kế đã vẽ xong, chờ chủ dự án chọn** ([cách xem và đưa vào Figma](docs/c1-thiet-ke.md)).
+**C1: bốn hướng thiết kế đã vẽ xong, chờ chủ dự án chọn** ([cách xem và đưa vào Figma](docs/c1-thiet-ke.md)).
 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
@@ -26,7 +26,7 @@ sửa trước C của đợt kiểm tra chỉ-đọc toàn bộ B; phần để
 | B6 | Tài khoản | ✅ Xong code, chờ duyệt |
 | B7 | Phòng và quyền | ✅ Xong code, chờ duyệt |
 | B8 | Xã hội và quản trị | ✅ Xong code, chờ duyệt |
-| C1 | Thiết kế | 🟡 Ba hướng đã vẽ xong, **chờ chủ dự án chọn** ([cách xem](docs/c1-thiet-ke.md)) |
+| C1 | Thiết kế | 🟡 Bốn hướng đã vẽ xong, **chờ chủ dự án chọn** ([cách xem](docs/c1-thiet-ke.md)) |
 | C2–C5 | Frontend | ⬜ Chưa bắt đầu (làm theo hướng được chọn ở C1) |
 | D | Kiểm thử tổng thể | ⬜ |
 | E | Production và vận hành | ⬜ |
@@ -153,9 +153,9 @@ sửa trước C của đợt kiểm tra chỉ-đọc toàn bộ B; phần để
 
 ### C. Thiết kế + frontend
 
-- [x] C1. Ba hướng thiết kế đầy đủ 17 màn × desktop 1440 + điện thoại dọc 390 (`design/c1/`): D1 Nỉ &
-  Đồng thau, D2 Giấy & Mực, D3 Kẹo Đêm; xem bằng `npm run dev` hoặc đưa vào Figma bằng html.to.design
-  ([hướng dẫn](docs/c1-thiet-ke.md))
+- [x] C1. Bốn hướng thiết kế đầy đủ 17 màn × desktop 1440 + điện thoại ngang 844 (`design/c1/`): D1 Nỉ &
+  Đồng thau, D2 Kính & Ánh Kim, D3 Kẹo Đêm, D4 Sơn Mài Vàng Son; xem bằng `npm run dev` hoặc đưa
+  vào Figma bằng html.to.design ([hướng dẫn](docs/c1-thiet-ke.md))
 - [ ] C1. Chủ dự án chọn hướng (có thể lấy phần của hướng khác); hướng được chọn thành design system
 - [ ] C2. Nền frontend: Next.js + TypeScript + Tailwind, state snapshot + reducer, CI cho `web/`
 - [ ] C3. Màn bàn chơi: 9 ghế, thanh hành động, đồng hồ, reconnect, animation
