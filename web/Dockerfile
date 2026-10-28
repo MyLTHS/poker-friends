@@ -15,6 +15,8 @@ COPY web/ ./
 # Read at build time: Next.js writes NEXT_PUBLIC_* values into the browser bundle.
 ARG NEXT_PUBLIC_DJANGO_WS
 ENV NEXT_PUBLIC_DJANGO_WS=$NEXT_PUBLIC_DJANGO_WS
+ARG NEXT_PUBLIC_RELEASE
+ENV NEXT_PUBLIC_RELEASE=$NEXT_PUBLIC_RELEASE
 RUN npm run build
 
 ENV NODE_ENV=production
