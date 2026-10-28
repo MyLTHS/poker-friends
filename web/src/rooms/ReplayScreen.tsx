@@ -6,6 +6,8 @@
 // other hands stay down unless the hand went to showdown.
 import "@/table/table.css";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 
@@ -14,6 +16,7 @@ import type { AppliedAction, HandView, TableState } from "@/api/protocol";
 import { cuesFor, type Cue } from "@/table/cues";
 import { useDevice } from "@/table/device";
 import type { Device } from "@/table/geometry";
+import { showdownBySeat } from "@/table/handName";
 import { describeAction, tableView } from "@/table/seatView";
 import { MobileTableBar, TableTopBar } from "@/table/Side";
 import { FitStage, Stage } from "@/table/Stage";
@@ -21,7 +24,7 @@ import { useTableFx, type SeatPlace } from "@/table/TableFx";
 import { ButtonLink, D1Root, ErrorState, Spinner, fmt, signed } from "@/ui";
 
 import { createRoomsApi, type HandReplay } from "./api";
-import { describeStep } from "./replay";
+import { describeStep, neighbours } from "./replay";
 
 const STEP_MS = 1400;
 
@@ -91,6 +94,7 @@ export function ReplayScreen({ handId }: { handId: number }) {
   const [replay, setReplay] = useState<HandReplay | null>(null);
   const [roomName, setRoomName] = useState("");
   const [maxSeats, setMaxSeats] = useState(9);
+  const [around, setAround] = useState<ReturnType<typeof neighbours<HandRow>>>({ prev: null, next: null });
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -108,6 +112,9 @@ export function ReplayScreen({ handId }: { handId: number }) {
         if (cancelled || !room.ok) return;
         setRoomName(room.data.room.name);
         setMaxSeats(room.data.room.max_seats);
+      });
+      rooms.hands(result.data.room_id).then((list) => {
+        if (!cancelled && list.ok) setAround(neighbours(list.data.hands, handId));
       });
     });
     return () => {
@@ -153,16 +160,20 @@ export function ReplayScreen({ handId }: { handId: number }) {
     return () => clearTimeout(timer);
   }, [playing, step, last, speed, goTo]);
 
-  // Keyboard: ← → step, space plays.
-  const keys = useRef({ goTo, step, playing });
+  // Keyboard: ← → step, Shift+← → the hand before / after, space plays.
+  const router = useRouter();
+  const keys = useRef({ goTo, step, playing, around });
   useEffect(() => {
-    keys.current = { goTo, step, playing };
+    keys.current = { goTo, step, playing, around };
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.tagName === "INPUT" && (e.target as HTMLInputElement).type !== "range") return;
       const k = keys.current;
-      if (e.key === "ArrowRight") k.goTo(k.step + 1);
+      const hand = e.key === "ArrowLeft" ? k.around.prev : e.key === "ArrowRight" ? k.around.next : null;
+      if (e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        if (hand) router.push(`/hands/${hand.hand_id}`);
+      } else if (e.key === "ArrowRight") k.goTo(k.step + 1);
       else if (e.key === "ArrowLeft") k.goTo(k.step - 1);
       else if (e.key === " ") setPlaying((p) => !p);
       else return;
@@ -170,10 +181,13 @@ export function ReplayScreen({ handId }: { handId: number }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [router]);
 
   const table = replay ? tableAt(replay, stepsOf(replay)[step].hand, me, roomName, maxSeats) : null;
-  const view = useMemo(() => (table && replay ? tableView(table, { lastActions: actionsAt(stepsOf(replay), step) }) : null), [table, replay, step]);
+  const view = useMemo(
+    () => (table && replay ? tableView(table, { lastActions: actionsAt(stepsOf(replay), step), showdown: replay.showdown }) : null),
+    [table, replay, step],
+  );
   const placeOf = useCallback(
     (seat: number): SeatPlace | undefined => {
       const s = view?.seats.find((v) => v.seat === seat);
@@ -215,6 +229,7 @@ export function ReplayScreen({ handId }: { handId: number }) {
       device={device}
       seats={view.seats}
       board={view.board}
+      boardHi={view.boardHi}
       pot={view.pot}
       mark={`${roomName || "Ván"} · ${fmt(table.room.small_blind)}/${fmt(table.room.big_blind)}`}
       showPot={!table.hand?.complete}
@@ -261,7 +276,7 @@ export function ReplayScreen({ handId }: { handId: number }) {
       <D1Root bg="table" className="tbl tbl-mobile">
         <div className="table-area-m">
           <FitStage device="mobile">{stage}</FitStage>
-          <MobileTableBar backHref={backHref} title={`Xem lại ván #${replay.hand_no}`} sub={`${roomName}${at ? ` · ${at}` : ""}`} />
+          <MobileTableBar backHref={backHref} title={`Xem lại ván #${replay.hand_no}`} sub={`${roomName}${at ? ` · ${at}` : ""}`} right={<HandNav device="mobile" around={around} />} />
         </div>
         <aside className="ppanel rp-panel">
           <div className="rp-panel-head">
@@ -293,6 +308,7 @@ export function ReplayScreen({ handId }: { handId: number }) {
       <TableTopBar
         backHref={backHref}
         back="Lịch sử"
+        right={<HandNav device="desktop" around={around} />}
         title={`Xem lại ván #${replay.hand_no}`}
         meta={
           <>
@@ -365,7 +381,49 @@ function resultLine(replay: HandReplay, names: Record<string, string>): string {
   const winners = replay.results.filter((r) => r.hand_net > 0);
   if (winners.length === 0) return "Hoà";
   const seven = replay.seven_deuce_winner ? ` · thưởng 7-2 cho ${names[replay.seven_deuce_winner]}` : "";
-  return `${winners.map((w) => `${w.display_name} ăn ${fmt(w.hand_net)}`).join(", ")}${seven}`;
+  const made = showdownBySeat(replay.showdown);
+  const seatOf = (playerId: string) => replay.showdown.find((h) => h.player_id === playerId)?.seat ?? 0;
+  const won = (w: HandReplay["results"][number]) => `${w.display_name} ăn ${fmt(w.hand_net)}${made[seatOf(w.player_id)] ? ` với ${made[seatOf(w.player_id)]}` : ""}`;
+  return `${winners.map(won).join(", ")}${seven}`;
+}
+
+type HandRow = { hand_id: number; hand_no: number; voided: boolean };
+
+/** The hand before / after in the room's history (design: top bar of the replay). */
+function HandNav({ device, around }: { device: Device; around: { prev: HandRow | null; next: HandRow | null } }) {
+  const { prev, next } = around;
+  if (device === "mobile") {
+    return (
+      <>
+        {prev && (
+          <Link className="iconbtn" href={`/hands/${prev.hand_id}`} aria-label={`Ván trước (#${prev.hand_no})`} title="Ván trước">
+            <ChevronLeft size={20} strokeWidth={2} />
+          </Link>
+        )}
+        {next && (
+          <Link className="iconbtn" href={`/hands/${next.hand_id}`} aria-label={`Ván sau (#${next.hand_no})`} title="Ván sau">
+            <ChevronRight size={20} strokeWidth={2} />
+          </Link>
+        )}
+      </>
+    );
+  }
+  return (
+    <>
+      {prev && (
+        <Link className="tbar-btn is-quiet" href={`/hands/${prev.hand_id}`} aria-keyshortcuts="Shift+ArrowLeft" title="Ván trước (Shift + ←)">
+          <ChevronLeft size={15} strokeWidth={2} />
+          Ván trước
+        </Link>
+      )}
+      {next && (
+        <Link className="tbar-btn" href={`/hands/${next.hand_id}`} aria-label={`Ván sau: ván #${next.hand_no}`} aria-keyshortcuts="Shift+ArrowRight" title="Ván sau (Shift + →)">
+          Ván #{next.hand_no}
+          <ChevronRight size={15} strokeWidth={2} />
+        </Link>
+      )}
+    </>
+  );
 }
 
 function Timeline({ device, items, step, onPick }: { device: Device; items: string[]; step: number; onPick: (i: number) => void }) {
