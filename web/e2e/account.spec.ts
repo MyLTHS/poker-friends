@@ -118,7 +118,7 @@ test.describe("flows through the email links", () => {
     const fresh = "go-mat-khau-moi-77";
     await page.goto("/account/forgot");
     // An account with a password; the reset link proves the address, so it needs no verifying.
-    await api(page, "GET", "/api/auth/config/"); // csrftoken cookie
+    await csrfSettled(page);
     await api(page, "POST", "/api/auth/signup/", { email, username: `Quen${id}`, password: PASSWORD });
 
     await page.getByLabel("Email").fill(email);
@@ -263,6 +263,17 @@ async function hydrated(page: Page) {
   await page.waitForFunction(() => Object.keys(document.querySelector("main") ?? {}).some((key) => key.startsWith("__reactFiber")));
 }
 
+/**
+ * Wait until the page's own GET /api/auth/config/ calls have all answered before reading the
+ * csrftoken cookie. Each call made without a cookie gets a new token, and the dev server makes two
+ * at once (React StrictMode runs the effect twice): read between them, or add a GET of our own,
+ * and the header no longer matches the cookie the next POST sends (403 "CSRF token incorrect").
+ */
+async function csrfSettled(page: Page) {
+  await hydrated(page);
+  await page.waitForLoadState("networkidle");
+}
+
 async function open(page: Page, path: string, ready: string) {
   await page.goto(path);
   await expect(page.getByText(ready, { exact: true }).locator("visible=true").first()).toBeVisible();
@@ -387,7 +398,7 @@ test.describe("landscape phone", () => {
 
   test("the guest upgrade and the profile fit all three phones", async ({ page }) => {
     await page.goto("/account");
-    await api(page, "GET", "/api/auth/config/"); // csrftoken cookie
+    await csrfSettled(page);
     await api(page, "POST", "/api/auth/guest/", {});
     const problems: string[] = [];
     for (const size of PHONES) {
