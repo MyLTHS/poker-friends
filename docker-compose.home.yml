@@ -45,8 +45,9 @@ services:
       caddy:
         condition: service_started
 
-  # A backup when the game starts (▶ in Docker Desktop too), then every 6 hours while it runs.
-  # An empty database (the very first start) has nothing to back up. pg_dump matches the database.
+  # A backup when the game starts (▶ in Docker Desktop too), then every 6 hours while it runs;
+  # the 60 newest are kept. An empty database (the very first start) has nothing to back up.
+  # pg_dump matches the database.
   autobackup:
     image: postgres:17
     env_file: .env.home
@@ -64,6 +65,8 @@ services:
             0) echo "autobackup: empty database, nothing to back up" ;;
             *) scripts/backup.sh || echo "autobackup: BACKUP FAILED" ;;
           esac
+          # Keep the 60 newest dumps (about two weeks of evenings); older ones go.
+          ls -1t backups/poker-*.dump 2>/dev/null | tail -n +61 | xargs -r rm -f
           sleep 21600
         done
     restart: unless-stopped

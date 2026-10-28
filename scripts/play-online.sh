@@ -124,7 +124,13 @@ backup() { # fails (never silently skips) when the database cannot be asked or t
 # Docker Desktop) prints a new banner: the last one is the live link. Only the banner counts: on a
 # network error the log also mentions https://api.trycloudflare.com, which is not our link.
 tunnel_url() {
-  dc logs --no-color --no-log-prefix tunnel 2>/dev/null | awk '
+  # Only this start's log: after ■ Stop and a new start, the same container still holds the
+  # banner of the last session, whose link is dead.
+  local id since
+  id=$(dc ps -q tunnel 2>/dev/null) || true
+  [ -n "$id" ] || return 0
+  since=$(docker inspect -f '{{.State.StartedAt}}' "$id" 2>/dev/null) || return 0
+  dc logs --no-color --no-log-prefix --since "$since" tunnel 2>/dev/null | awk '
     /Your quick Tunnel has been created/ { banner = 1; next }
     banner && match($0, /https:\/\/[a-z0-9-]+\.trycloudflare\.com/) {
       found = substr($0, RSTART, RLENGTH)
@@ -156,6 +162,7 @@ abort_up() {
   [ "$UP_DONE" = 1 ] && return
   say "Chưa bật xong: đang đóng đường hầm và tắt server (dữ liệu vẫn giữ)..." >&2
   stop_pid caffeinate
+  stop_pid sh
   dc down >/dev/null 2>&1 || true
 }
 
@@ -166,10 +173,6 @@ check_public() { # HTTP status of the page through the tunnel, or 000
 cmd_up() {
   command -v docker >/dev/null || die "chưa có Docker."
   docker info >/dev/null 2>&1 || die "Docker Desktop chưa chạy: mở Docker Desktop, đợi nó báo xong rồi chạy lại."
-  if tunnel_running; then
-    say "Đang chạy rồi. Link: $(tunnel_url)"
-    exit 0
-  fi
   check_backend_name
   mkdir -p "$STATE"
   ensure_env
@@ -178,6 +181,7 @@ cmd_up() {
   set_env REDIS_URL ""
   set_env DJANGO_ALLOWED_HOSTS ".trycloudflare.com,localhost,127.0.0.1"
   set_env FRONTEND_URL_FROM_REQUEST true
+  set_env FRONTEND_URL http://localhost
   trap abort_up EXIT
   trap 'exit 130' INT TERM
 
@@ -198,8 +202,16 @@ cmd_up() {
   [ -n "$url" ] || die "không lấy được link sau 60 giây (mạng?). Xem: docker compose -p $PROJECT logs tunnel"
 
   if command -v caffeinate >/dev/null; then
-    # Keeps the Mac awake until "down" (started from Docker Desktop, nothing does: see the guide).
-    nohup caffeinate -ims >/dev/null 2>&1 &
+    # Keeps the Mac awake while the tunnel container runs: a watcher exits when it stops (■ in
+    # Docker Desktop or "down"), and caffeinate with it. Started from ▶ alone, nothing keeps the
+    # Mac awake: see the guide.
+    stop_pid caffeinate
+    stop_pid sh
+    local container="${PROJECT}-tunnel-1"
+    nohup sh -c "while [ -n \"\$(docker ps -q --filter name=^/$container\$)\" ]; do sleep 30; done" \
+      >/dev/null 2>&1 &
+    echo $! >"$STATE/sh.pid"
+    nohup caffeinate -ims -w "$(cat "$STATE/sh.pid")" >/dev/null 2>&1 &
     echo $! >"$STATE/caffeinate.pid"
   fi
 
@@ -240,6 +252,7 @@ cmd_down() {
     fi
   fi
   stop_pid caffeinate
+  stop_pid sh
   if [ -f "$ENV_FILE" ]; then
     say "Tắt server và đường hầm (dữ liệu vẫn giữ)..."
     dc down

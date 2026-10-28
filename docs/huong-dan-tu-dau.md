@@ -113,12 +113,13 @@ display is off**. Màn hình vẫn tự tắt được, chỉ là máy không ng
    ```
 
    Link `https://….trycloudflare.com` đó là **link của buổi hôm nay**. Bôi đen, copy. Mỗi lần bấm
-   Start là một link mới (link cũ hết dùng được).
+   Start là một link mới, link cũ hết dùng được. Logs giữ cả các lần trước, nên nếu thấy nhiều
+   khung như vậy thì lấy **khung cuối cùng** (dưới cùng).
 4. **Tự thử trước:** mở link trên điện thoại, **tắt Wi‑Fi để dùng 4G** cho giống bạn bè ở xa.
    Link mới đôi khi cần chờ 30–60 giây mới mở được. Thấy trang sảnh là ổn.
 
 Mỗi lần bấm Start, game **tự sao lưu** database vào thư mục `backups/` (rồi cứ 6 tiếng thêm một
-bản trong lúc chạy).
+bản trong lúc chạy; giữ 60 bản mới nhất).
 
 Thích gõ lệnh hơn? `scripts/play-online.sh up` làm đúng những việc trên, còn giữ máy thức và copy
 sẵn link; `scripts/play-online.sh status` cho xem lại link đang dùng.
