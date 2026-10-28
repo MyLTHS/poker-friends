@@ -203,3 +203,7 @@ LOGGING = {
         "games": {"handlers": ["console"], "level": "INFO"},
     },
 }
+
+# --- Feedback (F, beta) -------------------------------------------------------------------
+# Player feedback and browser errors: write-only API, read in the admin (apps/feedback/).
+INSTALLED_APPS += ["apps.feedback"]
