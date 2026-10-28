@@ -24,17 +24,18 @@ Một con số dùng chung cho cả TypeScript (`motion.ts`) và CSS (`tokens.cs
 | `DURATION.chip` | `--dur-chip` | 380 | 1 | Chip bay từ ghế ra chỗ cược, từ chỗ cược vào pot |
 | `DURATION.collect` | `--dur-collect` | 560 | 1 | Pot trượt về người thắng |
 | `DURATION.flip` | `--dur-flip` | 420 | 120 | Một lá bài lật |
-| `DURATION.turnPulse` | *(chưa có)* | 1600 | — | Một nhịp "thở" của vòng sáng ghế tới lượt |
-| `DURATION.sevenDeuce` | *(chưa có)* | 2600 | — | Cả khoảnh khắc 7-2 trước khi thu về thành banner |
+| *(chỉ CSS)* | `--dur-confetti` | 900 | — (không vẽ pháo giấy) | Pháo giấy 7-2 bung ra (`Confetti` trong `fx.tsx`) |
+| `DURATION.turnPulse` | `--dur-turn-pulse` | 1600 | — (bỏ nhịp thở, vòng sáng đứng yên) | Một nhịp "thở" của vòng sáng ghế tới lượt |
+| `DURATION.sevenDeuce` | `--dur-seven-deuce` | 2600 | — (banner hiện ngay) | Cả khoảnh khắc 7-2 trước khi thu về thành banner |
 
 ### Đường cong (easing)
 
 | TypeScript | CSS | Giá trị | Dùng cho |
 |---|---|---|---|
-| `EASE.standard` | `--ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | Phần lớn thay đổi giao diện |
-| `EASE.out` | `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Thứ **đi tới**: chạy nhanh rồi chậm dần vào chỗ |
-| `EASE.in` | `--ease-in` | `cubic-bezier(0.4, 0, 1, 1)` | Thứ **rời đi**: chậm rồi nhanh dần |
-| `EASE.settle` | `--ease-settle` | `cubic-bezier(0.34, 1.4, 0.64, 1)` | Chip và bài **đáp xuống**: vượt quá một chút rồi nằm yên, như chip rơi trên nỉ |
+| `EASE.standard` | `--ease-d1-standard` | `cubic-bezier(0.2, 0, 0, 1)` | Phần lớn thay đổi giao diện |
+| `EASE.out` | `--ease-d1-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Thứ **đi tới**: chạy nhanh rồi chậm dần vào chỗ |
+| `EASE.in` | `--ease-d1-in` | `cubic-bezier(0.4, 0, 1, 1)` | Thứ **rời đi**: chậm rồi nhanh dần |
+| `EASE.settle` | `--ease-d1-settle` | `cubic-bezier(0.34, 1.4, 0.64, 1)` | Chip và bài **đáp xuống**: vượt quá một chút rồi nằm yên, như chip rơi trên nỉ |
 | `EASE.linear` | `linear` | `linear` | Đồng hồ: thời gian trôi đều |
 
 ### Nhịp so le (stagger) và bản mờ dần
@@ -68,6 +69,12 @@ Một con số dùng chung cho cả TypeScript (`motion.ts`) và CSS (`tokens.cs
    - **P**lay: `fly(el, cũ, {duration, lift})` cho nó trôi về chỗ mới. `lift` làm đường đi cong lên
      (ném bài, ném chip) thay vì trượt thẳng.
 
+   **Đo ở đâu với socket:** sự kiện từ WebSocket đi thẳng vào reducer rồi React vẽ lại ngay, nên
+   bước F phải chạy **trước khi `dispatch` sự kiện vào reducer** (trong chỗ nhận tin của
+   `useTableSocket`, hoặc một hàm bọc `dispatch`): đo hộp cỗ bài / chồng chip / pot, cất vào một
+   `ref`, rồi mới `dispatch`; bước P chạy trong `useLayoutEffect` sau lần vẽ đó, đọc lại `ref` ấy.
+   Đo sau khi đã `dispatch` là đo nhầm chỗ mới, chuyển động sẽ không xảy ra.
+
    Nhờ vậy **trạng thái luôn đúng ngay lập tức**; chuyển động chỉ là lớp trang điểm. Mất chuyển động
    (máy yếu, tab ẩn, giảm chuyển động) thì giao diện vẫn đúng.
 4. **Không bao giờ để chuyển động làm chậm trạng thái.** Reducer (`web/src/table/reducer.ts`) áp sự
@@ -93,7 +100,7 @@ Một con số dùng chung cho cả TypeScript (`motion.ts`) và CSS (`tokens.cs
 | **Lật bài showdown** | `flip` 420 ms, `standard` (`FlipCard`, lớp `.pc-flip.is-up`) | Tay này cách tay kia `STAGGER.showdown` 180 ms, theo thứ tự lật bài | `hand.completed` (bài trong `hand.players[].cards` không còn `??`) | Đổi mặt bằng mờ dần 120 ms (CSS đã làm) | `FlipCard` có; thứ tự lật C3 làm |
 | **Vòng đồng hồ lượt** (`TimerRing`) | Theo `deadline` của server, `linear` | — | `turn.deadline` | **Vẫn chạy** (đó là thông tin); chỉ bỏ hiệu ứng nhấp nháy nếu có | Vòng có; ≤ 5 giây chuyển đỏ (`.is-low`) |
 | **Nổi bật ghế tới lượt** (vòng sáng) | `turnPulse` 1600 ms một nhịp, lặp | — | `turn.deadline` (đổi người tới lượt) | Vòng sáng đứng yên | C3 làm |
-| **Khoảnh khắc 7-2** | `sevenDeuce` 2600 ms tổng: lật 2 lá (`flip`), confetti, rồi thu về banner | Lật trước, confetti sau | `hand.completed` có `seven_deuce` (reducer đặt `celebration`) | Banner và 2 lá hiện ngay, **không confetti** | Màn cũ `SevenDeuceMoment.tsx` có; nhịp mới C3 làm |
+| **Khoảnh khắc 7-2** | `sevenDeuce` 2600 ms tổng: lật 2 lá (`flip`), confetti, rồi thu về banner | Lật trước, confetti sau | `hand.completed` có `seven_deuce` (reducer đặt `celebration`) | Banner và 2 lá hiện ngay, **không confetti** | Pháo giấy `Confetti` (`fx.tsx`) có; nhịp 7-2 C3 làm |
 | **Toast** | Vào: `base` 220 ms, `out`, trượt xuống 10 px từ trên. Ra: `fast` 140 ms, `in`, trượt sang phải 16 px | — | Code gọi toast | Gần như tức thì (1 ms ra; 120 ms vào) | Có (`d1-toast-in/out`) |
 | **Mở modal / sheet** | `slow` 320 ms, `out`. Modal nổi lên 12 px + phóng từ 0,98; sheet trượt vào 40 px từ phải; nền mờ dần | — | Mở/đóng `<dialog>` | 120 ms | Có (`@starting-style`) |
 | **Nút bấm** | `press` 90 ms: lún 2 px, tối đi một chút | — | Nhấn chuột/ngón tay | Tức thì | Có |
@@ -124,8 +131,9 @@ lặp mãi (trừ đồng hồ và spinner); thông tin vẫn đọc được (a
   ghế, pot) trước khi áp sự kiện, rồi bay sau khi React vẽ.
 - Chia pot phụ lần lượt; thứ tự lật bài ở showdown (server chưa gửi thứ tự lật: tạm đi vòng từ người
   bên trái nút button, chốt lại khi làm).
-- Vòng sáng ghế tới lượt (`turnPulse`) và khoảnh khắc 7-2 theo nhịp 2600 ms: cần thêm CSS, chưa có
-  biến `--dur-turn-pulse`/`--dur-seven-deuce`. Confetti chỉ dùng vài phần tử, chỉ `transform`/`opacity`.
+- Vòng sáng ghế tới lượt (`--dur-turn-pulse`) và khoảnh khắc 7-2 theo nhịp `--dur-seven-deuce`
+  (2600 ms): cần thêm CSS. Pháo giấy dùng `Confetti` có sẵn (chỉ `transform`/`opacity`, tự ẩn khi
+  giảm chuyển động).
 - Cho vòng đồng hồ chạy mượt (CSS transition `linear` giữa các lần `tick`, hoặc `requestAnimationFrame`),
   tính theo giờ server (`deadline`, `server_time`), không theo đồng hồ máy.
 - Không chạy chuyển động cho `table.snapshot`/resync; tab đang ẩn (`document.hidden`) thì bỏ qua.

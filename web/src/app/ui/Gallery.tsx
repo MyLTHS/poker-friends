@@ -15,6 +15,7 @@ import {
   Checkbox,
   Chip,
   ChipStack,
+  Confetti,
   Crest,
   DURATION,
   EASE,
@@ -29,6 +30,7 @@ import {
   PageHead,
   Panel,
   PlayingCard,
+  QR,
   Sheet,
   Skeleton,
   SkeletonCard,
@@ -44,6 +46,7 @@ import {
   Wordmark,
   fly,
   fmt,
+  sampleQrModules,
   signed,
   tone,
   useToast,
@@ -185,6 +188,7 @@ function Tokens() {
 
 function Buttons() {
   const [busy, setBusy] = useState(false);
+  const [chat, setChat] = useState(true);
   return (
     <Section id="nut" title="Nút" note="primary (đồng thau), ghost, quiet, danger, felt, light, paper × sm/md/lg. Trên điện thoại ngang mọi nút cao ≥ 44px. Bấm Tab để thấy vòng focus.">
       <div className="grid gap-4">
@@ -225,7 +229,7 @@ function Buttons() {
           <IconButton label="Cài đặt bàn">
             <Settings size={18} strokeWidth={1.8} />
           </IconButton>
-          <IconButton label="Trò chuyện" active>
+          <IconButton label="Trò chuyện" pressed={chat} onClick={() => setChat(!chat)}>
             <MessageCircle size={18} strokeWidth={1.8} />
           </IconButton>
           <a className="link" href="#nut">
@@ -343,6 +347,10 @@ function People() {
         <Crest size={48} />
         <MiniTable seats={6} seated={4} dealer />
         <MiniTable seats={9} seated={2} w={96} h={58} />
+        <span className="qr-wrap">
+          <QR modules={sampleQrModules()} size={120} label="Mã QR mẫu (không quét được)" />
+          <small>QR mẫu: C4 nối bộ mã hoá thật</small>
+        </span>
       </Row>
     </Section>
   );
@@ -350,6 +358,7 @@ function People() {
 
 function CardsAndChips() {
   const [up, setUp] = useState(false);
+  const [burst, setBurst] = useState(0);
   return (
     <Section id="bai-chip" title="Lá bài và chip" note="Bài nhận mã giao thức (As, Th, 7c; ?? là bài úp). Từ 52px rộng có thêm chỉ số lật ngược ở góc dưới như bài thật.">
       <Row>
@@ -374,6 +383,12 @@ function CardsAndChips() {
         <FlipCard card="2c" faceUp={up} w={56} />
         <Button kind="ghost" size="sm" onClick={() => setUp(!up)}>
           {up ? "Úp lại" : "Lật bài (showdown)"}
+        </Button>
+        <span className="relative ml-24 inline-block h-14 w-14 phone:ml-16">
+          <Confetti key={burst} count={30} spread={0.6} className="left-1/2 top-1/2" />
+        </span>
+        <Button kind="ghost" size="sm" onClick={() => setBurst((n) => n + 1)}>
+          Pháo giấy 7-2
         </Button>
       </Row>
       <Row className="mt-6">
@@ -401,6 +416,7 @@ function CardsAndChips() {
 function Surfaces() {
   const toast = useToast();
   const [modal, setModal] = useState(false);
+  const [lost, setLost] = useState(false);
   const [sheet, setSheet] = useState(false);
   return (
     <Section id="lop-phu" title="Panel, toast, modal, sheet" note="Modal và sheet là <dialog> thật: giữ focus bên trong, Esc hoặc bấm ra ngoài để đóng.">
@@ -424,6 +440,9 @@ function Surfaces() {
         </Button>
         <Button kind="ghost" onClick={() => setModal(true)}>
           Mở modal
+        </Button>
+        <Button kind="ghost" onClick={() => setLost(true)}>
+          Modal không đóng được
         </Button>
         <Button kind="ghost" onClick={() => setSheet(true)}>
           Mở sheet
@@ -449,6 +468,20 @@ function Surfaces() {
         }
       >
         Mạng vừa chập chờn. Ghế và chip của bạn vẫn giữ nguyên; bàn tự chơi tiếp khi bạn vào lại.
+      </Modal>
+      <Modal
+        open={lost}
+        onClose={() => setLost(false)}
+        dismissible={false}
+        icon={<Spinner />}
+        title="Mất kết nối"
+        actions={
+          <Button kind="primary" onClick={() => setLost(false)}>
+            Giả lập: đã nối lại
+          </Button>
+        }
+      >
+        Esc và bấm ra ngoài không đóng được; chỉ màn chơi đóng khi socket nối lại.
       </Modal>
       <Sheet open={sheet} onClose={() => setSheet(false)} title="Bảng chủ phòng" aside={<Badge kind="brass">Chủ phòng</Badge>}>
         <TextField label="Tên phòng" defaultValue="Bàn thứ Sáu" />
@@ -627,7 +660,7 @@ function Motion() {
 
 export function Gallery() {
   return (
-    <AppShell active="lobby" me={{ name: "Lym", notifications: 1 }}>
+    <AppShell active="lobby" me={{ name: "Lym", notifications: 1, notificationsHref: "/account" }}>
       <ToastProvider>
         <PageHead eyebrow="C2 · nền giao diện" title="Bộ giao diện D1 · Nỉ & Đồng thau" sub="Mọi token và component dùng chung, để C3/C4 dựng màn và so với design/c1." />
         <nav aria-label="Mục" className="flex flex-wrap gap-2">

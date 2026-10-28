@@ -61,6 +61,8 @@ export function Wordmark({ small = false }: { small?: boolean }) {
   );
 }
 
+const px = (v: number) => Math.round(v * 100) / 100;
+
 /** Seat occupancy of a room as a tiny oval table (lobby cards, empty states). */
 export function MiniTable({ seats, seated, w = 160, h = 96, dealer = false }: { seats: number; seated: number; w?: number; h?: number; dealer?: boolean }) {
   const dot = w >= 120 ? 12 : w >= 60 ? 8 : 5;
@@ -77,7 +79,8 @@ export function MiniTable({ seats, seated, w = 160, h = 96, dealer = false }: { 
           <i
             key={i}
             className={`mini-seat${i < seated ? " is-taken" : ""}`}
-            style={{ width: dot, height: dot, left: w / 2 + Math.cos(a) * rx - dot / 2, top: h / 2 + Math.sin(a) * ry - dot / 2 }}
+            // rounded to 0.01px: Math.cos/sin may differ in the last digits between server and browser
+            style={{ width: dot, height: dot, left: px(w / 2 + Math.cos(a) * rx - dot / 2), top: px(h / 2 + Math.sin(a) * ry - dot / 2) }}
           />
         );
       })}
