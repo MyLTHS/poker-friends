@@ -16,7 +16,6 @@ class User(AbstractUser):
     is_guest = models.BooleanField(default=False)
     # The owner let this account in (members only, GUESTS_ALLOWED off). Not the same as a verified
     # email: with Gmail or Google sign-in on, anyone can verify their own address.
-    approved = models.BooleanField(default=False)
 
 
 class Room(models.Model):

@@ -8,7 +8,6 @@
 #   scripts/play-online.sh status   # running? which link?
 #   scripts/play-online.sh logs     # last server log lines (email links when EMAIL_URL is empty)
 #   scripts/play-online.sh links    # verification / password reset links emailed this session
-#   scripts/play-online.sh verify <email>   # let a friend in: approve their account (asks first)
 #   scripts/play-online.sh admin    # create the owner's admin login (feedback, errors, users)
 #   scripts/play-online.sh down     # back up, stop the tunnel and the stack (data and the Docker
 #                                     # Desktop group are kept: ▶ starts it again)
@@ -79,8 +78,7 @@ TRUSTED_PROXIES=1
 DJANGO_ALLOWED_HOSTS=.trycloudflare.com,localhost,127.0.0.1
 FRONTEND_URL=http://localhost
 FRONTEND_URL_FROM_REQUEST=true
-# Members only: only verified accounts reach the rooms (no guests). Friends sign up, then the owner
-# vouches for each: scripts/play-online.sh verify <email>, or the "verified" box in /admin/.
+# Members only: no guests. Friends sign up on the link and play at once.
 GUESTS_ALLOWED=false
 POSTGRES_DB=poker
 POSTGRES_USER=poker
@@ -303,19 +301,6 @@ cmd_links() {
   fi
 }
 
-cmd_verify() {
-  [ -n "${1:-}" ] || die "cần email, ví dụ: scripts/play-online.sh verify ban@example.com"
-  [ -f "$ENV_FILE" ] || die "chưa chạy lần nào."
-  # Show whose account it is first: someone could have signed up with a friend's email.
-  dc exec -T backend python manage.py verify_email --show -- "$1" || exit 1
-  local answer=""
-  read -r -p "Đúng là bạn của bạn? Duyệt tài khoản này? (y/n) " answer
-  case "$answer" in
-    y | Y | yes | có | co) dc exec -T backend python manage.py verify_email -- "$1" ;;
-    *) say "Không duyệt." ;;
-  esac
-}
-
 cmd_admin() {
   [ -f "$ENV_FILE" ] || die "chưa chạy lần nào."
   say "Tạo tài khoản quản trị (trang <link>/admin/). Bạn tự gõ tên, email và mật khẩu."
@@ -328,10 +313,9 @@ case "${1:-}" in
   status) cmd_status ;;
   logs) cmd_logs "${2:-}" ;;
   links) cmd_links ;;
-  verify) cmd_verify "${2:-}" ;;
   admin) cmd_admin ;;
   *)
-    say "Cách dùng: scripts/play-online.sh up | down | status | logs [số dòng] | links | verify <email> | admin"
+    say "Cách dùng: scripts/play-online.sh up | down | status | logs [số dòng] | links | admin"
     exit 2
     ;;
 esac

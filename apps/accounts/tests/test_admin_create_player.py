@@ -65,7 +65,7 @@ class TestInvitation:
         user, invitation = services.create_player(" An@Example.com ", "An")
         assert (user.email, user.username, user.is_guest) == ("an@example.com", "An", False)
         assert not user.has_usable_password()
-        assert services.is_email_verified(user) and user.approved  # let in by staff
+        assert services.is_email_verified(user)  # staff vouch for the address
 
         (message,) = mail.outbox
         assert message.to == ["an@example.com"]
@@ -132,10 +132,11 @@ class TestInvitation:
         third = set_password(client, link_in(mail.outbox[2]), "mat-khau-thu-ba-77")
         assert third.status_code == 204
 
-    def test_members_only_a_player_made_by_staff_is_already_approved(self, client, settings):
-        settings.GUESTS_ALLOWED = False  # playing from home: only approved accounts get in
-        user, _ = services.create_player("chi@example.com", "Chi")
-        assert user.approved
+    def test_members_only_a_player_made_by_staff_plays_once_they_set_a_password(
+        self, client, settings
+    ):
+        settings.GUESTS_ALLOWED = False  # playing from home: accounts only, no guests
+        services.create_player("chi@example.com", "Chi")
         assert set_password(client, link_in(mail.outbox[0])).status_code == 204
         response = login(client, "chi@example.com")
         assert response.status_code == 200
@@ -215,14 +216,11 @@ class TestAdmin:
         assert link_in(mail.outbox[1]).replace("&", "&amp;") in page
         assert "không có email" in page  # the guest is skipped, and staff are told why
 
-    def test_no_invitation_for_an_account_not_approved(self, staff):
-        # e.g. a Google sign-up still waiting: a password would only lead to "not approved".
-        waiting = User.objects.create_user("Dung", "dung@example.com", password=None)
-        response = staff.post(
-            LIST_URL, {"action": "invite_again", "_selected_action": [waiting.pk]}, follow=True
-        )
-        assert mail.outbox == []
-        assert "Dung chưa được duyệt" in response.content.decode()
+    def test_an_account_with_no_password_gets_an_invitation(self, staff):
+        # e.g. a Google sign-up: the link lets them set a password too.
+        google = User.objects.create_user("Dung", "dung@example.com", password=None)
+        staff.post(LIST_URL, {"action": "invite_again", "_selected_action": [google.pk]})
+        assert [m.to for m in mail.outbox] == [["dung@example.com"]]
 
     def test_no_new_link_for_a_player_who_already_set_a_password(self, staff, client):
         user, _ = services.create_player("an@example.com", "An")
