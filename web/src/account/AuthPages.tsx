@@ -13,8 +13,8 @@ import { ForgotScreen } from "./ForgotScreens";
 import { SignupScreen } from "./SignupScreen";
 import { useAuthBoot } from "./useAuthBoot";
 
-/** `next`: already checked by safeNext (app/account/signup/page.tsx); remembered for the first
- *  login, days later, after the owner's approval. */
+/** `next`: already checked by safeNext (app/account/signup/page.tsx); the new account goes there
+ *  at once (remembered too, for a signup through Google). */
 export function SignupPage({ next = null }: { next?: string | null }) {
   const api = useMemo(() => createAuthApi(), []);
   const [boot] = useAuthBoot(api);
