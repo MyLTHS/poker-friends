@@ -48,7 +48,15 @@ class PokerUserAdmin(UserAdmin):
 
     @admin.action(description="Bỏ duyệt (không cho vào chơi nữa)")
     def withdraw_approval(self, request, queryset):
+        from asgiref.sync import async_to_sync
+
+        from apps.games.actor import drop_player_everywhere
+        from apps.games.consumers import LOGIN_REQUIRED_CLOSE_CODE
+
+        ids = list(queryset.values_list("pk", flat=True))
         count = queryset.update(approved=False)
+        for user_id in ids:  # out of every table now, even one only watching
+            async_to_sync(drop_player_everywhere)(user_id, LOGIN_REQUIRED_CLOSE_CODE)
         self.message_user(request, f"Đã bỏ duyệt {count} tài khoản.")
 
     def has_delete_permission(self, request, obj=None):

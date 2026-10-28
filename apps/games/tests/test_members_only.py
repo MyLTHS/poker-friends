@@ -197,3 +197,59 @@ class TestApprovalWithdrawn:
             assert out == {"type": "websocket.close", "code": LOGIN_REQUIRED_CLOSE_CODE}
 
         run_async(body)
+
+
+class TestWithdrawalReachesSilentWatchers:
+    def test_a_player_who_only_watches_is_dropped_at_once(self):
+        from apps.games.actor import drop_player_everywhere
+
+        room, a, b = heads_up_room()
+        a.email = "alice@example.com"
+        a.approved = True
+        a.save()
+        mark_email_verified(a)
+
+        async def body():
+            conn = TestWebSocket().connect_as(room, a)
+            assert (await conn.connect())[0]
+            await conn.receive_json_from(timeout=2)  # the snapshot; they never send anything
+            await drop_player_everywhere(a.pk, LOGIN_REQUIRED_CLOSE_CODE)
+            for _ in range(10):
+                out = await conn.receive_output(timeout=2)
+                if out["type"] == "websocket.close":
+                    break
+            assert out == {"type": "websocket.close", "code": LOGIN_REQUIRED_CLOSE_CODE}
+
+        run_async(body)
+
+    def test_the_admin_action_withdraws_approval(self):
+        friend = member("chi")
+        owner = User.objects.create_superuser(
+            username="owner", email="o@example.com", password="x" * 12
+        )
+        client = Client()
+        client.force_login(owner)
+        response = client.post(
+            "/admin/games/user/",
+            {"action": "withdraw_approval", "_selected_action": [friend.pk]},
+        )
+        assert response.status_code == 302
+        friend.refresh_from_db()
+        assert friend.approved is False
+
+
+def test_the_backfill_approves_only_a_verified_current_email():
+    import importlib
+
+    from allauth.account.models import EmailAddress
+    from django.apps import apps as django_apps
+
+    kept = User.objects.create_user(username="kept", email="kept@example.com")
+    EmailAddress.objects.create(user=kept, email="kept@example.com", verified=True, primary=True)
+    moved = User.objects.create_user(username="moved", email="new@example.com")
+    EmailAddress.objects.create(user=moved, email="old@example.com", verified=True, primary=False)
+    khach = guest("khach-9")
+    migration = importlib.import_module("apps.games.migrations.0014_user_approved")
+    migration.approve_verified_accounts(django_apps, None)
+    approved = set(User.objects.filter(approved=True).values_list("username", flat=True))
+    assert "kept" in approved and "moved" not in approved and khach.username not in approved

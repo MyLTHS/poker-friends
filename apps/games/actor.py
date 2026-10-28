@@ -212,6 +212,10 @@ class TableActor:
     async def kick(self, user_id: int) -> None:
         await self._call(lambda: self._kick(user_id))
 
+    async def drop_player(self, user_id: int, code: int) -> None:
+        """Close this player's sockets here, at once (the owner withdrew their approval)."""
+        await self._call(lambda: self._drop_player(user_id, code))
+
     async def close(self) -> bool:
         """Close the room; ``False`` when it closes only after the running hand."""
         return await self._call(self._close)
@@ -792,6 +796,18 @@ class TableActor:
         if seat is not None:
             await self._seat_updated(seat)
 
+    async def _drop_player(self, user_id: int, code: int) -> None:
+        player_id = str(user_id)
+        dropped = [conn for conn, player in self.connections.items() if player == player_id]
+        layer = get_channel_layer()
+        for conn in dropped:
+            self.connections.pop(conn)
+            channel = self.channels.pop(conn, None)
+            if channel is not None and layer is not None:
+                await layer.send(channel, {"type": "table.close", "code": code})
+        if dropped and player_id in self.session.seats.values():
+            await self._seat_updated(self._seat_of(player_id))  # shown as disconnected
+
     async def _close(self) -> bool:
         self._refuse_if_suspended()
         if self.closed:
@@ -1087,6 +1103,13 @@ async def get_actor(room_id: int) -> TableActor:
         actor = await _recover(room_id)
         _actors[room_id] = actor
         return actor
+
+
+async def drop_player_everywhere(user_id: int, code: int) -> None:
+    """Close every socket this player has open, at every table of this process."""
+    for actor in list(_actors.values()):
+        if not actor.closed:
+            await actor.drop_player(user_id, code)
 
 
 async def reset_registry_for_tests() -> None:
