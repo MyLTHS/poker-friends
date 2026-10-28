@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 
+import { ClientErrorReporter } from "@/feedback/browser";
 import { fontVariables } from "@/ui/fonts";
 import { RotatePrompt } from "@/ui/RotatePrompt";
 import "./globals.css";
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         {children}
         <RotatePrompt />
+        <ClientErrorReporter />
       </body>
     </html>
   );
