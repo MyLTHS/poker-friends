@@ -33,7 +33,7 @@ const direction: Direction = {
   name: "Nỉ & Đồng thau",
   tagline: "Một câu lạc bộ poker riêng về đêm: nỉ xanh, gỗ sẫm, ánh đồng thau.",
   description:
-    "Bàn nỉ xanh nhìn từ trên xuống, viền da gỗ sẫm, chi tiết đồng thau và ánh đèn vàng ấm; chữ Noto Serif Display tương phản cao cho tiêu đề và con số lớn, Manrope cho giao diện. Hợp với hội bạn chơi tối cuối tuần muốn cảm giác ấm, thân, \"bàn quen\" thay vì sòng bài lấp lánh. Điểm mạnh là bài và chip như thật, bàn dễ đọc và có không khí riêng; đổi lại nền tối và nhiều lớp đổ bóng nên cần giữ kỷ luật tương phản, và phong cách cổ điển kém trẻ trung hơn các hướng phẳng.",
+    "Bàn nỉ xanh nhìn từ trên xuống, viền da gỗ sẫm, chi tiết đồng thau và ánh đèn vàng ấm; chữ Josefin Sans hình học, đậm cho tiêu đề và con số lớn, Be Vietnam Pro cho giao diện và các cột số. Hợp với hội bạn chơi tối cuối tuần muốn cảm giác ấm, thân, \"bàn quen\" thay vì sòng bài lấp lánh. Điểm mạnh là bài và chip như thật, bàn dễ đọc và có không khí riêng; đổi lại nền tối và nhiều lớp đổ bóng nên cần giữ kỷ luật tương phản, và phong cách cổ điển kém trẻ trung hơn các hướng phẳng.",
   swatches: [
     { name: "Nỉ xanh", value: "#155A3F" },
     { name: "Da gỗ sẫm", value: "#3A2417" },
@@ -43,7 +43,7 @@ const direction: Direction = {
     { name: "Rượu vang", value: "#9E2B31" },
     { name: "Lời", value: "#86CFA0" },
   ],
-  fonts: ["Noto Serif Display", "Manrope"],
+  fonts: ["Josefin Sans", "Be Vietnam Pro"],
   render: (screen, device) => {
     const Screen = SCREENS[screen];
     return <Screen device={device} />;

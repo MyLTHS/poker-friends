@@ -500,26 +500,28 @@ function ReconnectCard({ device }: { device: Device }) {
 }
 
 function PausedCard({ device }: { device: Device }) {
+  // the phone column is 176px wide: shorter wording, same facts
+  const d = device === "desktop";
   return (
     <div className={`paused paused-${device}`}>
-      <span className="variant-label">Biến thể · lỗi máy chủ</span>
+      <span className="variant-label">{d ? "Biến thể · lỗi máy chủ" : "Lỗi máy chủ"}</span>
       <div className="paused-card">
         <span className="paused-icon">
-          <ServerCrash size={device === "desktop" ? 24 : 20} strokeWidth={1.9} />
+          <ServerCrash size={d ? 24 : 20} strokeWidth={1.9} />
         </span>
         <span className="paused-head">
           <b>Bàn tạm dừng</b>
-          <span>Máy chủ gặp sự cố. Ván #37 được giữ nguyên, đồng hồ dừng lại.</span>
+          <span>{d ? "Máy chủ gặp sự cố. Ván #37 được giữ nguyên, đồng hồ dừng lại." : "Máy chủ gặp sự cố. Ván #37 được giữ nguyên."}</span>
         </span>
         <ul className="paused-facts">
           <li>
-            <Clock size={14} /> Đồng hồ dừng ở <b>14 giây</b>
+            <Clock size={14} /> {d ? "Đồng hồ dừng ở" : "Dừng ở"} <b>14 giây</b>
           </li>
           <li>
-            <Lock size={14} /> Chip và bài <b>giữ nguyên</b>
+            <Lock size={14} /> {d ? "Chip và bài" : "Chip"} <b>giữ nguyên</b>
           </li>
           <li>
-            <RefreshCw size={14} /> Tự thử lại sau <b>0:30</b>
+            <RefreshCw size={14} /> {d ? "Tự thử lại sau" : "Thử lại sau"} <b>0:30</b>
           </li>
         </ul>
         <Btn kind="ghost" size="md" block icon={<RotateCw size={15} />}>
@@ -624,7 +626,7 @@ function OwnerPanel({ device }: { device: Device }) {
                   <span className="op-id">
                     <b>{p.name}</b>
                     <small>
-                      Ghế {p.seat} · {p.note ?? (p.inHand ? "đang trong ván" : "chờ ván sau")}
+                      Ghế {p.seat} · {p.note ?? (p.inHand ? (d ? "đang trong ván" : "trong ván") : "chờ ván sau")}
                     </small>
                   </span>
                   <span className="op-stack">{fmt(p.stack)}</span>
@@ -705,7 +707,7 @@ function OwnerPanel({ device }: { device: Device }) {
       <section className="owner-danger">
         <span>
           <b>Đóng phòng</b>
-          <small>Kết thúc bàn, mọi người thấy bảng tổng kết lời/lỗ.</small>
+          <small>{d ? "Kết thúc bàn, mọi người thấy bảng tổng kết lời/lỗ." : "Kết thúc bàn, hiện bảng lời/lỗ."}</small>
         </span>
         <Btn kind="danger" size="sm">
           Đóng phòng

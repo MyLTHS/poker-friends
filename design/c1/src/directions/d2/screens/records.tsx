@@ -44,8 +44,8 @@ function SummaryTable({ d }: { d: Device }) {
     <div className={`k-sum ${mob ? "k-sum-m" : ""}`}>
       <div className="k-sum-row k-sum-head">
         <span>Người chơi</span>
-        <span>Được cấp</span>
-        <span>Số ván</span>
+        <span>{mob ? "Cấp" : "Được cấp"}</span>
+        <span>{mob ? "Ván" : "Số ván"}</span>
         <span>7-2</span>
         <span>Còn</span>
         <span>Lời / lỗ</span>
@@ -88,7 +88,7 @@ function HandRow({ h, d }: { h: (typeof HANDS)[number]; d: Device }) {
           <Pill tone="mute" icon={<Ban size={12} strokeWidth={2.4} />}>
             Đã huỷ
           </Pill>
-          <small>{mob ? "Chip trả lại như trước ván" : "Ván bị huỷ giữa chừng · chip trả lại như trước ván"}</small>
+          <small>{mob ? "Chip trả lại như cũ" : "Ván bị huỷ giữa chừng · chip trả lại như trước ván"}</small>
         </span>
       </div>
     );

@@ -13,7 +13,7 @@ const direction: Direction = {
   name: "Sơn Mài Vàng Son",
   tagline: "Sơn then, son đỏ và vàng lá: một phòng chơi riêng mang hồn tranh sơn mài Việt.",
   description:
-    "Nền sơn then đen bóng nhiều lớp, mặt bàn son đỏ viền vàng lá thếp tay, dải khảm vỏ trứng và điểm xà cừ óng ánh; chữ có chân Brygada 1918 cho tiêu đề, Commissioner cho chữ thường. " +
+    "Nền sơn then đen bóng nhiều lớp, mặt bàn son đỏ viền vàng lá thếp tay, dải khảm vỏ trứng và điểm xà cừ óng ánh; chữ có chân Playfair Display cho tiêu đề, số lớn và nút cược, Be Vietnam Pro cho chữ thường." +
     "Hợp hội bạn muốn một bàn chơi trang trọng, ấm và có bản sắc Việt mà vẫn hiện đại, đọc nhanh trên điện thoại xoay ngang. " +
     "Điểm mạnh là chất liệu và chiều sâu (như cầm một hộp sơn mài thật) và một hệ thống nhất quán từ lá bài, chip tới nút; đánh đổi là nền tối nhiều lớp nên cần giữ kỷ luật tương phản, và vẻ sang trọng ít “vui nhộn” hơn hướng Kẹo Đêm.",
   swatches: [
@@ -25,7 +25,7 @@ const direction: Direction = {
     { name: "Xà cừ", value: "#D5ECEF" },
     { name: "Ngọc bích (lời)", value: "#74C7A3" },
   ],
-  fonts: ["Brygada 1918", "Commissioner"],
+  fonts: ["Playfair Display", "Be Vietnam Pro"],
   render: (screen, device) => {
     const node = renderPlay(screen, device) ?? renderRooms(screen, device) ?? renderAccount(screen, device) ?? renderSocial(screen, device);
     if (node) return node;

@@ -8,13 +8,15 @@ theo yêu cầu của chủ dự án. Code nằm ở `design/c1/`:
 
 | Hướng | Thư mục | Tinh thần | Phông chữ (tiêu đề · chữ thường) |
 |---|---|---|---|
-| D1 · Nỉ & Đồng thau | `design/c1/src/directions/d1/` | Câu lạc bộ riêng ban đêm: nỉ xanh, viền gỗ, đồng thau, chữ có chân | Noto Serif Display · Manrope |
-| D2 · Kính & Ánh Kim | `design/c1/src/directions/d2/` | Sảnh tầng thượng nửa đêm: kính mờ, viền vàng sâm panh, bàn xanh dầu dưới một ngọn đèn | Mona Sans · Geist |
+| D1 · Nỉ & Đồng thau | `design/c1/src/directions/d1/` | Câu lạc bộ riêng ban đêm: nỉ xanh, viền gỗ, đồng thau, chữ kiểu Art Deco | Josefin Sans · Be Vietnam Pro |
+| D2 · Kính & Ánh Kim | `design/c1/src/directions/d2/` | Sảnh tầng thượng nửa đêm: kính mờ, viền vàng sâm panh, bàn xanh dầu dưới một ngọn đèn | Be Vietnam Pro (cả hai) |
 | D3 · Kẹo Đêm | `design/c1/src/directions/d3/` | Vui, đậm, ưu tiên điện thoại: nền chàm, màu kẹo, nút to bo tròn | M PLUS Rounded 1c · Plus Jakarta Sans |
-| D4 · Sơn Mài Vàng Son | `design/c1/src/directions/d4/` | Hồn tranh sơn mài Việt: sơn then, son đỏ, vàng lá, khảm vỏ trứng | Brygada 1918 · Commissioner |
+| D4 · Sơn Mài Vàng Son | `design/c1/src/directions/d4/` | Hồn tranh sơn mài Việt: sơn then, son đỏ, vàng lá, khảm vỏ trứng | Playfair Display · Be Vietnam Pro |
 
-Mọi phông đều là Google Fonts có bộ chữ tiếng Việt (dấu chồng như ầ, ặ, ữ hiện đúng) và có sẵn trong
-Figma. Mỗi hướng tự nạp phông của mình ở đầu `style.css` trong thư mục của hướng đó.
+Phông của D1, D2, D4 do chủ dự án chọn từ bảng mẫu chữ; cỡ chữ và độ đậm theo thang của D3 (chữ
+thường 14–15 px trở lên trên desktop, không dùng nét mảnh 400 trên nền tối). Mọi phông đều là Google
+Fonts có bộ chữ tiếng Việt (dấu chồng như ầ, ặ, ữ hiện đúng) và có sẵn trong Figma. Mỗi hướng tự nạp
+phông của mình ở đầu `style.css` trong thư mục của hướng đó.
 
 Các màn: đăng nhập, đăng ký, quên/đặt lại mật khẩu, nâng cấp từ khách, hồ sơ, lobby, tạo phòng,
 link mời, bàn tới lượt mình, bàn nhiều trạng thái (showdown, đã bỏ, nghỉ, mất kết nối, all-in, người
