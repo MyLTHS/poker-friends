@@ -4,6 +4,7 @@ from io import StringIO
 
 import pytest
 from django.core.management import CommandError, call_command
+from django.db import connection
 
 from apps.games.models import Hand, HandCommand, LedgerEntry, LedgerKind, Room, User
 
@@ -121,3 +122,27 @@ class TestCheckLedgerFails:
         hand.save(update_fields=["result"])
         assert "replay ra kết quả khác" in check_fails()
         assert "OK" in check("--no-replay")
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.skipif(connection.vendor != "postgresql", reason="snapshot isolation is PostgreSQL")
+def test_check_ledger_reads_one_snapshot(monkeypatch):
+    """A hand finishing while the check runs must not look like a mismatch: every query of
+    one run sees the same moment (REPEATABLE READ), and the check never writes."""
+    from apps.games.management.commands import check_ledger
+
+    simulated_room(hands=2, players=2)
+    seen = []
+    real = check_ledger.check_room
+
+    def spy(room, replay=True):
+        with connection.cursor() as cursor:
+            cursor.execute("SHOW transaction_isolation")
+            isolation = cursor.fetchone()[0]
+            cursor.execute("SHOW transaction_read_only")
+            seen.append((isolation, cursor.fetchone()[0]))
+        return real(room, replay)
+
+    monkeypatch.setattr(check_ledger, "check_room", spy)
+    assert "OK" in check()
+    assert seen == [("repeatable read", "on")]

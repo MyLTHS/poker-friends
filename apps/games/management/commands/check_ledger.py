@@ -12,14 +12,18 @@ never writes to the database. Checks, per room:
 - unless ``--no-replay``: replaying each finished hand from its command log gives the stored
   result (docs/spec.md: every hand replays to the same result).
 
+Safe while the server plays: on PostgreSQL every query reads one snapshot of the database.
+
 The report is in Vietnamese: it is read by the owner during an incident.
 """
 
 import json
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db import connection, transaction
 from django.db.models import Sum
 
 from apps.games.engine.hand import HandEngine
@@ -49,14 +53,14 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        rooms = Room.objects.order_by("pk")
-        if options["room"]:
-            rooms = rooms.filter(pk__in=options["room"])
-            missing = set(options["room"]) - set(rooms.values_list("pk", flat=True))
-            if missing:
-                raise CommandError(f"Không có phòng: {', '.join(map(str, sorted(missing)))}")
-
-        reports = [check_room(room, replay=not options["no_replay"]) for room in rooms]
+        with snapshot():
+            rooms = Room.objects.order_by("pk")
+            if options["room"]:
+                rooms = rooms.filter(pk__in=options["room"])
+                missing = set(options["room"]) - set(rooms.values_list("pk", flat=True))
+                if missing:
+                    raise CommandError(f"Không có phòng: {', '.join(map(str, sorted(missing)))}")
+            reports = [check_room(room, replay=not options["no_replay"]) for room in rooms]
         for report in reports:
             self._print(report)
 
@@ -84,6 +88,23 @@ class Command(BaseCommand):
             self.stdout.write(f"      ván #{hand_no} đang chơi dở (server sẽ chơi tiếp)")
         for problem in report.problems:
             self.stdout.write(self.style.ERROR(f"      - {problem}"))
+
+
+@contextmanager
+def snapshot():
+    """Run every query on one consistent view of the database (PostgreSQL REPEATABLE READ).
+
+    Otherwise a hand finishing, or a grant landing, between two queries of a running server
+    looks like a mismatch: the ledger read before the hand row, say. SQLite (development) has
+    no concurrent writer to worry about. Inside an outer transaction (tests) the level is
+    already fixed, so it is left as it is.
+    """
+    outer = connection.in_atomic_block
+    with transaction.atomic():
+        if connection.vendor == "postgresql" and not outer:
+            with connection.cursor() as cursor:
+                cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        yield
 
 
 def check_room(room: Room, replay: bool = True) -> RoomReport:
