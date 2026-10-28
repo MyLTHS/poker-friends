@@ -13,7 +13,8 @@
     "test": "vitest run",
     "api:gen": "node scripts/gen-api-types.mjs",
     "api:check": "node scripts/gen-api-types.mjs --check && tsc -p tsconfig.api.json && node scripts/check-fixture-types.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:members": "E2E_MEMBERS_ONLY=1 playwright test"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

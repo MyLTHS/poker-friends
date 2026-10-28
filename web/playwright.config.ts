@@ -17,6 +17,9 @@ const API_PORT = Number(process.env.E2E_API_PORT ?? 8000);
 const WEB = `http://localhost:${WEB_PORT}`;
 const API = `localhost:${API_PORT}`;
 process.env.E2E_WEB = WEB;
+// E2E_MEMBERS_ONLY=1 (`npm run e2e:members`): Django with guests off, and only members.spec.ts;
+// otherwise every other spec, with guests on. One dev server per folder: they cannot share a run.
+const MEMBERS_ONLY = process.env.E2E_MEMBERS_ONLY === "1";
 // A throwaway SQLite database, recreated on every run, so tests never touch db.sqlite3.
 const E2E_DB = path.join(ROOT, "e2e.sqlite3");
 const djangoEnv = {
@@ -26,10 +29,12 @@ const djangoEnv = {
   DJANGO_DEBUG: "true",
   // Every spec makes its guests from this one address; the real limit (20 an hour) is unit-tested.
   GUESTS_PER_IP_HOUR: "200",
+  ...(MEMBERS_ONLY ? { GUESTS_ALLOWED: "false" } : {}),
 };
 
 export default defineConfig({
   testDir: "e2e",
+  ...(MEMBERS_ONLY ? { testMatch: "members.spec.ts" } : { testIgnore: "members.spec.ts" }),
   timeout: 120_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,

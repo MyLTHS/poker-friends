@@ -129,7 +129,8 @@ test("not logged in: play as a guest and send in one go", async ({ page }) => {
   const dialog = dialogOf(page);
   await expect(dialog.getByText("Cần đăng nhập để gửi (khách cũng được)")).toBeVisible();
   await expect(page.locator(":focus")).toContainText("Cần đăng nhập để gửi");
-  await expect(dialog.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute("href", "/account");
+  // the login comes back to this page afterwards (account/members.ts)
+  await expect(dialog.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute("href", "/account?next=%2Frooms");
   await dialog.getByRole("button", { name: "Chơi bằng khách rồi gửi" }).click();
   await expect(page.getByText("Cảm ơn bạn!")).toBeVisible();
 
