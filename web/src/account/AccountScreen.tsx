@@ -2,17 +2,15 @@
 
 // /account: the login for a visitor, the upgrade for a guest, the profile for a member. Google's
 // result arrives as ?google= / ?error= (see app/account/page.tsx) and shows on whichever screen.
-// Members only (server GUESTS_ALLOWED off, account/members.ts): an account the owner has not
-// approved waits on ApprovalScreen; an old guest is told to upgrade; after logging in the player
-// goes back to `next` (the page that sent them here, an invite link with its token).
+// Members only (server GUESTS_ALLOWED off, account/members.ts): any real account plays; an old
+// guest is told to upgrade; after logging in the player goes back to `next` (the page that sent
+// them here, an invite link with its token).
 import { useEffect, useMemo, useState } from "react";
 
 import { D1Root, LoadingLine } from "@/ui";
 
 import { createAuthApi, type Me } from "./api";
-import { ApprovalScreen, NOT_YET } from "./ApprovalScreen";
 import { LoginScreen } from "./LoginScreen";
-import { LogoutButton } from "./LogoutButton";
 import { loginPath, takeRememberedNext } from "./members";
 import type { Notice } from "./messages";
 import { loadMyRooms, type MyRooms } from "./myRooms";
@@ -24,7 +22,7 @@ const NOTICE_SECONDS = 6;
 
 const GUEST_NOW_MEMBERS_ONLY: Notice = {
   kind: "error",
-  text: "Giờ bàn chỉ dành cho thành viên. Nâng cấp tài khoản khách này (giữ nguyên chip) rồi nhờ chủ phòng duyệt.",
+  text: "Giờ bàn chỉ dành cho thành viên. Nâng cấp tài khoản khách này (giữ nguyên chip) là vào chơi được.",
 };
 
 /** `next`: already checked by safeNext (app/account/page.tsx). */
@@ -32,7 +30,6 @@ export function AccountScreen({ initialNotice, next = null }: { initialNotice: N
   const api = useMemo(() => createAuthApi(), []);
   const [boot, setMe] = useAuthBoot(api);
   const [notice, setNotice] = useState<Notice | null>(initialNotice);
-  const [checking, setChecking] = useState(false);
   const rooms = useMyRooms(boot.me);
   const membersOnly = boot.config?.guests_allowed === false;
 
@@ -87,23 +84,6 @@ export function AccountScreen({ initialNotice, next = null }: { initialNotice: N
   if (boot.me.is_guest) {
     const guestNotice = shown ?? (membersOnly ? GUEST_NOW_MEMBERS_ONLY : null);
     return <UpgradeScreen api={api} me={boot.me} googleEnabled={googleEnabled} rooms={rooms} notice={guestNotice} onDone={done} />;
-  }
-  if (!boot.me.member) {
-    return (
-      <ApprovalScreen
-        email={boot.me.email}
-        notice={notice}
-        busy={checking}
-        onRetry={async () => {
-          setChecking(true);
-          const me = await api.me();
-          setChecking(false);
-          if (me.ok && me.data.member) done(me.data, "Chủ phòng đã duyệt. Vào bàn thôi!");
-          else setNotice(me.ok ? NOT_YET : { kind: "error", text: "Không hỏi được server. Thử lại nhé." });
-        }}
-        other={<LogoutButton api={api} onDone={done} kind="ghost" size="lg" block />}
-      />
-    );
   }
   return <ProfileScreen api={api} me={boot.me} rooms={rooms} notice={shown} onDone={done} />;
 }

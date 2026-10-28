@@ -82,16 +82,14 @@ describe("inviteUrl", () => {
 });
 
 describe("members only", () => {
-  it("hands a refusal for who the player is to one place: log in, or wait for the owner", async () => {
+  it("hands a stranger or an old guest (401 login_required) to one place: the login", async () => {
     const blocked = vi.fn();
-    const login = createRoomsApi(fakeFetch(401, { code: "login_required", message: "x" }), () => "", blocked);
-    const result = await login.lobby();
+    const api = createRoomsApi(fakeFetch(401, { code: "login_required", message: "x" }), () => "", blocked);
+    const result = await api.lobby();
     expect(result.ok).toBe(false); // the screen still gets the error
-    expect(blocked).toHaveBeenLastCalledWith("login");
-
-    const wait = createRoomsApi(fakeFetch(403, { code: "not_approved", message: "x" }), () => "", blocked);
-    await wait.snapshot(3);
-    expect(blocked).toHaveBeenLastCalledWith("approval");
+    expect(blocked).toHaveBeenCalledTimes(1);
+    await api.snapshot(3);
+    expect(blocked).toHaveBeenCalledTimes(2);
   });
 
   it("leaves every other refusal to the screen", async () => {

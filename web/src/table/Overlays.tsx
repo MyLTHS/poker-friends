@@ -5,7 +5,7 @@
 // and the "Bàn tạm dừng" card when the server suspended the room.
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { Clock, Hourglass, Lock, LogIn, RefreshCw, RotateCw, ServerCrash, Timer } from "lucide-react";
+import { Clock, Lock, LogIn, RefreshCw, RotateCw, ServerCrash, Timer } from "lucide-react";
 
 import { Button, ButtonLink } from "@/ui";
 
@@ -25,8 +25,8 @@ export function ReconnectCard({
 }: {
   device: Device;
   retry: Retry;
-  /** Closed with 4401 (members only): log in again, or wait for the owner's approval. */
-  refusal?: AuthRefusal | "checking";
+  /** Closed with 4401 (members only): log in, then back to this table. */
+  refusal?: AuthRefusal;
   /** My turn clock, when the connection dropped during my turn: it keeps running on the server. */
   myClock?: TurnClock;
   canCheck: boolean;
@@ -82,40 +82,25 @@ export function ReconnectCard({
 }
 
 /** The 4401 card: the same place and look as the reconnect card, with the way on. */
-function RefusedCard({ device, refusal, backHref }: { device: Device; refusal: AuthRefusal | "checking"; backHref: string }) {
+function RefusedCard({ device, refusal, backHref }: { device: Device; refusal: AuthRefusal; backHref: string }) {
   const d = device === "desktop";
   const card = useRef<HTMLDivElement>(null);
   useEffect(() => card.current?.focus(), [refusal]);
-  const wait = refusal !== "checking" && refusal.block === "approval";
-  const title = refusal === "checking" ? "Không vào lại được bàn" : wait ? "Đợi chủ phòng duyệt" : "Cần đăng nhập để chơi tiếp";
-  const text =
-    refusal === "checking"
-      ? "Đang kiểm tra tài khoản…"
-      : wait
-        ? "Tài khoản của bạn chưa được, hoặc không còn được, chủ phòng duyệt. Nhắn chủ phòng nhé."
-        : "Bàn này chỉ dành cho thành viên. Đăng nhập xong bạn quay lại đúng bàn này.";
   return (
     <div ref={card} tabIndex={-1} className={`overlay-card rc-card rc-${device}`} role="alertdialog" aria-labelledby="rc-title" aria-describedby="rc-desc">
       <span className="rc-spinner" aria-hidden>
-        {wait ? <Hourglass size={d ? 22 : 20} strokeWidth={2} /> : <LogIn size={d ? 22 : 20} strokeWidth={2} />}
+        <LogIn size={d ? 22 : 20} strokeWidth={2} />
       </span>
       <b className="rc-title" id="rc-title">
-        {title}
+        Cần đăng nhập để chơi tiếp
       </b>
       <span className="rc-sub" id="rc-desc">
-        {text}
+        Bàn này chỉ dành cho thành viên. Đăng nhập (hoặc đăng ký) xong bạn quay lại đúng bàn này.
       </span>
       <span className="rc-actions">
-        {refusal !== "checking" &&
-          (wait ? (
-            <ButtonLink kind="primary" size={d ? "md" : "lg"} href="/account">
-              Xem tài khoản
-            </ButtonLink>
-          ) : (
-            <ButtonLink kind="primary" size={d ? "md" : "lg"} icon={<LogIn size={16} aria-hidden />} href={refusal.loginHref}>
-              Đăng nhập
-            </ButtonLink>
-          ))}
+        <ButtonLink kind="primary" size={d ? "md" : "lg"} icon={<LogIn size={16} aria-hidden />} href={refusal.loginHref}>
+          Đăng nhập
+        </ButtonLink>
         <ButtonLink kind="ghost" size={d ? "md" : "lg"} href={backHref}>
           Về sảnh
         </ButtonLink>

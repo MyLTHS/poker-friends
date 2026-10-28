@@ -31,8 +31,7 @@ const TEXT: Record<string, string> = {
   network_error: "Không nối được tới server. Kiểm tra Django đang chạy rồi thử lại.",
   // members only (server GUESTS_ALLOWED off, account/members.ts)
   login_required: "Bàn này chỉ dành cho thành viên. Đăng nhập để vào.",
-  not_approved: "Chủ phòng chưa duyệt tài khoản này.",
-  guests_disabled: "Chỉ thành viên mới vào được. Đăng ký rồi nhờ chủ phòng duyệt.",
+  guests_disabled: "Chỉ thành viên: đăng ký tài khoản là vào chơi được.",
 };
 
 // The Google flow ends on /account?error=<GoogleError>; worded for someone who just used Google.

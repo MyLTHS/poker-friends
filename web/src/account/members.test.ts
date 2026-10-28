@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { authBlock, blockFromMe, loginPath, rememberNext, safeNext, signupPath, takeRememberedNext } from "./members";
+import { loginPath, needsLogin, rememberNext, safeNext, signupPath, takeRememberedNext } from "./members";
 
 describe("safeNext", () => {
   it("keeps a path of this site, with its query (an invite token)", () => {
@@ -50,29 +50,15 @@ describe("loginPath / signupPath", () => {
   });
 });
 
-describe("authBlock", () => {
-  it("reads the members-only answers of the API", () => {
-    expect(authBlock("login_required")).toBe("login");
-    expect(authBlock("not_approved")).toBe("approval");
+describe("needsLogin", () => {
+  it("reads the members-only answer of the API: a stranger or an old guest logs in", () => {
+    expect(needsLogin("login_required")).toBe(true);
   });
 
-  it("leaves every other error to the screen", () => {
-    for (const code of ["not_authenticated", "forbidden", "room_not_found", "kicked", "network_error", "rate_limited"]) {
-      expect(authBlock(code)).toBeNull();
+  it("leaves every other error to the screen (there is no approval to wait for any more)", () => {
+    for (const code of ["not_approved", "not_authenticated", "forbidden", "room_not_found", "kicked", "network_error", "rate_limited"]) {
+      expect(needsLogin(code)).toBe(false);
     }
-  });
-});
-
-describe("blockFromMe", () => {
-  const me = { is_guest: false, member: false };
-  it("asks a logged-in account the owner has not approved to wait, never to log in again", () => {
-    expect(blockFromMe({ ok: true, data: me })).toBe("approval");
-  });
-
-  it("sends a stranger, a guest or a broken answer to the login", () => {
-    expect(blockFromMe({ ok: false })).toBe("login");
-    expect(blockFromMe({ ok: true, data: { is_guest: true, member: false } })).toBe("login");
-    expect(blockFromMe({ ok: true, data: { is_guest: false, member: true } })).toBe("login"); // refused anyway: log in again
   });
 });
 
@@ -86,7 +72,7 @@ describe("rememberNext / takeRememberedNext", () => {
     };
   };
 
-  it("keeps an invite link through signup, email and approval, and gives it back once", () => {
+  it("keeps an invite link through a trip to Google, and gives it back once", () => {
     const s = storage();
     rememberNext("/rooms/join?token=abc", s, 1000);
     expect(takeRememberedNext(s, 2000)).toBe("/rooms/join?token=abc");

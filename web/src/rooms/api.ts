@@ -3,7 +3,7 @@
 import type { components } from "@/api/rest";
 
 import { makeRequest, type Result } from "@/account/api";
-import { authBlock, goToAuth, type AuthBlock } from "@/account/members";
+import { goToLogin, needsLogin } from "@/account/members";
 
 type Schemas = components["schemas"];
 export type RoomDetail = Schemas["RoomDetail"];
@@ -32,21 +32,20 @@ export function inviteUrl(origin: string, token: string): string {
 }
 
 /**
- * Every call of the room screens (lobby, room, table, history, replay). Members only: a refusal
- * for who the player is (401 login_required, 403 not_approved) is handled here once for all of
- * them, by `onBlocked` (default: leave for the login, or for "Đợi chủ phòng duyệt"). The screen
- * still gets the error, and shows it for the moment the page takes to change.
+ * Every call of the room screens (lobby, room, table, history, replay). Members only: a stranger
+ * or an old guest (401 login_required) is handled here once for all of them, by `onBlocked`
+ * (default: leave for the login, coming back afterwards). The screen still gets the error, and
+ * shows it for the moment the page takes to change.
  */
 export function createRoomsApi(
   fetchImpl: typeof fetch = (...args) => fetch(...args),
   cookies: () => string = () => document.cookie,
-  onBlocked: (block: AuthBlock) => void = goToAuth,
+  onBlocked: () => void = goToLogin,
 ) {
   const send = makeRequest(fetchImpl, cookies);
   const request = async <T>(...args: Parameters<typeof send>): Promise<Result<T>> => {
     const result = await send<T>(...args);
-    const block = result.ok ? null : authBlock(result.error.code);
-    if (block) onBlocked(block);
+    if (!result.ok && needsLogin(result.error.code)) onBlocked();
     return result;
   };
   const room = (id: number, rest = "") => `/api/rooms/${id}/${rest}`;

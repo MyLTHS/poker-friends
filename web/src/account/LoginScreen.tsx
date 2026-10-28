@@ -1,8 +1,7 @@
 "use client";
 
 // Login (design: screens-account.tsx Login): email + password, Google, play as a guest. Members
-// only (server GUESTS_ALLOWED off): no guest, a line saying so, and an account the owner has not
-// approved yet waits on ApprovalScreen instead of the form.
+// only (server GUESTS_ALLOWED off): no guest, and a line saying that an account is all it takes.
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Lock, Mail, UserRound } from "lucide-react";
@@ -10,17 +9,15 @@ import { Lock, Mail, UserRound } from "lucide-react";
 import { Button } from "@/ui";
 
 import type { AuthApi, Me } from "./api";
-import { ApprovalScreen, NOT_YET } from "./ApprovalScreen";
 import { AuthFrame, Field, GoogleButton, NoticeAlert, Or, PasswordField, mmss, useCooldown } from "./frame";
 import { rememberNext, signupPath } from "./members";
 import type { Notice } from "./messages";
 import { formValues, useSubmit } from "./ui";
 
 type Done = (me: Me | null, text?: string) => void;
-type Credentials = { email: string; password: string };
 
-/** A refused login that only the owner can unblock: approve (and, members only, verify) it. */
-const waitsForOwner = (code: string, membersOnly: boolean) => code === "not_approved" || (membersOnly && code === "email_not_verified");
+/** The line members-only shows under the login, the signup and the invite. */
+export const MEMBERS_HINT = "Chỉ thành viên: đăng ký tài khoản là vào chơi được.";
 
 export function LoginScreen({
   api,
@@ -39,31 +36,7 @@ export function LoginScreen({
   notice: Notice | null;
   onDone: Done;
 }) {
-  const [waiting, setWaiting] = useState<Credentials | null>(null);
-  const retry = useSubmit();
-  const [retried, setRetried] = useState(false);
   useEffect(() => rememberNext(next), [next]);
-
-  if (waiting) {
-    return (
-      <ApprovalScreen
-        email={waiting.email}
-        notice={retried ? (retry.error && !waitsForOwner(retry.error.code, membersOnly) ? retry.notice : NOT_YET) : null}
-        busy={retry.busy}
-        onRetry={async () => {
-          setRetried(false);
-          const result = await retry.run(() => api.login(waiting));
-          if (result.ok) onDone(result.data, "Đã đăng nhập.");
-          else setRetried(true);
-        }}
-        other={
-          <Button kind="ghost" size="lg" block onClick={() => setWaiting(null)}>
-            Dùng tài khoản khác
-          </Button>
-        }
-      />
-    );
-  }
   return (
     <AuthFrame
       hero={{
@@ -82,23 +55,10 @@ export function LoginScreen({
         <span className="eyebrow">Thành viên</span>
         <h2 className="auth-title">Chào mừng trở lại</h2>
         <p className="auth-sub">Đăng nhập để vào bàn của hội.</p>
-        <LoginForm
-          api={api}
-          googleEnabled={googleEnabled}
-          membersOnly={membersOnly}
-          next={next}
-          notice={notice}
-          onDone={onDone}
-          onWaiting={(credentials) => {
-            setRetried(false);
-            setWaiting(credentials);
-          }}
-        />
+        <LoginForm api={api} googleEnabled={googleEnabled} membersOnly={membersOnly} next={next} notice={notice} onDone={onDone} />
       </div>
       <p className="auth-legal">
-        {membersOnly
-          ? "Chỉ thành viên mới vào bàn: tài khoản mới cần chủ phòng duyệt."
-          : "Khách vẫn chơi đủ mọi bàn; nâng cấp lên tài khoản sau vẫn giữ chip và lịch sử."}
+        {membersOnly ? MEMBERS_HINT : "Khách vẫn chơi đủ mọi bàn; nâng cấp lên tài khoản sau vẫn giữ chip và lịch sử."}
       </p>
     </AuthFrame>
   );
@@ -111,7 +71,6 @@ function LoginForm({
   next,
   notice,
   onDone,
-  onWaiting,
 }: {
   api: AuthApi;
   googleEnabled: boolean;
@@ -119,7 +78,6 @@ function LoginForm({
   next: string | null;
   notice: Notice | null;
   onDone: Done;
-  onWaiting: (credentials: Credentials) => void;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const login = useSubmit({ scope: area });
@@ -128,28 +86,23 @@ function LoginForm({
   // guest" failed just now, and the page's notice (Google, logged out) goes once anything is tried.
   const [last, setLast] = useState<"login" | "guest" | null>(null);
   const shown = last === "login" ? login.notice : last === "guest" ? guest.notice : notice;
-  const [email, setEmail] = useState("");
   return (
     <div className="form-stack" ref={area}>
       {membersOnly && (
         <p className="members-note">
           <Lock size={15} strokeWidth={2} aria-hidden />
-          <span>Chỉ thành viên. Đăng ký rồi nhờ chủ phòng duyệt.</span>
+          <span>{MEMBERS_HINT}</span>
         </p>
       )}
       <NoticeAlert notice={shown} />
-      {last === "login" && login.error?.code === "email_not_verified" && <ResendVerification api={api} email={email} />}
       <form
         {...login.form}
         className="form-stack"
         onSubmit={async (event) => {
           const values = formValues(event);
           setLast("login");
-          setEmail(values.email);
-          const credentials = { email: values.email, password: values.password };
-          const result = await login.run(() => api.login(credentials));
+          const result = await login.run(() => api.login({ email: values.email, password: values.password }));
           if (result.ok) onDone(result.data, "Đã đăng nhập.");
-          else if (waitsForOwner(result.error.code, membersOnly)) onWaiting(credentials);
         }}
       >
         <Field

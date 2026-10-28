@@ -142,7 +142,7 @@ export function CreateRoomScreen() {
             title="Đăng nhập để mở bàn"
             text={
               guestsAllowed === false
-                ? "Bàn chỉ dành cho thành viên: đăng nhập bằng tài khoản chủ phòng đã duyệt để mở bàn."
+                ? "Bàn chỉ dành cho thành viên: đăng nhập (hoặc đăng ký, xong là vào) để mở bàn."
                 : "Chủ phòng cần một tài khoản (chơi bằng khách cũng được) để cấp chip và quản lý bàn."
             }
             actions={
