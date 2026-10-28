@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { Check, ChevronLeft, Globe, LogIn, Lock } from "lucide-react";
 
+import { loginPath } from "@/account/members";
 import { errorText } from "@/account/messages";
 import { Alert, Button, ButtonLink, Chip, Crest, EmptyState, LoadingLine, MiniTable, Panel, TextField, Toggle } from "@/ui";
 
@@ -74,7 +75,7 @@ const FORM_ID = "create-room";
 export function CreateRoomScreen() {
   const api = useMemo(() => createRoomsApi(), []);
   const router = useRouter();
-  const { me, whenReady } = useMe();
+  const { me, guestsAllowed, whenReady } = useMe();
   const phone = usePhone();
   const online = useOnline();
   const [draft, setDraft] = useState<Draft>(DRAFT);
@@ -139,10 +140,14 @@ export function CreateRoomScreen() {
           <EmptyState
             art={<MiniTable seats={9} seated={0} w={phone ? 96 : 180} h={phone ? 58 : 104} />}
             title="Đăng nhập để mở bàn"
-            text="Chủ phòng cần một tài khoản (chơi bằng khách cũng được) để cấp chip và quản lý bàn."
+            text={
+              guestsAllowed === false
+                ? "Bàn chỉ dành cho thành viên: đăng nhập bằng tài khoản chủ phòng đã duyệt để mở bàn."
+                : "Chủ phòng cần một tài khoản (chơi bằng khách cũng được) để cấp chip và quản lý bàn."
+            }
             actions={
-              <ButtonLink kind="primary" href="/account" icon={<LogIn size={16} aria-hidden />}>
-                Đăng nhập hoặc chơi bằng khách
+              <ButtonLink kind="primary" href={loginPath("/rooms/new")} icon={<LogIn size={16} aria-hidden />}>
+                {guestsAllowed === false ? "Đăng nhập" : "Đăng nhập hoặc chơi bằng khách"}
               </ButtonLink>
             }
           />

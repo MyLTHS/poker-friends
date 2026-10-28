@@ -85,15 +85,23 @@ export function useOrigin(): string {
 }
 
 /** The signed-in player (a guest counts): `undefined` while asking, `null` when nobody is. Also
- *  fetches /api/auth/config/ first, which sets the csrftoken cookie every POST needs. `reload`
- *  asks again (after an invite link made the visitor a guest). */
-export function useMe(): { me: Me | null | undefined; whenReady: () => Promise<void>; reload: () => void } {
+ *  fetches /api/auth/config/ first, which sets the csrftoken cookie every POST needs, and says
+ *  whether the server takes guests (`guestsAllowed`, undefined until known; false: members
+ *  only). `reload` asks again (after an invite link made the visitor a guest). */
+export function useMe(): { me: Me | null | undefined; guestsAllowed: boolean | undefined; whenReady: () => Promise<void>; reload: () => void } {
   const auth = useMemo(() => createAuthApi(), []);
   const [me, setMe] = useState<Me | null | undefined>(undefined);
+  const [guestsAllowed, setGuestsAllowed] = useState<boolean | undefined>(undefined);
   const [asked, setAsked] = useState(0);
   const ready = useRef<Promise<void> | null>(null);
   // In effects and handlers only: never fetch while rendering (the server renders too).
-  const whenReady = useCallback(() => (ready.current ??= auth.config().then(() => undefined)), [auth]);
+  const whenReady = useCallback(
+    () =>
+      (ready.current ??= auth.config().then((config) => {
+        if (config.ok) setGuestsAllowed(config.data.guests_allowed);
+      })),
+    [auth],
+  );
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -106,5 +114,5 @@ export function useMe(): { me: Me | null | undefined; whenReady: () => Promise<v
     };
   }, [auth, whenReady, asked]);
   const reload = useCallback(() => setAsked((n) => n + 1), []);
-  return { me, whenReady, reload };
+  return { me, guestsAllowed, whenReady, reload };
 }
