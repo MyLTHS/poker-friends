@@ -947,6 +947,21 @@
       grid-column: 1 / -1;
     }
 
+    /* a box scrolled into view (focus, keyboard) stops below the sticky bar, not under it */
+    .d1.auth input {
+      scroll-margin: calc(var(--appbar-h) + 12px) 0 12px;
+    }
+    /* the text box itself is the finger's target: 44px inside the box's 1px border */
+    .d1.auth .input {
+      height: 46px;
+    }
+    /* the small hero's wordmark link: 44px tall without moving anything */
+    .d1 .m-hero-content > a {
+      display: inline-flex;
+      padding-block: 3px;
+      margin-block: -3px;
+    }
+
     /* the other pages: a bar, then the columns side by side */
     .d1.auth-phone-bar .auth-main,
     .d1.auth-phone-bar .auth-main.is-split,
@@ -1069,9 +1084,15 @@
       font-size: var(--fs-sm);
     }
 
-    /* profile: an id card beside the rooms and sign-in methods */
+    /* profile: an id card beside the rooms and sign-in methods. The page title is not drawn but
+       stays the page's h1 for screen readers. */
     .d1 .profile-page .page-head {
-      display: none;
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
     .d1 .p-card .av {
       width: 64px !important;
@@ -1162,6 +1183,14 @@
     }
     .d1 .p-methods small {
       font-size: var(--fs-sm);
+    }
+  }
+
+  /* the smallest landscape phones (667×375, the notch insets still kept): the signup's email and
+     name one under the other, each wide enough to read */
+  @media (orientation: landscape) and (max-height: 500px) and (max-width: 760px) {
+    .d1.auth-phone-bar .form-pair {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 

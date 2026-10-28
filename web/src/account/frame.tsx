@@ -29,6 +29,7 @@ export function AuthFrame({
   children: ReactNode;
 }) {
   const main = `auth-main${layout !== "single" ? " is-split" : ""}${layout === "forgot" ? " is-forgot" : ""}`;
+  useFocusedBoxInView();
   return (
     <D1Root bg="auth" className={`auth auth-phone-${phone.kind}`}>
       <AuthHero {...hero} />
@@ -36,6 +37,28 @@ export function AuthFrame({
       <main className={main}>{children}</main>
     </D1Root>
   );
+}
+
+/**
+ * The phone's keyboard takes half the landscape screen. When the visible area shrinks over the box
+ * being typed in, bring the box back to the middle of what is left (under the sticky bar). Android
+ * resizes the page itself (interactive-widget, app/account/layout.tsx); iOS only shrinks the
+ * visual viewport, which is what this listens to.
+ */
+function useFocusedBoxInView() {
+  useEffect(() => {
+    const view = window.visualViewport;
+    if (!view) return;
+    const reveal = () => {
+      const box = document.activeElement;
+      if (!(box instanceof HTMLInputElement)) return;
+      const bar = document.querySelector(".d1.auth .appbar")?.getBoundingClientRect().bottom ?? 0;
+      const r = box.getBoundingClientRect();
+      if (r.top < Math.max(view.offsetTop, bar) || r.bottom > view.offsetTop + view.height) box.scrollIntoView({ block: "center" });
+    };
+    view.addEventListener("resize", reveal);
+    return () => view.removeEventListener("resize", reveal);
+  }, []);
 }
 
 function AuthHero({ headline, sub }: { headline: ReactNode; sub: ReactNode }) {
@@ -113,7 +136,8 @@ function MobileHero({ title, sub }: { title: ReactNode; sub?: ReactNode }) {
   );
 }
 
-/** The phone bar of a page under the login (the same look as AppShell's sub-page bar). */
+/** The phone bar of a page under the login (the same look as AppShell's sub-page bar). Its title
+ *  is the page's h1 on the phone, where the hero (the desktop h1) is hidden. */
 function AuthBar({ title, sub, back, right }: Omit<Bar, "kind">) {
   return (
     <header className="appbar">
@@ -122,10 +146,12 @@ function AuthBar({ title, sub, back, right }: Omit<Bar, "kind">) {
           <ChevronLeft size={22} aria-hidden />
         </Link>
       )}
-      <span className="appbar-title">
-        <b>{title}</b>
+      <div className="appbar-title">
+        <h1>
+          <b>{title}</b>
+        </h1>
         {sub && <small>{sub}</small>}
-      </span>
+      </div>
       {right && <span className="appbar-right">{right}</span>}
     </header>
   );
