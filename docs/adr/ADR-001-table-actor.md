@@ -47,7 +47,7 @@ không có cách lưu/nạp sẵn ngoài `record()`/`replay()`.
 | 1. Kiểm tra hợp lệ | `command_id` đã áp chưa (bộ nhớ, rồi ràng buộc duy nhất `(hand, command_id)` trong DB); đúng `hand_id` đang chạy; người gửi ngồi bàn; hành động hợp lệ theo `HandEngine.legal_actions` | Trả `command.rejected`, ghi log. **Không** ghi DB, không đổi gì |
 | 2. Ghi `HandCommand` | Một transaction ngắn: `HandCommand(hand, player, sequence = n + 1, command_id, kind, amount)` | Không ghi được (DB lỗi) thì trả `command.rejected` mã `internal_error`; chưa áp gì nên client gửi lại an toàn |
 | 3. Áp vào engine | `HandEngine.act(...)` | Không được xảy ra vì bước 1 đã kiểm đúng luật đó. Nếu vẫn xảy ra: **fail-stop** (mục 5) |
-| 4. Phát sự kiện | Tăng `version`; mỗi người một bản `view_for(người đó)`; gửi qua channel layer (Redis). Ván xong thì `save_completed_hand()` (ván + ledger trong một transaction) **trước** khi phát `hand.completed` | Người nhận mất gói thì tự resync bằng `version` |
+| 4. Phát sự kiện | Tăng `version`; mỗi người một bản `view_for(người đó)`; gửi qua channel layer (trong bộ nhớ của process, xem ghi chú cuối). Ván xong thì `save_completed_hand()` (ván + ledger trong một transaction) **trước** khi phát `hand.completed` | Người nhận mất gói thì tự resync bằng `version` |
 | 5. Trả lời | `command.ack` cho người gửi, mang `result_version` | |
 
 Vì sao **ghi trước rồi mới áp**: nếu process chết ở bất kỳ đâu sau bước 2, lệnh đã nằm trong DB nên
@@ -270,3 +270,19 @@ không giới hạn và chưa có rate limit lệnh; WebSocket không có cookie
 - **Mọi lỗi khi lưu ván xong** (không chỉ `HandPersistenceError`) đều fail-stop: sổ chip trong bộ
   nhớ đã đi trước DB. Khởi động lại thì khôi phục lưu lại ván; lưu vẫn hỏng thì phòng mở tạm dừng.
 
+## Bỏ Redis (28/10/2026)
+
+Mọi chỗ dùng channel layer đều nằm trong actor, tức trong đúng một process Daphne (điểm 1 ở trên),
+nên Redis chỉ là đường chuyền tin nội bộ của process đó. Production giờ dùng
+`InMemoryChannelLayer` (để trống `REDIS_URL`). Hai lý do, đều đo bằng bot chơi thử
+([choi-thu-bang-bot.md](../choi-thu-bang-bot.md)) trên cùng bộ Docker production, 6 bot, 100 ván:
+
+- **Redis làm rơi tin.** channels_redis dùng chung một hàng đợi cho mọi kết nối trong một process,
+  và một kết nối bị huỷ đúng lúc nó đang nhận hộ có thể làm rơi tin của kết nối khác. Đo được 16 lần
+  hụt `version` với Redis (733 lần ngắt kết nối), 0 lần với kênh trong bộ nhớ (818 lần ngắt).
+  Client vẫn tự resync được, nhưng đó là việc thừa.
+- **Hàng đợi chung 100 tin cho cả process.** Lúc đông người mà tin dồn dập thì đầy, và server cắt
+  kết nối của người đang nhận (`ChannelFull`).
+
+Nếu sau này chạy nhiều process thì phải xem lại toàn bộ ADR này (mỗi bàn một người ghi duy nhất),
+không chỉ bật lại Redis. `config/settings.py` vẫn đọc `REDIS_URL` cho trường hợp đó.
