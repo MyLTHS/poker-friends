@@ -90,6 +90,13 @@ DATABASES = {
         conn_max_age=60,
     )
 }
+if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
+    # runserver answers on several threads. A transaction that reads, then writes, fails at once
+    # with "database is locked" when another thread holds the write lock; taking the write lock
+    # at BEGIN (IMMEDIATE) makes it wait for up to `timeout` seconds instead (E2E runs on SQLite).
+    DATABASES["default"].setdefault("OPTIONS", {}).update(
+        {"transaction_mode": "IMMEDIATE", "timeout": 20}
+    )
 
 # Empty in production: one Daphne process, so the in-memory layer is enough and does not drop
 # messages when a socket closes (ADR-001, "Bỏ Redis"). Kept for a multi-process setup.

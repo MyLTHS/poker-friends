@@ -75,7 +75,11 @@ test("pre-actions play a hand to the showdown; the hand is named on the table an
     const names = await p.locator(".seat-hand, .me-hand").allTextContents();
     expect(names.length, "a showdown names at least the winner's hand").toBeGreaterThan(0);
     for (const name of names) expect(name).toMatch(HAND);
-    await expect(p.locator(".board .pc.is-hi").first()).toBeVisible();
+    // The board cards of the winning hand light up and the rest dim. A hand made in the hole
+    // alone (a pocket pair, an ace high) uses no board card, so then none is lit or dimmed.
+    const lit = await p.locator(".board .pc.is-hi").count();
+    const dim = await p.locator(".board .pc.is-lo").count();
+    expect(lit + dim === 0 || (lit > 0 && lit + dim === 5), `board: ${lit} lit, ${dim} dimmed`).toBeTruthy();
   }
   await shot(button, "showdown-desktop");
   await button.getByRole("tab", { name: /Nhật ký/ }).click();
