@@ -49,6 +49,7 @@ function LoginForm({ api, googleEnabled, notice, onDone }: { api: AuthApi; googl
       <NoticeAlert notice={login.notice ?? guest.notice ?? notice} />
       {login.error?.code === "email_not_verified" && <ResendVerification api={api} email={email} />}
       <form
+        {...login.form}
         className="form-stack"
         onSubmit={async (event) => {
           const values = formValues(event);
@@ -64,9 +65,9 @@ function LoginForm({ api, googleEnabled, notice, onDone }: { api: AuthApi; googl
           autoComplete="email"
           required
           icon={<Mail size={17} strokeWidth={1.8} />}
-          error={login.fields.email?.join(" ")}
+          error={login.fieldError("email")}
         />
-        <PasswordField label="Mật khẩu" name="password" autoComplete="current-password" required error={login.fields.password?.join(" ")} />
+        <PasswordField label="Mật khẩu" name="password" autoComplete="current-password" required error={login.fieldError("password")} />
         <div className="form-row-between">
           <span />
           <Link href="/account/forgot" className="link">

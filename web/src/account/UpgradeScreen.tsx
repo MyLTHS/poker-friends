@@ -165,6 +165,7 @@ function UpgradeForm({
         </>
       )}
       <form
+        {...submit.form}
         className="form-stack"
         onSubmit={async (event) => {
           const values = formValues(event);
@@ -182,7 +183,7 @@ function UpgradeForm({
           required
           icon={<Mail size={17} strokeWidth={1.8} />}
           onChange={(e) => onEmail(e.target.value)}
-          error={submit.fields.email?.join(" ")}
+          error={submit.fieldError("email")}
         />
         <div className="field-group">
           <PasswordField
@@ -193,7 +194,7 @@ function UpgradeForm({
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            error={submit.fields.password?.join(" ")}
+            error={submit.fieldError("password")}
           />
           {password && <Strength level={passwordLevel(password)} />}
         </div>
@@ -203,7 +204,7 @@ function UpgradeForm({
           name="username"
           autoComplete="nickname"
           icon={<UserRound size={17} strokeWidth={1.8} />}
-          error={submit.fields.username?.join(" ")}
+          error={submit.fieldError("username")}
         />
         <Button type="submit" kind="primary" size="lg" block busy={submit.busy}>
           Nâng cấp &amp; giữ chip

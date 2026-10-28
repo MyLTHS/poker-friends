@@ -200,10 +200,15 @@ export function PasswordField(props: Omit<ComponentProps<typeof TextField>, "typ
   );
 }
 
-/** A notice (Google result, "logged out", a server error) as the D1 alert. */
+/** A notice (Google result, "logged out", a server error) as the D1 alert. An error can take the
+ *  focus (useSubmit moves it there when no box is to blame), so Tab goes on from it. */
 export function NoticeAlert({ notice }: { notice: Notice | null }) {
   if (!notice) return null;
-  return <Alert kind={notice.kind} title={notice.text} />;
+  return (
+    <div className="form-notice" tabIndex={-1} data-form-notice={notice.kind}>
+      <Alert kind={notice.kind} title={notice.text} />
+    </div>
+  );
 }
 
 /** Seconds left before "send again" is allowed; `start()` begins a new wait. */

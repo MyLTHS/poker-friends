@@ -92,6 +92,7 @@ function SignupForm({ api, sentTo, onSent }: { api: AuthApi; sentTo: string | nu
   const rules = passwordRules(password);
   return (
     <form
+      {...submit.form}
       className="form-stack"
       onSubmit={async (event) => {
         const values = formValues(event);
@@ -109,7 +110,7 @@ function SignupForm({ api, sentTo, onSent }: { api: AuthApi; sentTo: string | nu
             autoComplete="email"
             required
             icon={<Mail size={17} strokeWidth={1.8} />}
-            error={submit.fields.email?.join(" ")}
+            error={submit.fieldError("email")}
           />
           <TextField
             label="Tên ở bàn"
@@ -120,7 +121,7 @@ function SignupForm({ api, sentTo, onSent }: { api: AuthApi; sentTo: string | nu
             maxLength={30}
             icon={<UserRound size={17} strokeWidth={1.8} />}
             hint="Bạn bè thấy tên này · 2–30 ký tự"
-            error={submit.fields.username?.join(" ")}
+            error={submit.fieldError("username")}
           />
         </div>
         <div className="field-group">
@@ -131,7 +132,7 @@ function SignupForm({ api, sentTo, onSent }: { api: AuthApi; sentTo: string | nu
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            error={submit.fields.password?.join(" ")}
+            error={submit.fieldError("password")}
           />
           {password && <Strength level={passwordLevel(password)} />}
           <ul className="pw-rules">

@@ -50,6 +50,22 @@ export function errorText(error: Pick<ClientError, "code">, retryAfter?: number)
   return TEXT[error.code] ?? "Có lỗi xảy ra, thử lại sau.";
 }
 
+/** The ApiError codes that are about one box of the form: the answer goes under that box. */
+export const FIELD_OF_CODE: Record<string, string> = { email_taken: "email", username_taken: "username" };
+
+type Checked = Pick<HTMLInputElement, "validity" | "type" | "minLength" | "maxLength" | "validationMessage">;
+
+/** What the browser's own checks (required, type=email, minLength…) found, in Vietnamese: the
+ *  browser would say it in its own language, in a bubble outside the page. */
+export function invalidText(input: Checked): string {
+  const { validity } = input;
+  if (validity.valueMissing) return "Chưa điền ô này.";
+  if (validity.typeMismatch && input.type === "email") return "Email chưa đúng dạng, ví dụ ten@gmail.com.";
+  if (validity.tooShort) return `Cần ít nhất ${input.minLength} ký tự.`;
+  if (validity.tooLong) return `Tối đa ${input.maxLength} ký tự.`;
+  return input.validationMessage;
+}
+
 export type Notice = { kind: "ok" | "error"; text: string };
 
 /** The Google flow ends on /account?google=ok or /account?error=<code>. */

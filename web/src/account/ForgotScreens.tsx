@@ -59,6 +59,7 @@ function ForgotRequest({ api }: { api: AuthApi }) {
   const [sentTo, setSentTo] = useState<string | null>(null);
   return (
     <form
+      {...submit.form}
       className="form-stack"
       onSubmit={async (event) => {
         const { email } = formValues(event);
@@ -76,7 +77,7 @@ function ForgotRequest({ api }: { api: AuthApi }) {
         </span>
       </div>
       <NoticeAlert notice={submit.notice} />
-      <TextField label="Email" name="email" type="email" autoComplete="email" required icon={<Mail size={17} strokeWidth={1.8} />} error={submit.fields.email?.join(" ")} />
+      <TextField label="Email" name="email" type="email" autoComplete="email" required icon={<Mail size={17} strokeWidth={1.8} />} error={submit.fieldError("email")} />
       <Button type="submit" kind="primary" size="lg" block busy={submit.busy}>
         {sentTo ? "Gửi lại link" : "Gửi link đặt lại"}
       </Button>
@@ -141,6 +142,7 @@ function ResetForm({ api, uid = "", token = "", preview = false }: { api?: AuthA
   }
   return (
     <form
+      {...submit.form}
       className="form-stack"
       onSubmit={async (event) => {
         event.preventDefault();
@@ -168,7 +170,7 @@ function ResetForm({ api, uid = "", token = "", preview = false }: { api?: AuthA
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            error={submit.fields.password?.join(" ")}
+            error={submit.fieldError("password")}
           />
           {password && <Strength level={passwordLevel(password)} />}
         </div>
