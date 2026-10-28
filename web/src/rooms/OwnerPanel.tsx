@@ -5,8 +5,9 @@
 // closing the room. A standalone component: the room page opens it in a side sheet, and the live
 // table (C3) can mount <OwnerSheet> the same way.
 //
-// Needs a <ToastProvider> (from @/ui) above it: results are announced as toasts, errors show
-// where they happened.
+// Needs a <ToastProvider> (from @/ui) above it, inside the .d1 root (RoomsShell has one; the
+// table screen must put one in): results are announced as toasts, errors show where they
+// happened. Brings its own CSS (rooms.css).
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, Clock, Copy, Crown, DoorClosed, Link2, Minus, Plus, RefreshCw, UserX } from "lucide-react";
 
@@ -17,9 +18,10 @@ import { fmt } from "@/ui/format";
 
 import { createRoomsApi, inviteUrl, type RoomDetail, type RoomsApi, type SeatOccupant } from "./api";
 import { Choices } from "./Choices";
-import { usePhone } from "./hooks";
+import { useOrigin, usePhone } from "./hooks";
 import { copyText } from "./RoomBits";
-import { blindsText, changedRules, pendingText, serverFieldErrors, THINK_CHOICES, type EditableRules } from "./rules";
+import { blindsText, changedRules, checkRules, pendingText, serverFieldErrors, SEVEN_CHOICES, THINK_CHOICES, type EditableRules, type FieldErrors } from "./rules";
+import "./rooms.css";
 
 export type OwnerPanelProps = {
   /** GET /api/rooms/<id>/ of a room the viewer owns (is_owner) */
@@ -33,18 +35,6 @@ export type OwnerPanelProps = {
   rooms?: RoomsApi;
 };
 
-const BLIND_LADDER: [number, number][] = [
-  [1, 2],
-  [5, 10],
-  [10, 20],
-  [20, 40],
-  [25, 50],
-  [50, 100],
-  [100, 200],
-  [200, 400],
-  [500, 1000],
-];
-const SEVEN_LADDER = [0, 25, 50, 100];
 const STEP = 100;
 
 type Confirm = { kind: "kick"; player: SeatOccupant } | { kind: "close" } | null;
@@ -74,6 +64,7 @@ export function OwnerPanel({ detail, seats, inHand, onChanged, rooms, noticeInHe
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [closeError, setCloseError] = useState<string | null>(null);
+  const origin = useOrigin();
 
   /** Runs one owner call: `key` marks the busy button; returns the result for local errors. */
   async function run<T>(key: string, action: () => Promise<Result<T>>, done?: ReactNode): Promise<Result<T>> {
@@ -126,7 +117,7 @@ export function OwnerPanel({ detail, seats, inHand, onChanged, rooms, noticeInHe
             ))}
           </ul>
         )}
-        <span className="owner-hint is-desktop-only">Người đang trong ván: chip cấp/trừ được áp sau khi ván kết thúc.</span>
+        <span className="owner-hint is-desktop-only">Người đang trong ván thì đợi ván xong mới cấp/trừ chip được.</span>
       </section>
 
       <RulesForm key={JSON.stringify([room, detail.pending])} detail={detail} disabled={closed} busy={busy === "rules"} save={(body, done) => run("rules", () => api.update(roomId, body), done)} />
@@ -137,7 +128,7 @@ export function OwnerPanel({ detail, seats, inHand, onChanged, rooms, noticeInHe
           <div className="link-row">
             <span className="link-box">
               <Link2 size={15} aria-hidden />
-              <span>{inviteUrl(window.location.origin, detail.invite_token).replace(/^https?:\/\//, "")}</span>
+              <span>{inviteUrl(origin, detail.invite_token).replace(/^https?:\/\//, "")}</span>
             </span>
             <button
               type="button"
@@ -341,6 +332,18 @@ function PlayerRow({
   );
 }
 
+type RulesDraft = { small_blind: string; big_blind: string; think_time_seconds: number; sevenOn: boolean; seven: string };
+
+const draftOf = (r: EditableRules): RulesDraft => ({
+  small_blind: String(r.small_blind),
+  big_blind: String(r.big_blind),
+  think_time_seconds: r.think_time_seconds,
+  sevenOn: r.seven_deuce_bonus > 0,
+  seven: String(r.seven_deuce_bonus || 50),
+});
+const toNumber = (text: string) => (text.trim() === "" ? NaN : Number(text));
+const digitsOnly = (text: string) => text.replace(/[^\d]/g, "").slice(0, 9);
+
 function RulesForm({
   detail,
   disabled,
@@ -360,75 +363,83 @@ function RulesForm({
     think_time_seconds: detail.pending?.think_time_seconds ?? room.think_time_seconds,
     seven_deuce_bonus: detail.pending?.seven_deuce_bonus ?? room.seven_deuce_bonus,
   };
-  const [edit, setEdit] = useState<EditableRules>(start);
-  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<RulesDraft>(() => draftOf(start));
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [failure, setFailure] = useState<string | null>(null);
+  const set = (patch: Partial<RulesDraft>) => setDraft((d) => ({ ...d, ...patch }));
+  const edit: EditableRules = {
+    small_blind: toNumber(draft.small_blind),
+    big_blind: toNumber(draft.big_blind),
+    think_time_seconds: draft.think_time_seconds,
+    seven_deuce_bonus: draft.sevenOn ? toNumber(draft.seven) : 0,
+  };
   const body = changedRules(start, edit);
   const dirty = Object.keys(body).length > 0;
   const playing = room.status === "playing";
-
-  const ladder = BLIND_LADDER.some(([s, b]) => s === start.small_blind && b === start.big_blind)
-    ? BLIND_LADDER
-    : [...BLIND_LADDER, [start.small_blind, start.big_blind] as [number, number]].sort((a, b) => a[1] - b[1]);
   const thinks = [...new Set([...THINK_CHOICES, start.think_time_seconds])].sort((a, b) => a - b);
-  const sevens = [...new Set([...SEVEN_LADDER, start.seven_deuce_bonus])].sort((a, b) => a - b);
-  const blindValue = `${edit.small_blind}/${edit.big_blind}`;
   const blindChanged = edit.small_blind !== room.small_blind || edit.big_blind !== room.big_blind;
 
   return (
     <form
       className="owner-rules"
       aria-label="Luật của bàn"
+      noValidate
       onSubmit={async (e) => {
         e.preventDefault();
-        setError(null);
+        setFailure(null);
+        // same limits as the server; the name is not edited here
+        const found = checkRules({ ...edit, name: room.name, max_seats: room.max_seats, is_private: detail.is_private });
+        setErrors(found);
+        if (Object.keys(found).length) return;
         const result = await save(body, playing ? "Đã lưu luật · áp từ ván sau" : "Đã lưu luật");
         if (!result.ok) {
           const fields = serverFieldErrors(result.error.fields as Record<string, string[]> | undefined);
-          setError(Object.values(fields)[0] ?? errorText(result.error, result.retryAfter));
+          setErrors(fields);
+          if (!Object.keys(fields).length) setFailure(errorText(result.error, result.retryAfter));
         }
       }}
     >
       <div className="owner-two">
-        <section className="owner-sec">
-          <h4>
-            <label htmlFor="owner-blind">Blind</label>
-          </h4>
-          <span className="select">
-            <span aria-hidden>
-              {blindChanged ? (
-                <>
-                  <s>{blindsText(room)}</s> → <b>{blindsText(edit)}</b>
-                </>
-              ) : (
-                <b>{blindsText(edit)}</b>
-              )}
+        <section className="owner-sec os-blind">
+          <h4 id="owner-blind">Blind</h4>
+          <span className="blind-pair" role="group" aria-labelledby="owner-blind">
+            <span className={`input${errors.small_blind ? " is-error" : ""}`}>
+              <input
+                aria-label="Blind nhỏ"
+                inputMode="numeric"
+                value={draft.small_blind}
+                disabled={disabled}
+                aria-invalid={errors.small_blind ? true : undefined}
+                aria-describedby="owner-blind-hint"
+                onChange={(e) => set({ small_blind: digitsOnly(e.target.value) })}
+              />
             </span>
-            <ChevronDown size={16} aria-hidden />
-            <select
-              id="owner-blind"
-              value={blindValue}
-              disabled={disabled}
-              onChange={(e) => {
-                const [small_blind, big_blind] = e.target.value.split("/").map(Number);
-                setEdit((r) => ({ ...r, small_blind, big_blind }));
-              }}
-            >
-              {ladder.map(([s, b]) => (
-                <option key={`${s}/${b}`} value={`${s}/${b}`}>
-                  {blindsText({ small_blind: s, big_blind: b })}
-                </option>
-              ))}
-            </select>
+            <span className="blind-sep" aria-hidden>
+              /
+            </span>
+            <span className={`input${errors.small_blind ? " is-error" : ""}`}>
+              <input
+                aria-label="Blind lớn"
+                inputMode="numeric"
+                value={draft.big_blind}
+                disabled={disabled}
+                aria-invalid={errors.small_blind ? true : undefined}
+                aria-describedby="owner-blind-hint"
+                onChange={(e) => set({ big_blind: digitsOnly(e.target.value) })}
+              />
+            </span>
           </span>
-          <span className="owner-hint">{playing ? "Áp từ ván sau" : "Áp cho ván tới"}</span>
+          <span id="owner-blind-hint" className={`owner-hint${errors.small_blind ? " is-error" : ""}`} role={errors.small_blind ? "alert" : undefined}>
+            {errors.small_blind ?? (blindChanged ? <>Đang {blindsText(room)} · {playing ? "áp từ ván sau" : "áp cho ván tới"}</> : playing ? "Áp từ ván sau" : "Áp cho ván tới")}
+          </span>
         </section>
         <section className="owner-sec">
           <h4 id="owner-secs">Giây suy nghĩ</h4>
           <Choices
             labelledBy="owner-secs"
             items={thinks.map((n) => ({ value: n, label: n, title: `${n} giây` }))}
-            value={edit.think_time_seconds}
-            onChange={(think_time_seconds) => setEdit((r) => ({ ...r, think_time_seconds }))}
+            value={draft.think_time_seconds}
+            onChange={(think_time_seconds) => set({ think_time_seconds })}
             className="seg seg-fill"
             itemClass="seg-item"
             disabled={disabled}
@@ -438,36 +449,50 @@ function RulesForm({
         <section className="owner-sec os-seven">
           <h4 id="owner-seven">Thưởng 7-2</h4>
           <span className="os-seven-row">
-            <Toggle
-              on={edit.seven_deuce_bonus > 0}
-              label="Bật thưởng 7-2"
-              disabled={disabled}
-              onChange={(on) => setEdit((r) => ({ ...r, seven_deuce_bonus: on ? start.seven_deuce_bonus || 50 : 0 }))}
-            />
-            {edit.seven_deuce_bonus > 0 && (
-              <Choices
-                labelledBy="owner-seven"
-                items={sevens.filter((n) => n > 0).map((n) => ({ value: n, label: n, title: `${n} chip mỗi người` }))}
-                value={edit.seven_deuce_bonus}
-                onChange={(seven_deuce_bonus) => setEdit((r) => ({ ...r, seven_deuce_bonus }))}
-                className="seg seg-fill seg-sm"
-                itemClass="seg-item"
-                disabled={disabled}
-              />
+            <Toggle on={draft.sevenOn} label="Bật thưởng 7-2" disabled={disabled} onChange={(sevenOn) => set({ sevenOn })} />
+            {draft.sevenOn && (
+              <>
+                <span className={`input${errors.seven_deuce_bonus ? " is-error" : ""}`}>
+                  <input
+                    aria-label="Thưởng 7-2 mỗi người"
+                    inputMode="numeric"
+                    value={draft.seven}
+                    disabled={disabled}
+                    aria-invalid={errors.seven_deuce_bonus ? true : undefined}
+                    aria-describedby={errors.seven_deuce_bonus ? "owner-seven-error" : undefined}
+                    onChange={(e) => set({ seven: digitsOnly(e.target.value) })}
+                  />
+                  <span className="input-trailing">chip</span>
+                </span>
+                <Choices
+                  label="Mức thưởng nhanh"
+                  items={SEVEN_CHOICES.map((n) => ({ value: String(n), label: n, title: `${n} chip mỗi người` }))}
+                  value={draft.seven}
+                  onChange={(seven) => set({ seven })}
+                  className="quick-amts"
+                  itemClass="qa"
+                  disabled={disabled}
+                />
+              </>
             )}
           </span>
+          {errors.seven_deuce_bonus && (
+            <span id="owner-seven-error" className="owner-hint is-error" role="alert">
+              {errors.seven_deuce_bonus}
+            </span>
+          )}
         </section>
       </div>
-      {(dirty || error) && (
+      {(dirty || failure) && (
         <div className="owner-save">
-          {error ? (
+          {failure ? (
             <span className="owner-hint is-error" role="alert">
-              {error}
+              {failure}
             </span>
           ) : (
             <span className="owner-hint">{playing ? "Đang có ván: luật mới áp từ ván sau." : "Áp ngay cho ván tới."}</span>
           )}
-          <Button kind="quiet" size="sm" onClick={() => (setEdit(start), setError(null))} disabled={busy}>
+          <Button kind="quiet" size="sm" onClick={() => (setDraft(draftOf(start)), setErrors({}), setFailure(null))} disabled={busy}>
             Bỏ
           </Button>
           <Button kind="primary" size="sm" type="submit" busy={busy} disabled={!dirty}>

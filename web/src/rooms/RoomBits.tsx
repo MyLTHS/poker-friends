@@ -3,14 +3,14 @@
 // Pieces several room screens share: status badges, the invitation card a guest sees, the
 // owner's share card (link, copy, share, QR) and the "paste an invite link" box.
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Check, Copy, Globe, Link2, Lock, QrCode, RefreshCw, Share2 } from "lucide-react";
 
 import { Avatar, Badge, Button, Crest, QR, TextField } from "@/ui";
 import { fmt } from "@/ui/format";
 
 import { inviteUrl, type RoomDetail } from "./api";
-import { useClientValue, usePhone } from "./hooks";
+import { useClientValue, useOrigin, usePhone } from "./hooks";
 import { inviteToken, STATUS_TEXT } from "./lobby";
 import { qrModules } from "./qr";
 import type { RoomInfo } from "./rules";
@@ -144,6 +144,7 @@ export async function copyText(text: string): Promise<boolean> {
 /** The owner's share card: the link, copy / share, the QR to scan from across the table. */
 export function ShareCard({ detail, onCopied, rotateHint = true }: { detail: RoomDetail; onCopied?: (ok: boolean) => void; rotateHint?: boolean }) {
   const phone = usePhone();
+  const origin = useOrigin();
   const [copied, setCopied] = useState(false);
   const canShare = useClientValue(() => typeof navigator.share === "function", false);
   useEffect(() => {
@@ -151,8 +152,10 @@ export function ShareCard({ detail, onCopied, rotateHint = true }: { detail: Roo
     const timer = window.setTimeout(() => setCopied(false), 2500);
     return () => window.clearTimeout(timer);
   }, [copied]);
-  if (!detail.invite_token) return null;
-  const link = inviteUrl(window.location.origin, detail.invite_token);
+  const link = detail.invite_token ? inviteUrl(origin, detail.invite_token) : "";
+  // the matrix only changes with the link (a re-render every poll would rebuild it)
+  const modules = useMemo(() => (link ? qrModules(link) : []), [link]);
+  if (!detail.invite_token || !origin) return null;
   const shown = link.replace(/^https?:\/\//, "");
   const room = detail.room;
   return (
@@ -184,7 +187,7 @@ export function ShareCard({ detail, onCopied, rotateHint = true }: { detail: Roo
             >
               {copied ? "Đã chép link" : "Chép link"}
             </Button>
-            {canShare && !phone && (
+            {canShare && (
               <Button
                 kind="ghost"
                 icon={<Share2 size={16} aria-hidden />}
@@ -201,7 +204,7 @@ export function ShareCard({ detail, onCopied, rotateHint = true }: { detail: Roo
           )}
         </div>
         <span className="qr-wrap">
-          <QR modules={qrModules(link)} size={phone ? 112 : 168} label={`Mã QR của link mời vào ${room.name}`} />
+          <QR modules={modules} size={phone ? 112 : 168} label={`Mã QR của link mời vào ${room.name}`} />
           <small>
             <QrCode size={12} aria-hidden /> Quét để vào
           </small>

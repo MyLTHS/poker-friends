@@ -1628,8 +1628,11 @@
     font-size: var(--fs-sm);
     color: var(--ivory-3);
   }
-  .d1 .history-grid .panel-head .seg {
+  .d1 .history-grid .panel-head .hands-count {
     margin-left: auto;
+  }
+  .d1 .history-grid .panel-head .seg {
+    margin-left: 12px;
   }
   @media (max-width: 1100px) {
     .d1 .history-grid {
@@ -1647,18 +1650,28 @@
   .d1 .sheet-head .owner-title b {
     display: block;
   }
-  .d1 .owner .select {
-    position: relative;
+  .d1 .owner .blind-pair .input {
+    flex: 1;
+    height: 40px;
+    padding: 0 12px;
   }
-  .d1 .owner .select select {
-    position: absolute;
-    inset: 0;
+  .d1 .owner .input input {
     width: 100%;
-    opacity: 0;
-    cursor: pointer;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    font: var(--w-strong) var(--fs-lg)/1 var(--text);
+    color: var(--ivory);
   }
-  .d1 .owner .select:focus-within {
-    border-color: var(--brass);
+  .d1 .owner .os-seven-row .input {
+    flex: none;
+    width: 112px;
+    height: 40px;
+    padding: 0 12px;
+  }
+  .d1 .owner .quick-amts .qa {
+    width: 44px;
+    height: 40px;
   }
   .d1 .owner-rules {
     display: flex;
@@ -2063,7 +2076,7 @@
       align-items: center;
       gap: 2px 10px;
     }
-    .d1 .owner .owner-two .select,
+    .d1 .owner .owner-two .blind-pair,
     .d1 .owner .owner-two .seg,
     .d1 .owner .owner-two .os-seven-row {
       grid-column: 2;
@@ -2072,9 +2085,6 @@
     .d1 .owner .owner-two .owner-hint {
       grid-column: 1;
       grid-row: 2;
-    }
-    .d1 .owner .select {
-      height: 44px;
     }
     .d1 .owner .seg-item {
       height: 36px;
@@ -2098,6 +2108,7 @@
       height: 44px;
     }
     .d1 .owner .op-adjust {
+      flex-wrap: wrap;
       padding: 0 0 10px;
       gap: 6px;
     }
@@ -2108,14 +2119,27 @@
       height: 44px;
     }
     .d1 .owner .stepper button {
-      width: 26px;
+      width: 44px;
     }
     .d1 .owner .stepper input {
-      width: 48px;
+      width: 44px;
       font-size: var(--fs-2xl);
     }
-    .d1 .owner .link-box {
+    .d1 .owner .link-box,
+    .d1 .owner .blind-pair .input,
+    .d1 .owner .os-seven-row .input,
+    .d1 .owner .quick-amts .qa {
       height: 44px;
+    }
+    .d1 .owner .os-seven-row .input {
+      width: 84px;
+    }
+    /* the column is narrow: the amount box is enough, quick amounts go */
+    .d1 .owner .os-seven-row .quick-amts {
+      display: none;
+    }
+    .d1 .owner .os-seven-row {
+      gap: 6px;
     }
     .d1 .owner .owner-danger {
       grid-area: danger;
