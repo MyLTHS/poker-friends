@@ -75,6 +75,7 @@ test("pre-actions play a hand to the showdown; the hand is named on the table an
     const names = await p.locator(".seat-hand, .me-hand").allTextContents();
     expect(names.length, "a showdown names at least the winner's hand").toBeGreaterThan(0);
     for (const name of names) expect(name).toMatch(HAND);
+    // a best five uses at least three board cards, so the winner's always light some (a split pot too)
     await expect(p.locator(".board .pc.is-hi").first()).toBeVisible();
   }
   await shot(button, "showdown-desktop");

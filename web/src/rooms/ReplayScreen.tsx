@@ -185,7 +185,7 @@ export function ReplayScreen({ handId }: { handId: number }) {
     () => (table && replay ? tableView(table, {
             lastActions: actionsAt(stepsOf(replay), step),
             showdown: replay.showdown,
-            winners: replay.results.filter((r) => r.hand_net > 0).map((r) => r.player_id),
+            winners: replay.results.filter((r) => r.hand_net >= 0).map((r) => r.player_id), // a split pot nets 0
           }) : null),
     [table, replay, step],
   );

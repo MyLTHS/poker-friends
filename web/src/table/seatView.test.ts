@@ -162,6 +162,22 @@ describe("tableView", () => {
     expect(view.boardHi).toEqual([0, 1, 3]);
   });
 
+  it("a split pot lights the board for both tied hands", () => {
+    const board = ["Ah", "Kd", "Qc", "Jh", "Ts"];
+    const hand = { ...midHand.hand!, board, complete: true, actor: null, legal_actions: null };
+    const view = tableView({ ...midHand, hand }, {
+      showdown: [
+        { player_id: "1", seat: 1, category: "straight", cards: ["Ah", "Kd", "Qc", "Jh", "Ts"] },
+        { player_id: "3", seat: 5, category: "straight", cards: ["Ah", "Kd", "Qc", "Jh", "Ts"] },
+      ],
+      results: [
+        { player_id: "1", seat: 1, hand_net: 0, seven_deuce_net: 0, stack: 1000 },
+        { player_id: "3", seat: 5, hand_net: 0, seven_deuce_net: 0, stack: 1000 },
+      ],
+    });
+    expect(view.boardHi).toEqual([0, 1, 2, 3, 4]);
+  });
+
   it("names no hand while the hand runs", () => {
     const view = tableView(midHand, {
       showdown: [{ player_id: "2", seat: 3, category: "one_pair", cards: ["Ac", "Ad", "Qh", "Jh", "7d"] }],

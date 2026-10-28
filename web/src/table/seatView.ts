@@ -121,7 +121,9 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
   const results = hand?.complete ? (extras.results ?? null) : null;
   const showdown = hand?.complete ? (extras.showdown ?? null) : null;
   const handNames = showdownBySeat(showdown);
-  const winners = results ? results.filter((r) => r.hand_net > 0).map((r) => r.player_id) : extras.winners;
+  // Whose hand lights the board: a split pot leaves the tied players at +0, while a shown loser
+  // always ends below 0 (they paid at least a blind), so >= 0 among the shown hands.
+  const winners = results ? results.filter((r) => r.hand_net >= 0).map((r) => r.player_id) : extras.winners;
 
   const views: SeatView[] = [];
   for (let seat = 1; seat <= room.max_seats; seat++) {
