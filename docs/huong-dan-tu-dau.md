@@ -66,6 +66,10 @@ cd ~/Projects/notes-2026
 ```
 
 ```bash
+git switch main
+```
+
+```bash
 git pull
 ```
 
@@ -105,6 +109,8 @@ Từ đây trở đi, **mọi lệnh đều chạy trong thư mục này**. Mở
      cho ai.**
    - Chờ tới dòng **XONG** và một link dạng `https://chu-ngau-nhien.trycloudflare.com`. Đó là
      **link của buổi hôm nay**. Mỗi lần `up` là một link mới.
+   - Nếu thay vì **XONG** script báo "Server đã chạy nhưng link chưa trả lời", không sao: link mới
+     cần thêm chút thời gian. Đợi một phút rồi mở thử.
 3. **Tự thử trước:** mở link trên điện thoại, **tắt Wi‑Fi để dùng 4G** cho giống bạn bè ở xa.
    Thấy trang sảnh là ổn. Link mới đôi khi cần chờ 30–60 giây mới mở được.
 
@@ -129,10 +135,19 @@ quản trị là `<link của buổi>/admin/`.
 ### 2.3. Tạo phòng
 
 1. Mở link của buổi trên máy tính. Trang mở ra **Sảnh**.
-2. Bấm **Tạo phòng**. Lần đầu, trang báo "Đăng nhập để mở bàn": bấm **Đăng nhập hoặc chơi bằng
-   khách**, rồi bấm **Chơi ngay bằng khách** (hoặc **Đăng ký** bằng email nếu muốn giữ chip và lịch
-   sử qua nhiều buổi; tự xác minh bằng `scripts/play-online.sh verify email-cua-ban@gmail.com`).
-   Xong bấm **Sảnh** ở thanh trên, rồi **Tạo phòng** lần nữa.
+2. **Chủ phòng nên có tài khoản thật (email + mật khẩu), đừng dùng khách.** Tài khoản khách chỉ
+   sống trên link của buổi đó: buổi sau link đổi là không vào lại được, và bạn mất quyền chủ phòng
+   cùng chip của các phòng cũ. Lần đầu làm như sau (các buổi sau chỉ cần **Đăng nhập**):
+   - Bấm **Tạo phòng**. Trang báo "Đăng nhập để mở bàn": bấm **Đăng nhập hoặc chơi bằng khách**,
+     rồi bấm **Đăng ký**, điền email, tên, mật khẩu.
+   - Tự xác minh email (chưa có Gmail thì email không gửi đi):
+
+     ```bash
+     scripts/play-online.sh verify email-cua-ban@gmail.com
+     ```
+
+   - Quay lại trang web, **Đăng nhập** bằng email và mật khẩu vừa tạo.
+   - Bấm **Sảnh** ở thanh trên, rồi **Tạo phòng**.
 3. Điền form tạo phòng:
    - đặt tên, blind (ví dụ 10/20), số ghế, thời gian suy nghĩ;
    - **thưởng 7-2** nếu muốn;
@@ -146,15 +161,19 @@ Dán **đoạn ở Phần 3** vào nhóm chat, thay `<LINK MỜI PHÒNG>` bằng
 **chỉ cần đúng link mời này**: mở ra là web tự tạo tài khoản khách và đưa họ vào phòng, không phải
 đăng ký hay mở link nào khác.
 
+Link mời chứa link của buổi, nên **mỗi buổi phải lấy lại link mời**: đăng nhập, vào trang phòng cũ
+(Sảnh → phòng của bạn), bấm **Chép link**. Phòng, luật chơi và chip vẫn như buổi trước.
+
 Link mời có mã bí mật: chỉ gửi trong nhóm kín.
 
 ### 2.5. Ngồi vào bàn và cấp chip
 
 1. Ở trang phòng, bấm **Ngồi đây** cạnh một ghế trống (hoặc **Vào bàn chơi** rồi **Ngồi vào**).
 2. Đợi bạn bè vào và **ngồi xuống ghế**. Chủ phòng chỉ cấp chip được cho người **đang ngồi**.
-3. Bấm biểu tượng **vương miện** (Bảng chủ phòng) trên thanh trên cùng. Ở mục **Người chơi &
-   chip**, bấm **Cấp/trừ** cạnh từng người, rồi **Cấp 500** (hoặc gõ số khác). Nhớ cấp cho cả
-   chính mình.
+3. Mở **Bảng chủ phòng**: trên máy tính là nút **Bảng chủ phòng** (có hình vương miện) ở đầu
+   trang phòng, cạnh **Vào bàn chơi**; trong bàn chơi và trên điện thoại là biểu tượng vương miện
+   ở thanh trên cùng. Ở mục **Người chơi & chip**, bấm **Cấp/trừ** cạnh từng người, rồi **Cấp
+   500** (hoặc gõ số khác). Nhớ cấp cho cả chính mình.
 4. Đủ **2 người có chip** là ván đầu tự chia. Các ván sau tự chia tiếp.
 
 Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip được.
@@ -196,8 +215,13 @@ Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip đ
 3. Mỗi tuần, chép thư mục `backups/` ra chỗ khác (Google Drive, ổ ngoài). Hỏng máy thì mất cả dữ
    liệu lẫn bản sao lưu nằm cùng máy.
 
-Dữ liệu (tài khoản, phòng, chip, lịch sử) vẫn giữ nguyên sau `down`. Buổi sau chạy lại `up` là có
-lại hết, chỉ có **link mới**.
+Dữ liệu (tài khoản, phòng, chip, lịch sử) vẫn giữ nguyên trong database sau `down`. Buổi sau chạy
+lại `up` là có **link mới**, và:
+- **Tài khoản đã đăng ký** (email + mật khẩu): đăng nhập lại trên link mới là có lại hết phòng và
+  chip.
+- **Tài khoản khách**: không vào lại được, vì khách chỉ sống trên link của buổi cũ. Chip của khách
+  vẫn nằm trong database nhưng không ai dùng được nữa. Ai muốn giữ chip qua các buổi thì phải
+  nâng cấp lên tài khoản thật **ngay trong buổi** (xem Phần 3).
 
 ---
 
@@ -211,16 +235,18 @@ lại hết, chỉ có **link mới**.
 > **4.** Đợi mình cấp chip, rồi bấm **Vào bàn chơi** (hoặc **Về bàn**) là chơi.
 >
 > Mở bằng **một trình duyệt** suốt buổi nhé: đổi máy hay đổi trình duyệt là thành người khách
-> mới. Muốn giữ chip cho lần sau thì bấm **Hồ sơ**, điền email + mật khẩu rồi bấm **Nâng cấp &
-> giữ chip**, xong nhắn mình để mình xác minh cho.
+> mới. Tài khoản khách **chỉ dùng được tối nay**. Muốn giữ chip cho các buổi sau thì ngay trong
+> buổi bấm **Hồ sơ**, điền email + mật khẩu, bấm **Nâng cấp & giữ chip**, rồi nhắn mình để mình
+> xác minh cho.
 >
 > Gặp gì lạ thì bấm **Gửi phản hồi** hoặc nhắn mình kèm giờ nhé!
 
 Mẹo cho bạn bè:
 - Trên máy tính, bấm phím `?` ở bàn để xem phím tắt: `F` bỏ bài, `C` check/theo, `R` tố.
-- Âm thanh bật/tắt ở biểu tượng bánh răng của bàn.
+- Âm thanh bật/tắt: trên máy tính ở biểu tượng bánh răng của bàn, trên điện thoại ở nút **Thêm**
+  (dấu ba chấm).
 - Lỡ đóng tab hay mất mạng thì mở lại link, bàn tự nối lại đúng chỗ.
-- Chưa tới lượt mà đã biết sẽ làm gì thì bấm **Chọn trước** (Check/Bỏ, Check, Theo bất kỳ): tới
+- Chưa tới lượt mà đã biết sẽ làm gì thì bấm **Chọn trước** (Check / Bỏ, Check, Theo bất kỳ): tới
   lượt là tự làm, sang vòng mới thì tự huỷ.
 
 ---
@@ -233,7 +259,7 @@ Mẹo cho bạn bè:
 | `up` báo không lấy được link | Kiểm Wi‑Fi, đợi một lúc, chạy lại `up` |
 | Link mới mở chưa được | Đợi 30–60 giây rồi thử lại |
 | Bạn bè mở link cũ không vào được | Link đổi mỗi lần `up`. Chạy `scripts/play-online.sh status` lấy link hiện tại, gửi lại |
-| Lỡ gập máy, máy ngủ, mất điện | Mở máy lên, chạy `scripts/play-online.sh down` rồi `scripts/play-online.sh up`, gửi **link mới** |
+| Lỡ gập máy, máy ngủ, mất điện | Mở máy lên, **mở Docker Desktop** và đợi cá voi đứng yên, chạy `scripts/play-online.sh down` rồi `scripts/play-online.sh up`, lấy lại link mời và gửi **link mới** |
 | `up` báo đã có một server khác đang chạy | Làm đúng lệnh `docker compose -p … down` mà script in ra, rồi chạy lại `up` |
 | Bàn báo "tạm dừng" | [runbook.md](runbook.md#bàn-tạm-dừng) (thay `dc` bằng lệnh `docker compose -p poker-home …` như ở bước 2.7) |
 | Nghi chip bị sai | Chạy lệnh kiểm sổ chip ở bước 2.7, rồi xem [runbook.md](runbook.md#lệch-chip) |
