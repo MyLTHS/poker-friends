@@ -354,8 +354,8 @@ class TableActor:
             await self._rejected(item.conn, command_id, "room_suspended")
             return
         if key not in self._applied and kind == "command.act":
-            await self._remember_from_log(key, message["hand_id"], command_id)
-        if key in self._applied:
+            await self._remember_from_log(key, item.player_id, message["hand_id"], command_id)
+        if key in self._applied and not self._someone_elses_old_command(key, item.player_id):
             first_asked, result_version = self._applied[key]
             if first_asked != asked:
                 await self._rejected(item.conn, command_id, "command_id_reused")
@@ -377,14 +377,38 @@ class TableActor:
         self._applied[key] = (asked, result_version)
         await self._ack(item.conn, command_id, result_version)
 
-    async def _remember_from_log(self, key: tuple, hand_id: Any, command_id: str) -> None:
+    def _someone_elses_old_command(self, key: tuple, player_id: str) -> bool:
+        """Another player's command.act id from a hand that is no longer running.
+
+        Not a resend by this sender: handled as a new command it is refused as stale_hand (or
+        no_active_hand), without confirming the id exists. Within the running hand a clash
+        still says command_id_reused: (hand, command_id) is unique, so it cannot be applied.
+        """
+        if key[0] != "act":
+            return False
+        first_asked, _ = self._applied[key]
+        running = self.hand is not None and key[1] == self.hand.pk
+        return first_asked[0] != player_id and not running
+
+    async def _remember_from_log(
+        self, key: tuple, player_id: str, hand_id: Any, command_id: str
+    ) -> None:
         """A command for another hand than the running one may still be in the log: the last
         command of a hand that recovery finished (the client resends it after reconnecting).
         Then it is a duplicate (result_version null), not a stale_hand rejection.
+
+        Only this room's hands and the sender's own commands count: anything else is not a
+        resend, and a "duplicate" or "reused" answer would confirm that someone else's command
+        id exists (in another room, even). It is then handled like any new command.
         """
         if self.hand is not None and hand_id == self.hand.pk:
             return  # the running hand's commands are already in _applied
-        stored = await HandCommand.objects.filter(hand_id=hand_id, command_id=command_id).afirst()
+        stored = await HandCommand.objects.filter(
+            hand_id=hand_id,
+            hand__room=self.room,
+            player_id=int(player_id),
+            command_id=command_id,
+        ).afirst()
         if stored is not None:
             payload = {"kind": stored.kind, "amount": stored.amount}
             self._applied[key] = (_asked(str(stored.player_id), "command.act", payload), None)
