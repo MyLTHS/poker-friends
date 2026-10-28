@@ -41,10 +41,16 @@ export function AccountScreen({ initialNotice, next = null }: { initialNotice: N
     if (initialNotice) window.history.replaceState(null, "", loginPath(next));
   }, [initialNotice, next]);
 
-  // A member who was sent here (or comes back with a link to follow) goes on at once.
+  // A member who was sent here (or comes back with a link to follow) goes on at once. Google's
+  // flow comes back without ?next= (/account?google=ok): then the page remembered before leaving
+  // for Google is the one. Taking it clears it, so an old link cannot fire days later.
   useEffect(() => {
-    if (boot.loaded && boot.me?.member && next) window.location.replace(next);
-  }, [boot.loaded, boot.me, next]);
+    if (!boot.loaded || !boot.me?.member) return;
+    const fromGoogle = initialNotice?.kind === "ok";
+    const remembered = next || fromGoogle ? takeRememberedNext() : null;
+    const target = next ?? remembered;
+    if (target) window.location.replace(target);
+  }, [boot.loaded, boot.me, next, initialNotice]);
 
   useEffect(() => {
     // "Đã đăng nhập." and the like fade out; errors stay until the next action.
@@ -55,10 +61,14 @@ export function AccountScreen({ initialNotice, next = null }: { initialNotice: N
 
   const done = (me: Me | null, text?: string) => {
     // In at last: back to the page that sent the player here, or the invite they signed up from.
-    const target = me?.member ? (next ?? takeRememberedNext()) : null;
-    if (target) {
-      window.location.assign(target);
-      return;
+    // The remembered one is taken (and so cleared) even when ?next= wins, so it cannot go stale.
+    if (me?.member) {
+      const remembered = takeRememberedNext();
+      const target = next ?? remembered;
+      if (target) {
+        window.location.assign(target);
+        return;
+      }
     }
     setMe(me);
     setNotice(text ? { kind: "ok", text } : null);
