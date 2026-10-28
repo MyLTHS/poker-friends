@@ -1,5 +1,5 @@
-// C4: the room screens on the real server. An opens a table from the lobby, Bình (a new visitor,
-// not logged in) opens the invite link, sits down, and An grants chips from the owner's panel.
+// C4: the room screens on the real server. Lan opens a table from the lobby, Bình (a new visitor,
+// not logged in) opens the invite link, sits down, and Lan grants chips from the owner's panel.
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
@@ -25,7 +25,8 @@ async function newGuest(browser: Browser, name: string): Promise<Page> {
 }
 
 test("lobby → create a room → invite link → a new visitor joins and sits; the owner grants chips", async ({ browser }) => {
-  const an = await newGuest(browser, "An");
+  // names differ from table.spec.ts: both files share one database per run
+  const an = await newGuest(browser, "Lan");
 
   // The lobby, then the create form.
   await an.goto("/rooms");
@@ -50,7 +51,7 @@ test("lobby → create a room → invite link → a new visitor joins and sits; 
   const binh = await (await browser.newContext()).newPage();
   await binh.goto(invite.pathname + invite.search);
   const card = binh.getByRole("article", { name: "Thiệp mời" });
-  await expect(card).toContainText("An mời bạn vào");
+  await expect(card).toContainText("Lan mời bạn vào");
   await expect(card.getByRole("heading", { name: "Bàn E2E C4" })).toBeVisible();
   await expect(card).toContainText("Bạn vào bằng khách");
   await card.getByRole("link", { name: "Vào phòng" }).click();
