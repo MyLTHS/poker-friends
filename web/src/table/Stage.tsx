@@ -76,7 +76,7 @@ export function Pot({ device, amount, label = "Pot" }: { device: Device; amount:
 
 function Bet({ device, s }: { device: Device; s: SeatView }) {
   return (
-    <div className="bet" data-bet={s.seat} style={at(betPos(device, s.spot))}>
+    <div className="bet" data-bet={s.seat} style={at(betPos(device, s.spot, s.isMe))}>
       <ChipStack amount={s.bet!} size={device === "desktop" ? 20 : 14} max={4} />
       <span className="bet-amt">{fmt(s.bet!)}</span>
     </div>
@@ -198,7 +198,7 @@ function SeatPod({ device, s, cx, clock, now, fx, onSit }: { device: Device; s: 
 /** My own seat: big hole cards, wide plate. Desktop stacks cards over the plate; the phone puts
  *  the cards beside the plate (hint above it) at the bottom centre of the stage. */
 function MeSeat({ device, s, hint, clock }: { device: Device; s: SeatView; hint?: ReactNode; clock?: TurnClock }) {
-  const p = spotPos(device, 1);
+  const p = spotPos(device, 1, true);
   const cards = s.cards ?? [];
   const d = device === "desktop";
   return (
@@ -269,7 +269,7 @@ export function Stage({ device, seats, board, pot, potLabel, mark, clock, now, m
       <Board device={device} cards={board} hidden={boardHidden} />
       {seats.filter((s) => (s.bet ?? 0) > 0).map((s) => <Bet key={s.seat} device={device} s={s} />)}
       {button && (
-        <span className="dealer" style={at(dealerPos(device, button.spot))} aria-label="Nút dealer">
+        <span className="dealer" style={at(dealerPos(device, button.spot, button.isMe))} aria-label="Nút dealer">
           D
         </span>
       )}

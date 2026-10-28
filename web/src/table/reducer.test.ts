@@ -251,3 +251,31 @@ describe("real backend messages (B4b)", () => {
     expect(after.table).toBe(before.table);
   });
 });
+
+describe("my seat", () => {
+  it("follows seat.updated when I sit down and when I leave", () => {
+    const watching: TableSnapshotMessage = {
+      ...snapshot,
+      payload: { table: { ...snapshot.payload.table, you: { player_id: "9", seat: null } } },
+    };
+    const occupant = { seat: 7, player_id: "9", display_name: "Khách", stack: 0, sitting_out: false, connected: true };
+    const sat: ServerMessage = { ...snapshot, type: "seat.updated", hand_id: null, version: 12, payload: { seat: 7, occupant } };
+    let model = run([{ type: "socket.open" }, server(watching), server(sat)]);
+    expect(model.table?.you.seat).toBe(7);
+    const left: ServerMessage = { ...snapshot, type: "seat.updated", hand_id: null, version: 13, payload: { seat: 7, occupant: null } };
+    model = run([server(left)], model);
+    expect(model.table?.you.seat).toBeNull();
+  });
+});
+
+describe("one click, one command", () => {
+  it("a second act before the ack resends the same command_id instead of a new command", () => {
+    let model = run([server(started)], connected());
+    model = reduce(model, act("first", "call"));
+    model = reduce(model, act("second", "raise", 40));
+    const sent = sentCommands(model);
+    expect(sent).toHaveLength(2);
+    expect(sent.map((m) => m.command_id)).toEqual(["first", "first"]);
+    expect(sent[1]).toBe(sent[0]);
+  });
+});

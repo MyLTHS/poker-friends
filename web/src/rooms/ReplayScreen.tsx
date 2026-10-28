@@ -18,7 +18,7 @@ import type { Device } from "@/table/geometry";
 import { describeAction, tableView } from "@/table/seatView";
 import { MobileTableBar, TableTopBar } from "@/table/Side";
 import { FitStage, Stage } from "@/table/Stage";
-import { useTableFx } from "@/table/TableFx";
+import { useTableFx, type SeatPlace } from "@/table/TableFx";
 import { ButtonLink, D1Root, ErrorState, Spinner, fmt, signed } from "@/ui";
 
 import { createRoomsApi, type HandReplay } from "./api";
@@ -176,8 +176,14 @@ export function ReplayScreen({ handId }: { handId: number }) {
 
   const table = replay ? tableAt(replay, stepsOf(replay)[step].hand, me, roomName, maxSeats) : null;
   const view = useMemo(() => (table && replay ? tableView(table, { lastActions: actionsAt(stepsOf(replay), step) }) : null), [table, replay, step]);
-  const spotOf = useCallback((seat: number) => view?.seats.find((s) => s.seat === seat)?.spot, [view]);
-  const { layer, fx: stageFx } = useTableFx({ cues: fx.cues, epoch: fx.epoch, device, spotOf });
+  const placeOf = useCallback(
+    (seat: number): SeatPlace | undefined => {
+      const s = view?.seats.find((v) => v.seat === seat);
+      return s && { spot: s.spot, me: !!s.isMe };
+    },
+    [view],
+  );
+  const { layer, fx: stageFx } = useTableFx({ cues: fx.cues, epoch: fx.epoch, device, placeOf });
 
   if (!replay || !table || !view) {
     return (

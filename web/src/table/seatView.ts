@@ -105,7 +105,8 @@ export type ViewExtras = {
 
 export function tableView(table: TableState, extras: ViewExtras = {}): TableView {
   const { room, seats, hand, you } = table;
-  const anchor = you.seat ?? 1;
+  // My seat at the bottom centre; the seat list is the truth if `you.seat` lags behind it.
+  const anchor = seats.find((s) => s.player_id === you.player_id)?.seat ?? you.seat ?? 1;
   const live = !!hand && !hand.complete;
   const blinds = live ? blindSeats(hand) : undefined;
   const results = hand?.complete ? (extras.results ?? null) : null;

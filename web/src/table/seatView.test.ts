@@ -6,7 +6,7 @@ import midHandFixture from "../../../docs/api/fixtures/server/valid/table.snapsh
 import spectatorFixture from "../../../docs/api/fixtures/server/valid/table.snapshot.spectator.json";
 import startedFixture from "../../../docs/api/fixtures/server/valid/hand.started.json";
 
-import { SPOTS_FOR, dealerPos, fitScale, spotOf } from "./geometry";
+import { GEO, SPOTS_FOR, dealerPos, fitScale, spotOf, spotPos } from "./geometry";
 import { actionLabel, blindSeats, dealOrder, raisePresets, showdownOrder, tableView } from "./seatView";
 
 const midHand = (midHandFixture as unknown as TableSnapshotMessage).payload.table;
@@ -29,6 +29,32 @@ describe("geometry", () => {
     expect(spotOf(4, 9, 5)).toBe(9);
     expect(spotOf(2, 6, 1)).toBe(3);
     expect(spotOf(1, 2, 2)).toBe(10);
+  });
+
+  it("never puts two seats on one spot, whatever the room size and my seat", () => {
+    for (let n = 2; n <= 9; n++) {
+      for (let anchor = 1; anchor <= n; anchor++) {
+        const spots = Array.from({ length: n }, (_, i) => spotOf(i + 1, n, anchor));
+        expect(new Set(spots).size, `${n} seats, me at ${anchor}`).toBe(n);
+        expect(spotOf(anchor, n, anchor)).toBe(1);
+      }
+    }
+  });
+
+  it("keeps every seat inside the frame (phone: clear of the 44px notch inset and the home bar)", () => {
+    // Seat box around its avatar centre, measured in the browser: avatar above, plate and tag below.
+    const box = { desktop: { dx: 64, up: 40, down: 134, left: 0 }, mobile: { dx: 37, up: 18, down: 73, left: 44 } };
+    const bottom = { desktop: 720, mobile: 390 - 20 };
+    for (const device of ["desktop", "mobile"] as const) {
+      const b = box[device];
+      for (const spot of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+        const p = spotPos(device, spot);
+        expect(p.x - b.dx, `${device} spot ${spot} left`).toBeGreaterThanOrEqual(b.left);
+        expect(p.x + b.dx, `${device} spot ${spot} right`).toBeLessThanOrEqual(GEO[device].w);
+        expect(p.y - b.up, `${device} spot ${spot} top`).toBeGreaterThanOrEqual(0);
+        expect(p.y + b.down, `${device} spot ${spot} bottom`).toBeLessThanOrEqual(bottom[device]);
+      }
+    }
   });
 
   it("places the dealer button on whole pixels (same in Node and the browser)", () => {

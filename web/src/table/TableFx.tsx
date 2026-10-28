@@ -54,7 +54,10 @@ function arrive(el: HTMLElement, from: Pt, at: Pt, opts: { lift?: number; scale?
   return [start, mid, end];
 }
 
-export function useTableFx({ cues, epoch, device, spotOf }: { cues: Cue[]; epoch: number; device: Device; spotOf: (seat: number) => number | undefined }) {
+/** Where a seat sits on the stage: its spot, and whether it is my own seat. */
+export type SeatPlace = { spot: number; me: boolean };
+
+export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoch: number; device: Device; placeOf: (seat: number) => SeatPlace | undefined }) {
   const layer = useRef<HTMLDivElement>(null);
   const [ghosts, setGhosts] = useState<Ghost[]>([]);
   const [unflipped, setUnflipped] = useState<Set<number>>(() => new Set());
@@ -137,21 +140,21 @@ export function useTableFx({ cues, epoch, device, spotOf }: { cues: Cue[]; epoch
         }
         case "bet": {
           const el = root.querySelector<HTMLElement>(`[data-bet="${cue.seat}"]`);
-          const spot = spotOf(cue.seat);
-          if (el && spot) track(play(el, arrive(el, spotPos(device, spot), centre(el, root, device), { scale: 0.7 }), { duration: DURATION.chip, easing: EASE.settle, delay: t }));
+          const at = placeOf(cue.seat);
+          if (el && at) track(play(el, arrive(el, spotPos(device, at.spot, at.me), centre(el, root, device), { scale: 0.7 }), { duration: DURATION.chip, easing: EASE.settle, delay: t }));
           t += DURATION.chip;
           break;
         }
         case "fold": {
-          const spot = spotOf(cue.seat);
-          if (spot && !reduced) ghost({ kind: "cards", amount: 0, from: spotPos(device, spot), to: g.c, delay: t, duration: DURATION.base, easing: EASE.in, lift: 0, fadeOut: true, small: !d });
+          const at = placeOf(cue.seat);
+          if (at && !reduced) ghost({ kind: "cards", amount: 0, from: spotPos(device, at.spot, at.me), to: g.c, delay: t, duration: DURATION.base, easing: EASE.in, lift: 0, fadeOut: true, small: !d });
           break;
         }
         case "collect": {
           if (!reduced) {
             cue.bets.forEach((b, i) => {
-              const spot = spotOf(b.seat);
-              if (spot) ghost({ kind: "chips", amount: b.amount, from: betPos(device, spot), to: g.pot, delay: t + i * STAGGER.chips, duration: DURATION.chip, easing: EASE.settle, lift: 0, fadeOut: true, small: !d });
+              const at = placeOf(b.seat);
+              if (at) ghost({ kind: "chips", amount: b.amount, from: betPos(device, at.spot, at.me), to: g.pot, delay: t + i * STAGGER.chips, duration: DURATION.chip, easing: EASE.settle, lift: 0, fadeOut: true, small: !d });
             });
           }
           t += DURATION.chip + (cue.bets.length - 1) * STAGGER.chips;
@@ -185,8 +188,8 @@ export function useTableFx({ cues, epoch, device, spotOf }: { cues: Cue[]; epoch
           if (!reduced) {
             cue.pots.forEach((pot, i) => {
               for (const { seat, amount } of pot.winners) {
-                const spot = spotOf(seat);
-                if (spot) ghost({ kind: "pot", amount, from: g.pot, to: spotPos(device, spot), delay: t + i * DURATION.collect, duration: DURATION.collect, easing: EASE.out, lift: 0, fadeOut: true, small: !d });
+                const at = placeOf(seat);
+                if (at) ghost({ kind: "pot", amount, from: g.pot, to: spotPos(device, at.spot, at.me), delay: t + i * DURATION.collect, duration: DURATION.collect, easing: EASE.out, lift: 0, fadeOut: true, small: !d });
               }
             });
             holdClass("fx-hold-result", end);

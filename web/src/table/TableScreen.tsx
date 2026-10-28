@@ -19,7 +19,7 @@ import { useDevice } from "./device";
 import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
 import { ConnStrip, PausedCard, ReconnectCard } from "./Overlays";
-import { describeAction, raisePresets, tableView, type SeatView, type TableView } from "./seatView";
+import { describeAction, raisePresets, tableView, type SeatView } from "./seatView";
 import { SevenDeuceStage, SevenLedger, SevenMedal } from "./SevenDeuce";
 import {
   ChatComposer,
@@ -37,7 +37,7 @@ import {
   type SideTab,
 } from "./Side";
 import { FitStage, Stage } from "./Stage";
-import { useTableFx } from "./TableFx";
+import { useTableFx, type SeatPlace } from "./TableFx";
 import { useTableSocket } from "./useTableSocket";
 
 const newCommandId = () => crypto.randomUUID();
@@ -112,8 +112,14 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
         : null,
     [table, model.lastActions, model.results, model.myCards, model.chat, model.clockOffsetMs, now],
   );
-  const spotOf = useCallback((seat: number) => view?.seats.find((s) => s.seat === seat)?.spot, [view]);
-  const { layer, fx } = useTableFx({ cues: model.fx, epoch: model.fxEpoch, device, spotOf });
+  const placeOf = useCallback(
+    (seat: number): SeatPlace | undefined => {
+      const s = view?.seats.find((v) => v.seat === seat);
+      return s && { spot: s.spot, me: !!s.isMe };
+    },
+    [view],
+  );
+  const { layer, fx } = useTableFx({ cues: model.fx, epoch: model.fxEpoch, device, placeOf });
 
   const dismissNotice = useCallback(() => dispatch({ type: "dismiss.notice" }), [dispatch]);
   const onAct = useCallback((kind: ActKind, amount?: number) => dispatch({ type: "act", kind, amount, commandId: newCommandId() }), [dispatch]);
@@ -146,6 +152,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const me = view.seats.find((s) => s.isMe);
   const occupant = table.seats.find((s) => s.player_id === you.player_id);
   const sittingOut = !!occupant?.sitting_out;
+  const isSeated = !!occupant;
   const pending = !!model.pending;
   // Read by the E2E tests (web/e2e/table.spec.ts): which state the page shows.
   const probe = {
@@ -167,7 +174,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const myResult = model.results?.find((r) => r.player_id === you.player_id);
   const nameOf = (playerId: string) => table.seats.find((s) => s.player_id === playerId)?.display_name ?? "?";
   const celebration = model.celebration;
-  const sevenSpot = celebration ? spotOf(celebration.seat) : undefined;
+  const sevenSpot = celebration ? placeOf(celebration.seat)?.spot : undefined;
   const unread = chatOpen ? 0 : Math.max(0, model.chat.length - seen);
 
   const sit = async (seat: number) => {
@@ -221,7 +228,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       meHint={meHint}
       showPot={!hand?.complete}
       fx={fx}
-      onSit={you.seat === null && onTakeSeat ? sit : undefined}
+      onSit={!isSeated && onTakeSeat ? sit : undefined}
       className={celebration ? "is-seven" : ""}
     >
       {layer}
@@ -243,7 +250,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
     </>
   );
 
-  const idle = idleContent({ table, view, me, myResult, winners, nameOf, sittingOut, left, celebration: !!celebration });
+  const idle = idleContent({ table, me, myResult, winners, nameOf, sittingOut, left, celebration: !!celebration });
 
   if (device === "mobile") {
     let panel: ReactNode;
@@ -282,7 +289,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
           {seatError && <span className="ip-error" role="alert">{seatError}</span>}
           <Spectators device="mobile" spectators={model.spectators} />
           <div className="ip-actions">
-            {you.seat !== null && (
+            {isSeated && (
               <Button kind="quiet" block icon={<Coffee size={16} />} onClick={toggleSit} aria-pressed={sittingOut}>
                 {sittingOut ? "Quay lại chơi" : "Nghỉ ván sau"}
               </Button>
@@ -292,7 +299,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
                 Xem lại ván
               </ButtonLink>
             )}
-            {leave && you.seat !== null && !hand?.complete && !myTurn && (
+            {leave && isSeated && !hand?.complete && !myTurn && (
               <Button kind="ghost" block onClick={leave.onLeave}>
                 {leave.label}
               </Button>
@@ -367,7 +374,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
         }
         right={
           <>
-            {you.seat !== null && <PreAction label="Nghỉ ván sau" on={sittingOut} onToggle={toggleSit} disabled={!online} />}
+            {isSeated && <PreAction label="Nghỉ ván sau" on={sittingOut} onToggle={toggleSit} disabled={!online} />}
             {hand?.complete && replayHref && (
               <Link className="tbar-btn is-quiet" href={replayHref(hand.hand_id)}>
                 Xem lại ván
@@ -406,10 +413,10 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
           <TableTools
             watchers={model.spectators.length}
             sittingOut={sittingOut}
-            canSit={you.seat !== null}
+            canSit={isSeated}
             onSitToggle={toggleSit}
             ownerHref={ownerHref}
-            leave={you.seat !== null ? leave : undefined}
+            leave={isSeated ? leave : undefined}
           />
         }
       />
@@ -498,7 +505,6 @@ type Idle = { eyebrow: string; status: string; center: string; mine?: string; wi
 /** Words of the idle bar / phone column for whatever is going on when it is not my turn. */
 function idleContent({
   table,
-  view,
   me,
   myResult,
   winners,
@@ -508,7 +514,6 @@ function idleContent({
   celebration,
 }: {
   table: TableState;
-  view: TableView;
   me: SeatView | undefined;
   myResult: PlayerResult | undefined;
   winners: PlayerResult[];
@@ -517,7 +522,7 @@ function idleContent({
   left: number | undefined;
   celebration: boolean;
 }): Idle {
-  const { hand, room, you } = table;
+  const { hand, room } = table;
   const seated = table.seats.length;
   if (room.status === "suspended") return { eyebrow: "Bàn tạm dừng", status: "Chờ máy chủ khôi phục", center: "Bàn tạm dừng để khôi phục." };
   if (room.status === "closed") return { eyebrow: "Phòng đã đóng", status: "Không có ván mới", center: "Chủ phòng đã đóng phòng." };
@@ -529,24 +534,28 @@ function idleContent({
       eyebrow: `Ván #${hand.hand_no} đã xong`,
       status: "Chờ ván mới",
       center: "Ván mới sắp bắt đầu.",
-      mine: net === null ? (you.seat === null ? "Bạn đang xem" : undefined) : net > 0 ? `Bạn: thắng ${signed(net)}` : net < 0 ? `Bạn: thua ${fmt(net)}` : "Bạn: hoà vốn",
+      mine: net === null ? (me ? undefined : "Bạn đang xem") : net > 0 ? `Bạn: thắng ${signed(net)}` : net < 0 ? `Bạn: thua ${fmt(net)}` : "Bạn: hoà vốn",
       win: celebration ? undefined : win,
       winSub: showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined,
     };
   }
+  // Seated but not dealt in: say why (no chips, sitting out, or simply next hand).
+  const noChips = !!me && (me.stack ?? 0) === 0;
+  const seatedWait = noChips
+    ? "Chưa có chip — nhờ chủ phòng cấp chip"
+    : sittingOut
+      ? "Đang nghỉ — bấm “Nghỉ ván sau” để quay lại"
+      : "Bạn đã ngồi — vào từ ván sau";
   if (!hand) {
     const waiting = seated < 2 ? "Cần ít nhất 2 người ngồi để chia bài" : "Ván mới sắp bắt đầu";
-    return {
-      eyebrow: you.seat === null ? "Bạn đang xem" : sittingOut ? "Bạn đang nghỉ" : "Giữa hai ván",
-      status: waiting,
-      center: you.seat === null ? "Bấm một ghế trống để ngồi." : waiting + ".",
-    };
+    if (!me) return { eyebrow: "Bạn đang xem", status: waiting, center: "Bấm một ghế trống để ngồi." };
+    return { eyebrow: noChips ? "Bạn đã ngồi" : sittingOut ? "Bạn đang nghỉ" : "Giữa hai ván", status: noChips ? seatedWait : waiting, center: noChips ? seatedWait : waiting + "." };
   }
   const actor = hand.actor ? nameOf(hand.actor) : null;
   const thinking = actor ? `${actor} suy nghĩ${left !== undefined ? ` · ${left}s` : ""}` : "Đang chờ";
-  if (you.seat === null) return { eyebrow: "Bạn đang xem", status: thinking, center: "Người xem không thấy bài úp." };
-  if (me?.state === "folded") return { eyebrow: "Bạn đã bỏ bài", status: thinking, center: thinking };
-  if (!view.seats.some((s) => s.isMe && (s.cards?.length ?? 0) > 0)) return { eyebrow: "Chờ ván sau", status: thinking, center: "Bạn vào từ ván sau." };
+  if (!me) return { eyebrow: "Bạn đang xem", status: thinking, center: "Người xem không thấy bài úp." };
+  if (me.state === "folded") return { eyebrow: "Bạn đã bỏ bài", status: thinking, center: thinking };
+  if ((me.cards?.length ?? 0) === 0) return { eyebrow: noChips ? "Bạn đã ngồi" : "Chờ ván sau", status: seatedWait, center: thinking };
   return { eyebrow: "Đang chờ", status: thinking, center: thinking };
 }
 

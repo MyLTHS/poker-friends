@@ -21,6 +21,9 @@ type Geo = {
   dealer: { k: number; r: number; sign: 1 | -1 };
   /** The button beside my own seat (the formula would hide it under my cards). */
   meDealer: Pt;
+  /** Spot 1 when it is someone else's seat (I watch): spot 1 is drawn for my big cards and plate,
+   *  an ordinary seat there would hang below the frame. */
+  pod1: Pt;
 };
 
 export const GEO: Record<Device, Geo> = {
@@ -48,6 +51,7 @@ export const GEO: Record<Device, Geo> = {
     meBet: { x: 550, y: 468 },
     dealer: { k: 0.28, r: 38, sign: 1 },
     meDealer: { x: 438, y: 610 },
+    pod1: { x: 550, y: 580 },
   },
   // Spot points are avatar centres, except spot 1 (bottom centre of my cards and plate).
   mobile: {
@@ -74,6 +78,7 @@ export const GEO: Record<Device, Geo> = {
     meBet: { x: 328, y: 266 },
     dealer: { k: 0.36, r: 32, sign: 1 },
     meDealer: { x: 236, y: 334 },
+    pod1: { x: 328, y: 296 },
   },
 };
 
@@ -100,20 +105,23 @@ export function spotOf(seat: number, maxSeats: number, anchor: number): number {
 
 export const lerp = (a: Pt, b: Pt, k: number): Pt => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
 
-export const spotPos = (device: Device, spot: number): Pt => GEO[device].spots[spot];
+/** Avatar centre of a seat; `me` = my own seat (spot 1 is then the bottom of my cards and plate). */
+export const spotPos = (device: Device, spot: number, me = false): Pt =>
+  spot === 1 && !me ? GEO[device].pod1 : GEO[device].spots[spot];
 
 /** Where a seat's bet stacks: 42% of the way to the centre (mine has its own place). */
-export function betPos(device: Device, spot: number): Pt {
+export function betPos(device: Device, spot: number, me = false): Pt {
   const g = GEO[device];
-  if (spot === 1) return g.meBet;
-  return lerp(g.spots[spot], g.c, 0.42);
+  if (spot === 1 && me) return g.meBet;
+  const p = lerp(spotPos(device, spot), g.c, 0.42);
+  return { x: Math.round(p.x), y: Math.round(p.y) };
 }
 
 /** The dealer button: a little toward the centre from the seat, pushed to its side. */
-export function dealerPos(device: Device, spot: number): Pt {
+export function dealerPos(device: Device, spot: number, me = false): Pt {
   const g = GEO[device];
-  if (spot === 1) return g.meDealer;
-  const s = g.spots[spot];
+  if (spot === 1 && me) return g.meDealer;
+  const s = spotPos(device, spot);
   const v = { x: g.c.x - s.x, y: g.c.y - s.y };
   const len = Math.hypot(v.x, v.y);
   const base = lerp(s, g.c, g.dealer.k);

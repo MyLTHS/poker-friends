@@ -126,8 +126,9 @@ test("two players and a spectator play one hand; nobody sees hidden cards", asyn
   await chi.page.getByRole("textbox", { name: "Tin nhắn" }).press("Enter");
   await expect(an.page.locator(".chat").getByText("chúc may mắn")).toBeVisible();
 
-  // Play: check or call every turn until the hand ends. The first action is a double click,
-  // which must be applied once (one command_id, docs/api/ws-protocol.md mục 5).
+  // Play: check or call every turn until the hand ends. The first action is a double click: the
+  // bar locks after the first click, so the server must see one action (reusing the command_id
+  // when a second click does get through is covered in reducer.test.ts "one click, one command").
   let actions = 0;
   for (let round = 0; round < 40; round++) {
     for (const player of [an, binh]) {

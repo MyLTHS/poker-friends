@@ -368,9 +368,15 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
       };
     }
     case "seat.updated": {
-      const others = table.seats.filter((s) => s.seat !== event.payload.seat);
-      const seats = event.payload.occupant ? [...others, event.payload.occupant] : others;
-      return { ...model, table: { ...table, seats: seats.sort((a, b) => a.seat - b.seat) } };
+      const { seat, occupant } = event.payload;
+      const others = table.seats.filter((s) => s.seat !== seat);
+      const seats = occupant ? [...others, occupant] : others;
+      // Taking or leaving a seat only comes as seat.updated: `you.seat` follows it, or the page
+      // would still draw me as a spectator (and rotate the table around the wrong seat).
+      let you = table.you;
+      if (occupant?.player_id === you.player_id) you = { ...you, seat };
+      else if (you.seat === seat) you = { ...you, seat: null };
+      return { ...model, table: { ...table, you, seats: seats.sort((a, b) => a.seat - b.seat) } };
     }
     case "room.suspended":
       return {
