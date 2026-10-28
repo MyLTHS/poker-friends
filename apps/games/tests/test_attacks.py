@@ -13,7 +13,8 @@ from django.test import AsyncClient
 
 from apps.accounts import ratelimit as accounts_ratelimit
 from apps.games import actor as actor_module
-from apps.games.models import Hand, HandCommand, Room, RoomSeat
+from apps.games import rooms
+from apps.games.models import Hand, HandCommand, Room, RoomMember, RoomSeat
 
 from .test_actor import (  # noqa: F401
     _slow_next_hand,
@@ -474,5 +475,47 @@ class TestDisconnectMidCommand:
             acks = by_type(await drain(again), "command.ack")
             assert [m["payload"]["duplicate"] for m in acks] == [True]
             assert await commands_in(room) == 1
+
+        run_async(body)
+
+
+# ---- 5. Flooding the REST endpoints ----------------------------------------------------------
+
+
+class TestRestFlooding:
+    def test_sitting_down_and_standing_up_in_a_loop_is_slowed_down(self):
+        """Found (audit B, deferred): no limit, a script could churn seat.updated for a table."""
+        room = make_room()
+        eve = make_user("eve")
+
+        async def body():
+            client = await alogged_in(eve)
+            base = f"/api/rooms/{room.pk}/seats/"
+            codes = []
+            for _ in range(rooms.SEAT_CHANGES_PER_PLAYER.limit // 2):
+                codes.append((await apost(client, base, {"seat": 3})).status_code)
+                codes.append((await client.delete(f"{base}me/")).status_code)
+            assert set(codes) == {201, 204}
+            blocked = await apost(client, base, {"seat": 3})
+            assert blocked.status_code == 429 and int(blocked["Retry-After"]) > 0
+            assert not await RoomSeat.objects.filter(room=room, user=eve).aexists()
+
+        run_async(body)
+
+    def test_guessing_invite_links_is_slowed_down(self):
+        """Found (audit B, deferred): no limit on trying invite tokens from one address."""
+        room = make_room(is_private=True, invite_token="the-real-invite-token")
+        eve = make_user("eve")
+
+        async def body():
+            client = await alogged_in(eve)
+            for i in range(rooms.JOINS_PER_IP.limit):
+                guess = await apost(client, "/api/rooms/join/", {"invite_token": f"guess-{i}"})
+                assert guess.status_code == 404
+            real = await apost(
+                client, "/api/rooms/join/", {"invite_token": "the-real-invite-token"}
+            )
+            assert real.status_code == 429
+            assert not await RoomMember.objects.filter(room=room, user=eve).aexists()
 
         run_async(body)

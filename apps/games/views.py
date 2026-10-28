@@ -50,6 +50,14 @@ async def _player_in_room(request: HttpRequest, room_id: int) -> tuple[Room, Use
     return room, user
 
 
+def _count_seat_change(user: User) -> JsonResponse | None:
+    try:
+        rooms.SEAT_CHANGES_PER_PLAYER.hit(str(user.pk))
+    except RateLimited as exc:
+        return rooms.rate_limited(exc)
+    return None
+
+
 def _status_for(code: str) -> int:
     if code in CONFLICT_CODES:
         return 409
@@ -67,6 +75,8 @@ async def take_seat(request: HttpRequest, room_id: int) -> JsonResponse:
     if isinstance(found, JsonResponse):
         return found
     _, user = found
+    if limited := _count_seat_change(user):
+        return limited
     try:
         body = json.loads(request.body or b"{}")
         seat = int(body["seat"])
@@ -88,6 +98,8 @@ async def leave_seat(request: HttpRequest, room_id: int) -> JsonResponse:
     if isinstance(found, JsonResponse):
         return found
     _, user = found
+    if limited := _count_seat_change(user):
+        return limited
     act = await actor_module.get_actor(room_id)
     try:
         await act.leave_seat(user)
