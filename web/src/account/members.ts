@@ -1,22 +1,11 @@
-// Members only (server GUESTS_ALLOWED off, docs/api/openapi.yaml AuthConfig): who may not go on,
-// and where to send them. The API answers 401 `login_required` to a stranger or an old guest
-// session (log in), 403 `not_approved` to an account the owner has not let in (wait: logging in
-// again would not help, so it must never lead back to the login, or the two would loop).
-// After logging in the player goes back where they were (`?next=`), which keeps an invite link's
-// token. Only this site's own paths count: no "//host", no "/\host", no scheme (open redirect).
+// Members only (server GUESTS_ALLOWED off, docs/api/openapi.yaml AuthConfig): any real account
+// that is logged in may play, nothing to approve or verify. The API answers 401 `login_required`
+// to a stranger or an old guest session: off to the login, and back where they were afterwards
+// (`?next=`), which keeps an invite link's token. Only this site's own paths count: no "//host",
+// no "/\host", no scheme (open redirect).
 
-export type AuthBlock = "login" | "approval";
-
-export function authBlock(code: string): AuthBlock | null {
-  if (code === "login_required") return "login";
-  if (code === "not_approved") return "approval";
-  return null;
-}
-
-/** After the table's socket was closed with 4401: ask /api/auth/me/ which it is. */
-export function blockFromMe(me: { ok: true; data: { is_guest: boolean; member: boolean } } | { ok: false }): AuthBlock {
-  return me.ok && !me.data.is_guest && !me.data.member ? "approval" : "login";
-}
+/** The API refused the player for who they are: log in (or sign up) first. */
+export const needsLogin = (code: string) => code === "login_required";
 
 const BASE = "https://this.site";
 
@@ -49,8 +38,8 @@ export const signupPath = (next?: string | null) => withNext("/account/signup", 
 /** The page the browser is on, to come back to after logging in. */
 export const herePath = () => window.location.pathname + window.location.search + window.location.hash;
 
-// Signing up takes days (email, then the owner's approval): the place to go after the first login
-// is kept in localStorage for a week, then dropped.
+// Google's flow leaves the site and comes back without ?next=: the place to go is kept in
+// localStorage meanwhile (for a week at most, then dropped).
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const KEY = "pf:next";
 const WEEK = 7 * 24 * 3600 * 1000;
@@ -79,17 +68,9 @@ export function takeRememberedNext(store: Store | null = browserStore(), now = D
   }
 }
 
-/** Leave a page the API refused: to the login (coming back here afterwards) or to the account
- *  page, which shows "Đợi chủ phòng duyệt". Never from the account pages themselves. */
-export function goToAuth(block: AuthBlock) {
+/** Leave a page the API refused for the login, coming back here afterwards. A full load on
+ *  purpose: nothing of the refused page should survive. Never from the account pages themselves. */
+export function goToLogin() {
   if (typeof window === "undefined" || window.location.pathname.startsWith("/account")) return;
-  if (block === "login") {
-    window.location.assign(loginPath(herePath()));
-    return;
-  }
-  // Waiting can take days: remember this page (an invite link) for when the owner approves.
-  rememberNext(herePath());
-  // A full load on purpose (as for the login above): nothing of the refused page should survive.
-  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-  window.location.assign("/account");
+  window.location.assign(loginPath(herePath()));
 }

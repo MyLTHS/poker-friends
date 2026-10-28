@@ -20,16 +20,14 @@ const TITLE: Record<string, string> = {
   network_error: "Không mở được link mời",
   rate_limited: "Thử vào quá nhiều lần",
   login_required: "Cần đăng nhập để vào phòng",
-  not_approved: "Đợi chủ phòng duyệt",
 };
 
 const TEXT: Record<string, string> = {
   no_token: "Link bị cắt mất đoạn ?token=…. Xin chủ phòng gửi lại cả link.",
   room_not_found: "Link sai, hoặc chủ phòng đã đổi link mời. Xin chủ phòng link mới nhé.",
   network_error: "Mạng đang chập chờn. Có mạng lại là tự thử lại.",
-  // members only: the page is leaving for the login (keeping this link) or the account page
-  login_required: "Phòng chỉ dành cho thành viên. Đang mở trang đăng nhập; đăng nhập xong bạn vào thẳng phòng.",
-  not_approved: "Tài khoản của bạn chưa được chủ phòng duyệt. Đang mở trang tài khoản…",
+  // members only: the page is leaving for the login (keeping this link)
+  login_required: "Phòng chỉ dành cho thành viên. Đang mở trang đăng nhập; đăng nhập (hoặc đăng ký) xong bạn vào thẳng phòng.",
 };
 
 /**

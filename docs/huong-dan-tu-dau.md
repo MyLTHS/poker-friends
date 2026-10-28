@@ -128,14 +128,7 @@ sẵn link; `scripts/play-online.sh status` cho xem lại link đang dùng.
 
 1. Mở link của buổi trên máy tính. Trang mở ra **Sảnh**.
 2. Lần đầu, tạo tài khoản chủ phòng (các buổi sau chỉ cần **Đăng nhập**):
-   - Trang đăng nhập: bấm **Đăng ký**, điền email, tên, mật khẩu.
-   - Tự duyệt chính mình (gõ `y` khi được hỏi):
-
-     ```bash
-     scripts/play-online.sh verify email-cua-ban@gmail.com
-     ```
-
-   - Quay lại trang web, **Đăng nhập** bằng email và mật khẩu vừa tạo.
+   - Trang đăng nhập: bấm **Đăng ký**, điền email, tên, mật khẩu. Xong là đã đăng nhập.
    - Bấm **Sảnh** ở thanh trên, rồi **Tạo phòng**.
 3. Điền form tạo phòng:
    - đặt tên, blind (ví dụ 10/20), số ghế, thời gian suy nghĩ;
@@ -144,26 +137,11 @@ sẵn link; `scripts/play-online.sh status` cho xem lại link đang dùng.
 4. Bấm **Tạo phòng & lấy link mời**. Trang phòng hiện **link mời** và **mã QR**. Bấm **Chép
    link** để copy.
 
-### 2.3. Bảo mật: chỉ người bạn duyệt mới vào được
+### 2.3. Gửi bạn bè
 
-Server chỉ cho **thành viên** vào: người chưa có tài khoản, hay đã đăng ký mà **chưa được bạn
-duyệt**, đều không thấy sảnh, phòng hay bàn. Mỗi người bạn chỉ cần duyệt **một lần**:
-
-1. Bạn bè mở link, bấm **Đăng ký**, điền email, tên, mật khẩu. Màn hình báo đợi chủ phòng duyệt.
-2. Bạn duyệt bằng một trong hai cách:
-   - Terminal: `scripts/play-online.sh verify email-cua-ban-do@gmail.com`. Lệnh hiện tên tài khoản và
-     ngày đăng ký, hỏi lại; gõ `y` nếu đúng là bạn của bạn (phòng ai đó đăng ký trước bằng email
-     của bạn mình).
-   - Trang quản trị `<link>/admin/` → **Users** → tick người đó → chọn **Duyệt** ở ô Action → Go.
-3. Bạn bè **Đăng nhập** là vào chơi được, cả các buổi sau.
-
-Muốn không cho ai đó vào nữa: trong admin chọn **Bỏ duyệt** (họ bị ngắt khỏi bàn ngay).
-
-### 2.4. Gửi bạn bè
-
-Dán **đoạn ở Phần 3** vào nhóm chat, thay `<LINK MỜI PHÒNG>` bằng link mời ở bước 2.2. Ai chưa có
-tài khoản thì đăng ký, nhắn bạn, và bạn duyệt như bước 2.3. Ai đã được duyệt thì mở link mời,
-đăng nhập là vào thẳng phòng.
+Dán **đoạn ở Phần 3** vào nhóm chat, thay `<LINK MỜI PHÒNG>` bằng link mời ở bước 2.2. Chỉ người có
+tài khoản mới vào được bàn, nhưng không ai phải chờ: bạn bè mở link mời, bấm **Đăng ký** là vào
+thẳng phòng. Ai đã có tài khoản thì mở link, **Đăng nhập** là vào.
 
 Link mời chứa link của buổi, nên **mỗi buổi phải lấy lại link mời**: đăng nhập, vào trang phòng cũ
 (Sảnh → phòng của bạn), bấm **Chép link**. Phòng, luật chơi và chip vẫn như buổi trước.
@@ -172,9 +150,9 @@ Link mời có mã bí mật: chỉ gửi trong nhóm kín.
 
 Đang ở trong bàn chơi cũng lấy được link: bấm **Mời bạn** ở thanh trên cùng (trên điện thoại là
 biểu tượng người có dấu +). Bạn **Chép link** để gửi, hoặc mở **mã QR** cho bạn ngồi cạnh quét.
-Bạn bè vẫn cần tài khoản đã được bạn duyệt (bước 2.3) mới vào được.
+Bạn bè chưa có tài khoản thì đăng ký ngay trên điện thoại là vào được.
 
-### 2.5. Ngồi vào bàn và cấp chip
+### 2.4. Ngồi vào bàn và cấp chip
 
 1. Ở trang phòng, bấm **Ngồi đây** cạnh một ghế trống (hoặc **Vào bàn chơi** rồi **Ngồi vào**).
 2. Đợi bạn bè vào và **ngồi xuống ghế**. Chủ phòng chỉ cấp chip được cho người **đang ngồi**.
@@ -186,29 +164,15 @@ Bạn bè vẫn cần tài khoản đã được bạn duyệt (bước 2.3) m�
 
 Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip được.
 
-### 2.6. Trong lúc chơi
+### 2.5. Trong lúc chơi
 
 - **Không gập máy.** Màn hình tự tắt thì không sao.
 - Không tắt Docker Desktop, không ngắt Wi‑Fi, không cho máy cập nhật hay khởi động lại.
-- Bạn nào **đăng ký bằng email** mà không nhận được email xác minh (chưa cài Gmail thì email không
-  gửi đi), có hai cách:
-  - In link xác minh của buổi kèm email người nhận, rồi gửi **riêng** cho đúng người:
-
-    ```bash
-    scripts/play-online.sh links
-    ```
-
-  - Hoặc xác minh hộ luôn người bạn tin:
-
-    ```bash
-    scripts/play-online.sh verify ban@gmail.com
-    ```
-
 - Có người tới muộn: bấm **Mời bạn** ngay trên bàn để chép link hoặc cho họ quét mã QR, không
   cần rời bàn.
 - Ai gặp lỗi lạ thì nhắc họ bấm **Gửi phản hồi** (nút có ở mọi màn), hoặc nhắn bạn kèm giờ.
 
-### 2.7. Hết buổi
+### 2.6. Hết buổi
 
 1. **Trước khi tắt**, kiểm tra sổ chip (trong Terminal). Dòng cuối phải là `OK: …`:
 
@@ -237,8 +201,8 @@ mới**: mọi người đăng nhập lại trên link mới là có lại hết
 >
 > **1.** Mở link này (chỉ dùng tối nay): `<LINK MỜI PHÒNG>`
 > **2.** Điện thoại thì **xoay ngang** máy. Máy tính thì Chrome, Safari hay Edge đều được.
-> **3.** Lần đầu: bấm **Đăng ký** (email, tên, mật khẩu), rồi **nhắn mình** để mình duyệt. Được
->    duyệt rồi thì **Đăng nhập**, các buổi sau chỉ cần đăng nhập.
+> **3.** Lần đầu: bấm **Đăng ký** (email, tên, mật khẩu) là vào chơi luôn. Các buổi sau chỉ cần
+>    **Đăng nhập**.
 > **4.** Vào phòng, bấm **Ngồi đây** cạnh một ghế trống.
 > **5.** Đợi mình cấp chip, rồi bấm **Vào bàn chơi** (hoặc **Về bàn**) là chơi.
 >
@@ -268,8 +232,8 @@ Mẹo cho bạn bè:
 | Bạn bè mở link cũ không vào được | Link đổi mỗi lần Start. Lấy link hiện tại trong Logs của **poker-home-tunnel-1** (hoặc `scripts/play-online.sh status`), gửi lại |
 | Lỡ gập máy, máy ngủ, mất điện | Mở máy, mở Docker Desktop, bấm ■ rồi ▶ nhóm **poker-home**, lấy link mới trong Logs, lấy lại link mời phòng và gửi lại |
 | `up` báo đã có một server khác đang chạy | Làm đúng lệnh `docker compose -p … down` mà script in ra, rồi chạy lại `up` |
-| Bàn báo "tạm dừng" | [runbook.md](runbook.md#bàn-tạm-dừng) (thay `dc` bằng lệnh `docker compose -p poker-home …` như ở bước 2.7) |
-| Nghi chip bị sai | Chạy lệnh kiểm sổ chip ở bước 2.7, rồi xem [runbook.md](runbook.md#lệch-chip) |
+| Bàn báo "tạm dừng" | [runbook.md](runbook.md#bàn-tạm-dừng) (thay `dc` bằng lệnh `docker compose -p poker-home …` như ở bước 2.6) |
+| Nghi chip bị sai | Chạy lệnh kiểm sổ chip ở bước 2.6, rồi xem [runbook.md](runbook.md#lệch-chip) |
 
 Chi tiết hơn: [choi-online.md](choi-online.md) (cách chơi online hoạt động) và
 [beta-f.md](beta-f.md) (sổ tay buổi beta: điều kiện đạt, cách xếp phản hồi).

@@ -17,7 +17,7 @@ Mọi việc làm bằng một lệnh, chạy trong thư mục dự án:
 | ▶ ở nhóm **poker-home** trong Docker Desktop | Bật tất cả (đường hầm và sao lưu tự động có sẵn); link nằm trong Logs của **poker-home-tunnel-1**. Cần dựng lần đầu bằng `up` |
 | `scripts/play-online.sh up` | Sao lưu, bật server và đường hầm, giữ máy thức, in link và copy sẵn |
 | `scripts/play-online.sh status` | Đang chạy không, link nào |
-| `scripts/play-online.sh logs` | Xem log server (cả link xác minh email, xem dưới) |
+| `scripts/play-online.sh logs` | Xem log server (cả email đặt lại mật khẩu khi chưa có Gmail, xem dưới) |
 | `scripts/play-online.sh down` | Sao lưu cuối buổi, tắt đường hầm và server (dữ liệu vẫn giữ) |
 
 ## Trước buổi chơi (khoảng 15 phút trước)
@@ -53,21 +53,16 @@ lỗi** có góp ý của bạn bè và lỗi trình duyệt (xem [runbook.md](r
 Trình duyệt coi mỗi link mới là một trang web khác, nên đăng nhập của buổi trước không theo sang
 buổi sau.
 
-- **Chơi khách** (bấm vào là chơi): dễ nhất trong một buổi. Nhưng buổi sau là một người khách
-  **mới**: chip và lịch sử của người khách cũ vẫn còn trong database, chỉ là không ai đăng nhập
-  lại vào đó được.
-- **Tài khoản email + mật khẩu**: muốn giữ chip qua nhiều buổi thì dùng cái này. Mỗi buổi mở link
-  mới rồi đăng nhập lại là xong. Người khách cũng nâng cấp lên tài khoản được mà không mất chip.
-  Đăng ký phải **xác minh email**:
+- **Chỉ thành viên**: server ở nhà tắt chế độ khách (`GUESTS_ALLOWED=false` trong `.env.home`).
+  Ai cũng phải có tài khoản email + mật khẩu, nhưng **đăng ký xong là vào chơi được ngay**: không
+  cần xác minh email, không cần ai duyệt.
+- **Mỗi buổi đăng nhập lại** trên link mới là có lại hết phòng và chip.
+- Email chỉ cần cho **quên mật khẩu**:
   - Có cấu hình Gmail (`EMAIL_URL` trong file `.env.home`, cách làm ở
     [huong-dan-google-smtp.md](huong-dan-google-smtp.md)): email tự gửi đi.
-  - Chưa có: email không gửi đi mà chỉ in vào log server. Hai cách:
-    - `scripts/play-online.sh links`: in ra các link xác minh (và đặt lại mật khẩu) của buổi này,
-      mỗi link kèm email người nhận. Gửi **riêng** từng link cho đúng người.
-    - `scripts/play-online.sh verify ban@example.com`: bạn xác minh hộ luôn cho người bạn tin,
-      không cần link. Người đó đăng nhập được ngay.
-  - Link trong email chỉ dùng được **trong buổi đó** (nó chứa link của buổi). Hết buổi chưa bấm
-    thì lần sau bấm "gửi lại email".
+  - Chưa có: email chỉ in vào log server. `scripts/play-online.sh links` in ra các link đặt lại mật
+    khẩu của buổi này, mỗi link kèm email người nhận. Gửi **riêng** từng link cho đúng người. Link
+    chỉ dùng được **trong buổi đó** (nó chứa link của buổi).
 - **Đăng nhập Google: không dùng được** với link đổi liên tục (Google chỉ chấp nhận địa chỉ đã
   khai trước). Script để trống phần Google, nên trang web không hiện nút này.
 

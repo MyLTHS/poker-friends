@@ -179,7 +179,7 @@ function UpgradeForm({
           const result = await submit.run(() =>
             api.upgrade({ email: values.email, password: values.password, ...(values.username ? { username: values.username } : {}) }),
           );
-          if (result.ok) onDone(result.data, `Đã nâng cấp. Mở email ${result.data.email} và bấm link để xác minh.`);
+          if (result.ok) onDone(result.data, `Đã nâng cấp. Từ giờ đăng nhập bằng ${result.data.email}.`);
         }}
       >
         <Field

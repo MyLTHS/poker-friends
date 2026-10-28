@@ -38,8 +38,8 @@ async function logIn(page: Page, email: string, password: string) {
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
 }
 
-test.describe("flows through the email links", () => {
-  test("a guest with chips upgrades and keeps them, verifies the email from the link, then logs in", async ({ page }) => {
+test.describe("account flows (the email links where there still are some)", () => {
+  test("a guest with chips upgrades and keeps them, then logs in again with the new account", async ({ page }) => {
     await playAsGuest(page);
     // The guest opens a table, sits and is granted chips: the upgrade must carry them over.
     const guest = await api(page, "GET", "/api/auth/me/");
@@ -58,27 +58,19 @@ test.describe("flows through the email links", () => {
 
     await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
     await expect(page.getByText(email).first()).toBeVisible();
-    await expect(page.getByText("Chưa xác minh")).toBeVisible();
-    await expect(page.getByText(/Đã nâng cấp\. Mở email/)).toBeVisible();
+    await expect(page.getByText(/Đã nâng cấp\. Từ giờ đăng nhập bằng/)).toBeVisible();
     await expect(page.getByRole("link", { name: /Bàn của khách/ })).toContainText("Còn 750 chip");
 
     await page.getByRole("button", { name: "Đăng xuất" }).click();
     await expect(page.getByRole("heading", { name: "Chào mừng trở lại" }).first()).toBeVisible();
 
-    // The email is not verified yet: the login says so and offers the link again.
-    await logIn(page, email, PASSWORD);
-    await expect(page.getByText("Email này chưa được xác minh", { exact: false })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Gửi lại link xác minh" })).toBeVisible();
-
-    await page.goto((await linkFromEmail(email, "/account/verify")).href);
-    await expect(page.getByRole("heading", { name: "Email đã xác minh" })).toBeVisible();
-    await page.getByRole("link", { name: "Đăng nhập" }).click();
+    // No email to verify first: the new account logs straight in, chips still there.
     await logIn(page, email, PASSWORD);
     await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
-    await expect(page.getByText("Đã xác minh")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Bàn của khách/ })).toContainText("Còn 750 chip");
   });
 
-  test("signing up: step 2, an email already taken, then the link and the first login", async ({ page }) => {
+  test("signing up logs in at once; the same email again is refused under its box", async ({ browser, page }) => {
     const id = unique();
     const email = `signup-${id}@example.com`;
     await page.goto("/account/signup");
@@ -88,28 +80,29 @@ test.describe("flows through the email links", () => {
     await expect(page.getByText("Độ mạnh:", { exact: false })).toBeAttached();
     await page.getByRole("button", { name: "Tạo tài khoản" }).click();
 
-    await expect(page.getByText(`Đã gửi link tới ${email}`, { exact: false })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Gửi lại link xác minh" })).toBeVisible();
+    // in at once: the lobby, as the new account
+    await expect(page).toHaveURL(/\/rooms$/);
+    await expect(page.getByRole("heading", { name: "Chọn một bàn" })).toBeVisible();
+    expect((await api(page, "GET", "/api/auth/me/")).email).toBe(email);
 
-    // The same email again: the answer sits under the email box, which takes the focus.
-    await page.getByRole("button", { name: "Sửa email" }).click();
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Tên ở bàn").fill(`Khac${id}`);
-    await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
-    await page.getByRole("button", { name: "Tạo tài khoản" }).click();
-    const box = page.getByLabel("Email");
+    // Verifying the email is optional now, and the link in the email still works.
+    await page.goto((await linkFromEmail(email, "/account/verify")).href);
+    await expect(page.getByRole("heading", { name: "Email đã xác minh" })).toBeVisible();
+    await expect(page).toHaveURL(/\/account\/verify$/); // the token left the address bar
+    await page.goto("/account");
+    await expect(page.getByText("Đã xác minh")).toBeVisible();
+
+    // Someone else with the same email: the answer sits under the email box, which takes the focus.
+    const other = await (await browser.newContext()).newPage();
+    await other.goto("/account/signup");
+    await other.getByLabel("Email").fill(email);
+    await other.getByLabel("Tên ở bàn").fill(`Khac${id}`);
+    await other.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
+    await other.getByRole("button", { name: "Tạo tài khoản" }).click();
+    const box = other.getByLabel("Email");
     await expect(box).toHaveAttribute("aria-invalid", "true");
     await expect(box).toHaveAccessibleDescription(/Email này đã thuộc một tài khoản khác/);
     await expect(box).toBeFocused();
-
-    await page.goto((await linkFromEmail(email, "/account/verify")).href);
-    await expect(page.getByRole("heading", { name: "Email đã xác minh" })).toBeVisible();
-    await expect(page.getByText(email)).toBeVisible();
-    await expect(page).toHaveURL(/\/account\/verify$/); // the token left the address bar
-    await page.getByRole("link", { name: "Đăng nhập" }).click();
-    await logIn(page, email, PASSWORD);
-    await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
-    await expect(page.getByText("Đã xác minh")).toBeVisible();
   });
 
   test("forgot password: the link sets a new one, the old one stops working", async ({ page }) => {

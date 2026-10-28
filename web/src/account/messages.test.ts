@@ -16,7 +16,6 @@ describe("errorText", () => {
       "validation_error",
       "network_error",
       "login_required",
-      "not_approved",
       "guests_disabled",
     ] as const) {
       expect(errorText({ code })).not.toBe("");
