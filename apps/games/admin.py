@@ -119,6 +119,17 @@ class PokerUserAdmin(UserAdmin):
         ),
     )
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if change and "is_active" in form.changed_data and not obj.is_active:
+            # Switched off: out of every table now, even one they only watch and never write to.
+            from asgiref.sync import async_to_sync
+
+            from apps.games.actor import drop_player_everywhere
+            from apps.games.consumers import LOGIN_REQUIRED_CLOSE_CODE
+
+            async_to_sync(drop_player_everywhere)(obj.pk, LOGIN_REQUIRED_CLOSE_CODE)
+
     def response_add(self, request, obj, post_url_continue=None):
         self.message_user(request, *self._invitation_message(obj, request.player_invitation))
         return super().response_add(request, obj, post_url_continue)

@@ -180,3 +180,26 @@ class TestDropEverywhere:
             assert out == {"type": "websocket.close", "code": LOGIN_REQUIRED_CLOSE_CODE}
 
         run_async(body)
+
+
+def test_switching_an_account_off_in_admin_drops_it_from_every_table(monkeypatch):
+    from types import SimpleNamespace
+
+    from django.contrib.admin.sites import site
+
+    from apps.games import actor
+
+    dropped = []
+
+    async def fake_drop(user_id, code):
+        dropped.append((user_id, code))
+
+    monkeypatch.setattr(actor, "drop_player_everywhere", fake_drop)
+    friend = member("chi")
+    admin = site._registry[User]
+    friend.is_active = False
+    admin.save_model(None, friend, SimpleNamespace(changed_data=["is_active"]), change=True)
+    assert dropped == [(friend.pk, LOGIN_REQUIRED_CLOSE_CODE)]
+    friend.first_name = "Chi"  # any other change leaves them be
+    admin.save_model(None, friend, SimpleNamespace(changed_data=["first_name"]), change=True)
+    assert len(dropped) == 1

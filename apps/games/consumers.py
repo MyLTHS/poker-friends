@@ -72,7 +72,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
         if not settings.GUESTS_ALLOWED:
             user = await User.objects.filter(pk=int(self.player_id)).afirst()
             if user is None or not await database_sync_to_async(is_member)(user):
-                # Approval withdrawn (or the account locked) while connected: stop here too.
+                # The account was switched off in /admin/ while connected: stop here too.
                 await self.close(code=LOGIN_REQUIRED_CLOSE_CODE)
                 return
         elif not await User.objects.filter(pk=int(self.player_id), is_active=True).aexists():

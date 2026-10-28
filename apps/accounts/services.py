@@ -194,8 +194,7 @@ def create_player(email: str, username: str) -> tuple[User, Invitation]:
     """A player's account made by staff (Django admin), and its invitation email.
 
     No password yet: the player sets their own from the invitation link (``invite_player``).
-    Staff vouch for the address and let the player in, so it is verified and approved from the
-    start.
+    Staff vouch for the address, so it is verified from the start.
     """
     email = normalize_email(email)
     try:
