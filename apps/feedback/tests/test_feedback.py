@@ -330,6 +330,11 @@ class TestClientErrors:
             assert secret not in stored, secret
         assert "[đã xoá]" in row.message and row.page.startswith("/account/reset?uid=")
 
+    def test_csrf_is_required(self):
+        response = post(Client(enforce_csrf_checks=True), "/api/client-errors/", ERROR)
+        assert response.status_code == 403
+        assert not ClientError.objects.exists()
+
     def test_nobody_reads_errors_over_http(self, guest):
         post(Client(), "/api/client-errors/", ERROR)
         assert logged_in(guest).get("/api/client-errors/").status_code == 405
