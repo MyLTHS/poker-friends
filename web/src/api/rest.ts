@@ -613,8 +613,8 @@ export interface paths {
          * Gửi phản hồi (lỗi, ý tưởng, khác)
          * @description Phải đăng nhập, khách cũng được. Tối đa 10 lần mỗi giờ mỗi người. `room_id` là phòng đang
          *     chơi (nếu có); phòng không có hoặc không được xem đều báo `validation_error` ở `room_id`.
-         *     Server tự ghi trình duyệt (`User-Agent`); token trong `page` (link mời, link đặt lại mật
-         *     khẩu) bị xoá trước khi lưu. Không có endpoint đọc lại.
+         *     Server tự ghi trình duyệt (`User-Agent`); token trong `page` và `message` (link mời, link
+         *     đặt lại mật khẩu dán vào) bị xoá trước khi lưu. Không có endpoint đọc lại.
          */
         post: operations["sendFeedback"];
         delete?: never;
@@ -634,11 +634,14 @@ export interface paths {
         put?: never;
         /**
          * Báo một lỗi JavaScript của trình duyệt
-         * @description Không cần đăng nhập. Tối đa 30 lần/10 phút mỗi người (nếu đã đăng nhập) và 60 lần/10 phút
-         *     mỗi IP. Trường dài hơn giới hạn bị cắt bớt, không bị từ chối. Cùng `message` và `page`
-         *     trong 10 phút chỉ tăng bộ đếm, không lưu thêm dòng. Trước khi lưu, server xoá cookie,
-         *     `sessionid`, `csrftoken`, token trong link và mảng bài (`cards`, `deck`) khỏi mọi trường;
-         *     client cũng không được gửi chúng. Không có endpoint đọc lại.
+         * @description Không cần đăng nhập. Tối đa 30 lần/10 phút mỗi người (nếu đã đăng nhập, kiểm trước) và 60
+         *     lần/10 phút mỗi IP; cả server nhận tối đa 1000 lỗi **mới** mỗi 24 giờ. Quá các mức này đều
+         *     trả `rate_limited` (429) với `Retry-After`. Trường dài hơn giới hạn bị cắt bớt, không bị
+         *     từ chối. Cùng `message`, `page` và `release` trong cùng khung 10 phút cố định (10:00–10:10…)
+         *     chỉ tăng bộ đếm, không lưu thêm dòng, kể cả khi hai báo cáo tới cùng lúc. Trước khi lưu,
+         *     server xoá cookie, header `Cookie` / `X-CSRFToken`, `sessionid`, `csrftoken`, token trong
+         *     link hay trong JSON (`"invite_token": …`) và danh sách lá bài khỏi mọi trường; client cũng
+         *     không được gửi chúng. Không có endpoint đọc lại.
          */
         post: operations["reportClientError"];
         delete?: never;
@@ -1951,7 +1954,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Đã nhận (hoặc đã cộng vào lỗi giống hệt trong 10 phút qua) */
+            /** @description Đã nhận (hoặc đã cộng vào lỗi giống hệt trong cùng khung 10 phút) */
             204: {
                 headers: {
                     [name: string]: unknown;
