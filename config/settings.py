@@ -20,11 +20,17 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.environ.get(name, default).split(",") if item.strip()]
 
 
-DEBUG = env_bool("DJANGO_DEBUG", True)
+# Off unless asked for: a server started without its configuration must never show debug pages.
+# Development turns it on with DJANGO_DEBUG=true (.env.example); manage.py does that by itself
+# when no DJANGO_SECRET_KEY is set, and pytest through config/settings_test.py.
+DEBUG = env_bool("DJANGO_DEBUG", False)
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-insecure-key")
 WEAK_SECRET_KEYS = {"dev-only-insecure-key", "change-me"}
 if not DEBUG and (SECRET_KEY in WEAK_SECRET_KEYS or len(SECRET_KEY) < 32):
-    raise RuntimeError("Set a strong DJANGO_SECRET_KEY (32+ chars) when DJANGO_DEBUG is off.")
+    raise RuntimeError(
+        "Set a strong DJANGO_SECRET_KEY (32+ chars) when DJANGO_DEBUG is off. "
+        "For local development set DJANGO_DEBUG=true (see .env.example)."
+    )
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
@@ -83,9 +89,16 @@ DATABASES = {
 }
 
 REDIS_URL = os.environ.get("REDIS_URL")
+# redis-py times a read out after 5 seconds by default, exactly how long channels_redis blocks
+# waiting for a message, so every socket quiet for 5 seconds died with 1011. Any longer read
+# timeout fixes it; a socket_timeout in REDIS_URL's query string still wins over this one.
+REDIS_SOCKET_TIMEOUT = 15
 CHANNEL_LAYERS = {
     "default": (
-        {"BACKEND": "channels_redis.core.RedisChannelLayer", "CONFIG": {"hosts": [REDIS_URL]}}
+        {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [{"address": REDIS_URL, "socket_timeout": REDIS_SOCKET_TIMEOUT}]},
+        }
         if REDIS_URL
         else {"BACKEND": "channels.layers.InMemoryChannelLayer"}
     )
@@ -128,10 +141,18 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # Behind an HTTPS reverse proxy (Caddy) that sets X-Forwarded-Proto: build https:// URLs (the
-# Google callback) and send cookies over HTTPS only. See docs/deploy.md.
+# Google callback), send cookies over HTTPS only, redirect plain http:// and tell browsers to use
+# HTTPS only (HSTS). HSTS starts at 30 days, without subdomains or the preload list, so it is
+# easy to undo while the domain is new; raise DJANGO_HSTS_SECONDS once HTTPS has been stable.
+# See docs/deploy.md.
+SECURE_SSL_REDIRECT = False
+SECURE_HSTS_SECONDS = 0
 if env_bool("DJANGO_BEHIND_HTTPS_PROXY"):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", str(30 * 24 * 60 * 60)))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS")
 
 # Reverse proxies (Caddy, ...) in front of Django; rate limits then read the client IP from
 # X-Forwarded-For. 0 = none, use the connection's address.

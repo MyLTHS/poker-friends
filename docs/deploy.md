@@ -17,9 +17,14 @@
    cũ rồi mới chạy bản mới; bàn đang chơi tự khôi phục từ DB khi bản mới lên).
 2. **Biến môi trường** (mẫu ở `.env.example`):
    - `DJANGO_DEBUG=false`, `DJANGO_SECRET_KEY` dài 32+ ký tự ngẫu nhiên (server không chạy nếu yếu).
+     Quên đặt `DJANGO_DEBUG` thì mặc định đã là tắt; quên `DJANGO_SECRET_KEY` thì Daphne không chạy.
+     Riêng `manage.py` tự bật debug khi **không** có `DJANGO_SECRET_KEY` (coi là máy dev).
    - `DJANGO_ALLOWED_HOSTS=<tên-miền>`, `FRONTEND_URL=https://<tên-miền>`.
    - `DJANGO_BEHIND_HTTPS_PROXY=true`: Django tin header `X-Forwarded-Proto` của Caddy, nên link
-     callback Google là `https://...`, cookie phiên và CSRF chỉ gửi qua HTTPS.
+     callback Google là `https://...`, cookie phiên và CSRF chỉ gửi qua HTTPS. Biến này còn bật
+     chuyển hướng `http://` sang `https://` và HSTS (trình duyệt nhớ chỉ dùng HTTPS, mặc định 30
+     ngày, không gồm subdomain; chỉnh bằng `DJANGO_HSTS_SECONDS`). Health check gọi thẳng Django
+     bằng `http://` mà không có header `X-Forwarded-Proto: https` sẽ nhận 301.
    - `TRUSTED_PROXIES=1` nếu Caddy trỏ thẳng vào Django (đúng số proxy đứng trước Django). Sai số
      này thì rate limit theo IP hỏng: hoặc mọi người chung một IP, hoặc người dùng tự khai IP giả.
    - `EMAIL_URL`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: [hướng dẫn](huong-dan-google-smtp.md).

@@ -15,6 +15,7 @@ from django.db.models import Count, Exists, OuterRef, Q
 from django.http import HttpRequest, JsonResponse
 
 from apps.accounts.ratelimit import RateLimit, RateLimited
+from apps.accounts.views import client_ip
 
 from . import actor as actor_module
 from .accounts import player_for_request
@@ -24,6 +25,11 @@ ROOMS_PER_USER = RateLimit("rooms-user", limit=10, window=60 * 60)
 # Commands over WebSocket, per player (consumers.py): far above what a person clicks.
 COMMANDS_PER_PLAYER = RateLimit("ws-commands", limit=20, window=10)
 CHAT_PER_PLAYER = RateLimit("ws-chat", limit=5, window=10)
+# REST: sitting down and standing up (together) per player, and invite links tried per address.
+# Far above what a person does; low enough that a script cannot churn a table's seats or try
+# invite tokens in bulk.
+SEAT_CHANGES_PER_PLAYER = RateLimit("seat-changes", limit=10, window=60)
+JOINS_PER_IP = RateLimit("join-ip", limit=20, window=10 * 60)
 
 STATUS = {
     "validation_error": 400,
@@ -400,6 +406,13 @@ async def rotate_invite(request: HttpRequest, room_id: int) -> JsonResponse:
 async def join(request: HttpRequest) -> JsonResponse:
     if request.method != "POST":
         return error("method_not_allowed", "POST.")
+    ip = client_ip(request)
+    try:
+        # Only wrong tokens count (below): friends at one table share a Wi-Fi, so one IP, and
+        # each of them opens the invite link, maybe several times.
+        JOINS_PER_IP.check(ip)
+    except RateLimited as exc:
+        return rate_limited(exc)
     try:
         token = read_json(request).get("invite_token")
         if not isinstance(token, str) or not 1 <= len(token) <= 64:
@@ -408,6 +421,7 @@ async def join(request: HttpRequest) -> JsonResponse:
         return error("validation_error", "Invalid body.", exc.fields)
     room = await Room.objects.select_related("owner").filter(invite_token=token).afirst()
     if room is None:
+        JOINS_PER_IP.hit(ip)
         return error("room_not_found", "Bad or old invite link.")
     try:
         user = await player_for_request(request)
