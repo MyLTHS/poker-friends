@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { Coffee, Crown, Hourglass } from "lucide-react";
 
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
+import { FeedbackDialog } from "@/feedback/FeedbackDialog";
 import { Button, ButtonLink, CardText, D1Root, Spinner, ToastProvider, fmt, signed } from "@/ui";
 
 import { IdleBar, PreAction, PreActions, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
@@ -81,7 +82,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const [drawer, setDrawer] = useState(false);
   const [seen, setSeen] = useState(0);
   const [seatError, setSeatError] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<"owner" | "settings" | "help" | null>(null);
+  const [dialog, setDialog] = useState<"owner" | "settings" | "help" | "feedback" | null>(null);
   const sound = useTableSound();
   const [keysOn, setKeysOn] = useKeysPref();
   const { table } = model;
@@ -281,7 +282,15 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const dialogs = (
     <>
       {owner?.({ open: dialog === "owner", onClose: closeDialog, seats: table.seats, inHand })}
-      <SettingsModal open={dialog === "settings"} onClose={closeDialog} sound={sound} keys={device === "desktop" ? { on: keysOn, set: setKeysOn } : undefined} onHelp={() => setDialog("help")} />
+      <SettingsModal
+        open={dialog === "settings"}
+        onClose={closeDialog}
+        sound={sound}
+        keys={device === "desktop" ? { on: keysOn, set: setKeysOn } : undefined}
+        onHelp={() => setDialog("help")}
+        onFeedback={() => setDialog("feedback")}
+      />
+      <FeedbackDialog open={dialog === "feedback"} onClose={closeDialog} />
       {device === "desktop" && <ShortcutHelp open={dialog === "help"} onClose={closeDialog} />}
       <SoundCues sound={sound} cues={model.fx} mySeat={occupant?.seat ?? null} myTurn={myTurn} turnKey={myTurn && turn ? `${hand?.hand_id}:${turn.deadline}` : null} deadline={myClock?.deadline ?? 0} frozen={myClock?.frozenAt !== undefined} />
     </>

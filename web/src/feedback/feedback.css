@@ -1,0 +1,103 @@
+/* The feedback dialog and the crash screen (src/feedback). D1 tokens and parts (.seg, .input,
+   .field) from ui/d1.css; only what they lack is here. */
+
+@layer components {
+  /* the modal's body sizes to its content: the form takes the card's whole width instead */
+  .d1 .modal-body:has(> .fb-form) {
+    align-self: stretch;
+  }
+  .d1 .fb-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    text-align: left;
+  }
+  .d1 .fb-intro {
+    font-size: var(--fs-md);
+    line-height: 1.5;
+    color: var(--ivory-2);
+  }
+  .d1 .fb-kinds {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  /* The kinds are radios: each invisible input lies over its whole segment, so a tap lands on
+     the radio itself (44px tall on the phone, like the segment's hit area in d1.css); its focus
+     shows on the segment. */
+  .d1 .fb-kinds .seg-item {
+    position: relative;
+  }
+  .d1 .fb-kinds .seg-item input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .d1 .fb-kinds .seg-item:has(input:focus-visible) {
+    outline: 2px solid var(--brass-2);
+    outline-offset: 2px;
+  }
+  /* a text area in the D1 box: the box grows with it */
+  .d1 .input.is-area {
+    height: auto;
+    padding: 10px 14px;
+    align-items: stretch;
+  }
+  .d1 .input.is-area textarea {
+    min-height: 120px;
+    resize: vertical;
+    line-height: 1.45;
+  }
+  .d1 .field-label em.is-over {
+    color: var(--claret-text);
+  }
+  .d1 .fb-problem {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    outline: none;
+  }
+  .d1 .fb-login {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+  }
+  .d1 .fb-login .link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* landscape phone: the dialog keeps the whole form in 390px of height */
+  @media (orientation: landscape) and (max-height: 500px) {
+    .d1 .fb-form {
+      gap: 10px;
+    }
+    .d1 .fb-intro {
+      display: none;
+    }
+    .d1 .fb-kinds .seg-item input {
+      top: min(0px, calc(50% - var(--tap) / 2));
+      bottom: min(0px, calc(50% - var(--tap) / 2));
+    }
+    .d1 .input.is-area textarea {
+      min-height: 76px;
+      height: 84px;
+    }
+  }
+
+  /* the crash screen (app/error.tsx): the error block in the middle of the page */
+  .d1.crash {
+    display: grid;
+    place-items: center;
+    min-height: 100dvh;
+    padding: 24px 16px;
+  }
+  .d1 .crash-main {
+    width: min(560px, 100%);
+  }
+}

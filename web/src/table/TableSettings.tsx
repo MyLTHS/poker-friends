@@ -5,7 +5,7 @@
 // listens to the animation cues, my turn and my clock, and plays nothing while sound is off or
 // the tab is hidden.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Keyboard, Volume2 } from "lucide-react";
+import { Keyboard, MessageSquareText, Volume2 } from "lucide-react";
 
 import { Choices } from "@/rooms/Choices";
 import { Button, Modal, Toggle } from "@/ui";
@@ -137,6 +137,7 @@ export function SettingsModal({
   sound,
   keys,
   onHelp,
+  onFeedback,
 }: {
   open: boolean;
   onClose: () => void;
@@ -144,6 +145,8 @@ export function SettingsModal({
   /** desktop: the shortcuts switch */
   keys?: { on: boolean; set: (on: boolean) => void };
   onHelp: () => void;
+  /** "Gửi phản hồi" (src/feedback): the table has no app bar, so it lives here */
+  onFeedback?: () => void;
 }) {
   const { prefs, setPrefs, play } = sound;
   return (
@@ -201,6 +204,20 @@ export function SettingsModal({
               </div>
             )}
           </>
+        )}
+        {onFeedback && (
+          <div className="tset-row">
+            <span className="tset-icon" aria-hidden>
+              <MessageSquareText size={18} strokeWidth={1.9} />
+            </span>
+            <span className="tset-text">
+              <b>Góp ý, báo lỗi</b>
+              <small>Gửi cho người làm game, kèm bàn đang mở.</small>
+            </span>
+            <Button kind="quiet" size="sm" aria-haspopup="dialog" onClick={onFeedback}>
+              Gửi phản hồi
+            </Button>
+          </div>
         )}
       </div>
     </Modal>
