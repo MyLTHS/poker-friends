@@ -63,7 +63,7 @@ class TestInvitation:
         user = services.create_player(" An@Example.com ", "An")
         assert (user.email, user.username, user.is_guest) == ("an@example.com", "An", False)
         assert not user.has_usable_password()
-        assert services.is_email_verified(user)
+        assert services.is_email_verified(user) and user.approved  # let in by staff
 
         (message,) = mail.outbox
         assert message.to == ["an@example.com"]

@@ -36,3 +36,71 @@ def remember_origin(get_response):
                 request_origin.reset(token)
 
     return middleware
+
+
+# --- Members only (GUESTS_ALLOWED off) -------------------------------------------------------
+
+# Open to everyone: signing up, logging in, verifying, resetting a password, and browser error
+# reports (a page can fail before anyone logs in). Everything else under /api/ needs a member.
+OPEN_API_PREFIXES = ("/api/auth/", "/api/client-errors/")
+
+
+def is_member(user) -> bool:
+    """Staff, or a real account the owner approved, with its email verified. Approval is its own
+    flag: with Gmail or Google sign-in on, a stranger can verify their own email."""
+    from apps.accounts.services import is_email_verified
+
+    if not user.is_authenticated or not user.is_active:
+        return False
+    if user.is_staff:
+        return True
+    return not user.is_guest and user.approved and is_email_verified(user)
+
+
+def _needs_member(request) -> bool:
+    from django.conf import settings
+
+    path = request.path
+    return (
+        not settings.GUESTS_ALLOWED
+        and path.startswith("/api/")
+        and not path.startswith(OPEN_API_PREFIXES)
+    )
+
+
+def _refusal(user):
+    """401 login_required for strangers and guests (go and log in); 403 not_approved for a real
+    account the owner has not let in yet (logging in again would not help)."""
+    from django.http import JsonResponse
+
+    if user.is_authenticated and not user.is_guest:
+        body = {"code": "not_approved", "message": "The owner has not let this account in yet."}
+        return JsonResponse(body, status=403)
+    body = {"code": "login_required", "message": "Log in with an account the owner approved."}
+    return JsonResponse(body, status=401)
+
+
+@sync_and_async_middleware
+def members_only(get_response):
+    """With GUESTS_ALLOWED off (playing from home, production) nobody without a verified account
+    reaches the rooms: no guest is made on the fly, and old guest sessions are refused too. The
+    WebSocket does the same check in RoomConsumer.connect."""
+    from asgiref.sync import sync_to_async
+
+    if iscoroutinefunction(get_response):
+
+        async def middleware(request):
+            if _needs_member(request):
+                user = await request.auser()
+                if not await sync_to_async(is_member)(user):
+                    return _refusal(user)
+            return await get_response(request)
+
+    else:
+
+        def middleware(request):
+            if _needs_member(request) and not is_member(request.user):
+                return _refusal(request.user)
+            return get_response(request)
+
+    return middleware

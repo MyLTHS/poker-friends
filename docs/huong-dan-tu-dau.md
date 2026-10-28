@@ -127,12 +127,9 @@ sẵn link; `scripts/play-online.sh status` cho xem lại link đang dùng.
 ### 2.2. Tạo phòng
 
 1. Mở link của buổi trên máy tính. Trang mở ra **Sảnh**.
-2. **Chủ phòng nên có tài khoản thật (email + mật khẩu), đừng dùng khách.** Tài khoản khách chỉ
-   sống trên link của buổi đó: buổi sau link đổi là không vào lại được, và bạn mất quyền chủ phòng
-   cùng chip của các phòng cũ. Lần đầu làm như sau (các buổi sau chỉ cần **Đăng nhập**):
-   - Bấm **Tạo phòng**. Trang báo "Đăng nhập để mở bàn": bấm **Đăng nhập hoặc chơi bằng khách**,
-     rồi bấm **Đăng ký**, điền email, tên, mật khẩu.
-   - Tự xác minh email (chưa có Gmail thì email không gửi đi):
+2. Lần đầu, tạo tài khoản chủ phòng (các buổi sau chỉ cần **Đăng nhập**):
+   - Trang đăng nhập: bấm **Đăng ký**, điền email, tên, mật khẩu.
+   - Tự duyệt chính mình (gõ `y` khi được hỏi):
 
      ```bash
      scripts/play-online.sh verify email-cua-ban@gmail.com
@@ -147,18 +144,33 @@ sẵn link; `scripts/play-online.sh status` cho xem lại link đang dùng.
 4. Bấm **Tạo phòng & lấy link mời**. Trang phòng hiện **link mời** và **mã QR**. Bấm **Chép
    link** để copy.
 
-### 2.3. Gửi bạn bè
+### 2.3. Bảo mật: chỉ người bạn duyệt mới vào được
 
-Dán **đoạn ở Phần 3** vào nhóm chat, thay `<LINK MỜI PHÒNG>` bằng link mời ở bước 2.2. Bạn bè
-**chỉ cần đúng link mời này**: mở ra là web tự tạo tài khoản khách và đưa họ vào phòng, không phải
-đăng ký hay mở link nào khác.
+Server chỉ cho **thành viên** vào: người chưa có tài khoản, hay đã đăng ký mà **chưa được bạn
+duyệt**, đều không thấy sảnh, phòng hay bàn. Mỗi người bạn chỉ cần duyệt **một lần**:
+
+1. Bạn bè mở link, bấm **Đăng ký**, điền email, tên, mật khẩu. Màn hình báo đợi chủ phòng duyệt.
+2. Bạn duyệt bằng một trong hai cách:
+   - Terminal: `scripts/play-online.sh verify email-cua-ban-do@gmail.com`. Lệnh hiện tên tài khoản và
+     ngày đăng ký, hỏi lại; gõ `y` nếu đúng là bạn của bạn (phòng ai đó đăng ký trước bằng email
+     của bạn mình).
+   - Trang quản trị `<link>/admin/` → **Users** → tick người đó → chọn **Duyệt** ở ô Action → Go.
+3. Bạn bè **Đăng nhập** là vào chơi được, cả các buổi sau.
+
+Muốn không cho ai đó vào nữa: trong admin chọn **Bỏ duyệt** (họ bị ngắt khỏi bàn ngay).
+
+### 2.4. Gửi bạn bè
+
+Dán **đoạn ở Phần 3** vào nhóm chat, thay `<LINK MỜI PHÒNG>` bằng link mời ở bước 2.2. Ai chưa có
+tài khoản thì đăng ký, nhắn bạn, và bạn duyệt như bước 2.3. Ai đã được duyệt thì mở link mời,
+đăng nhập là vào thẳng phòng.
 
 Link mời chứa link của buổi, nên **mỗi buổi phải lấy lại link mời**: đăng nhập, vào trang phòng cũ
 (Sảnh → phòng của bạn), bấm **Chép link**. Phòng, luật chơi và chip vẫn như buổi trước.
 
 Link mời có mã bí mật: chỉ gửi trong nhóm kín.
 
-### 2.4. Ngồi vào bàn và cấp chip
+### 2.5. Ngồi vào bàn và cấp chip
 
 1. Ở trang phòng, bấm **Ngồi đây** cạnh một ghế trống (hoặc **Vào bàn chơi** rồi **Ngồi vào**).
 2. Đợi bạn bè vào và **ngồi xuống ghế**. Chủ phòng chỉ cấp chip được cho người **đang ngồi**.
@@ -170,7 +182,7 @@ Link mời có mã bí mật: chỉ gửi trong nhóm kín.
 
 Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip được.
 
-### 2.5. Trong lúc chơi
+### 2.6. Trong lúc chơi
 
 - **Không gập máy.** Màn hình tự tắt thì không sao.
 - Không tắt Docker Desktop, không ngắt Wi‑Fi, không cho máy cập nhật hay khởi động lại.
@@ -190,7 +202,7 @@ Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip đ
 
 - Ai gặp lỗi lạ thì nhắc họ bấm **Gửi phản hồi** (nút có ở mọi màn), hoặc nhắn bạn kèm giờ.
 
-### 2.6. Hết buổi
+### 2.7. Hết buổi
 
 1. **Trước khi tắt**, kiểm tra sổ chip (trong Terminal). Dòng cuối phải là `OK: …`:
 
@@ -209,12 +221,7 @@ Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip đ
    liệu lẫn bản sao lưu nằm cùng máy.
 
 Dữ liệu (tài khoản, phòng, chip, lịch sử) vẫn giữ nguyên khi tắt. Buổi sau bấm ▶ lại là có **link
-mới**, và:
-- **Tài khoản đã đăng ký** (email + mật khẩu): đăng nhập lại trên link mới là có lại hết phòng và
-  chip.
-- **Tài khoản khách**: không vào lại được, vì khách chỉ sống trên link của buổi cũ. Chip của khách
-  vẫn nằm trong database nhưng không ai dùng được nữa. Ai muốn giữ chip qua các buổi thì phải
-  nâng cấp lên tài khoản thật **ngay trong buổi** (xem Phần 3).
+mới**: mọi người đăng nhập lại trên link mới là có lại hết phòng và chip.
 
 ---
 
@@ -224,13 +231,12 @@ mới**, và:
 >
 > **1.** Mở link này (chỉ dùng tối nay): `<LINK MỜI PHÒNG>`
 > **2.** Điện thoại thì **xoay ngang** máy. Máy tính thì Chrome, Safari hay Edge đều được.
-> **3.** Trang tự vào phòng. Bấm **Ngồi đây** cạnh một ghế trống.
-> **4.** Đợi mình cấp chip, rồi bấm **Vào bàn chơi** (hoặc **Về bàn**) là chơi.
+> **3.** Lần đầu: bấm **Đăng ký** (email, tên, mật khẩu), rồi **nhắn mình** để mình duyệt. Được
+>    duyệt rồi thì **Đăng nhập**, các buổi sau chỉ cần đăng nhập.
+> **4.** Vào phòng, bấm **Ngồi đây** cạnh một ghế trống.
+> **5.** Đợi mình cấp chip, rồi bấm **Vào bàn chơi** (hoặc **Về bàn**) là chơi.
 >
-> Mở bằng **một trình duyệt** suốt buổi nhé: đổi máy hay đổi trình duyệt là thành người khách
-> mới. Tài khoản khách **chỉ dùng được tối nay**. Muốn giữ chip cho các buổi sau thì ngay trong
-> buổi bấm **Hồ sơ**, điền email + mật khẩu, bấm **Nâng cấp & giữ chip**, rồi nhắn mình để mình
-> xác minh cho.
+> Chip và lịch sử nằm trong tài khoản, chơi máy nào cũng được.
 >
 > Gặp gì lạ thì bấm **Gửi phản hồi** hoặc nhắn mình kèm giờ nhé!
 
@@ -256,8 +262,8 @@ Mẹo cho bạn bè:
 | Bạn bè mở link cũ không vào được | Link đổi mỗi lần Start. Lấy link hiện tại trong Logs của **poker-home-tunnel-1** (hoặc `scripts/play-online.sh status`), gửi lại |
 | Lỡ gập máy, máy ngủ, mất điện | Mở máy, mở Docker Desktop, bấm ■ rồi ▶ nhóm **poker-home**, lấy link mới trong Logs, lấy lại link mời phòng và gửi lại |
 | `up` báo đã có một server khác đang chạy | Làm đúng lệnh `docker compose -p … down` mà script in ra, rồi chạy lại `up` |
-| Bàn báo "tạm dừng" | [runbook.md](runbook.md#bàn-tạm-dừng) (thay `dc` bằng lệnh `docker compose -p poker-home …` như ở bước 2.6) |
-| Nghi chip bị sai | Chạy lệnh kiểm sổ chip ở bước 2.6, rồi xem [runbook.md](runbook.md#lệch-chip) |
+| Bàn báo "tạm dừng" | [runbook.md](runbook.md#bàn-tạm-dừng) (thay `dc` bằng lệnh `docker compose -p poker-home …` như ở bước 2.7) |
+| Nghi chip bị sai | Chạy lệnh kiểm sổ chip ở bước 2.7, rồi xem [runbook.md](runbook.md#lệch-chip) |
 
 Chi tiết hơn: [choi-online.md](choi-online.md) (cách chơi online hoạt động) và
 [beta-f.md](beta-f.md) (sổ tay buổi beta: điều kiện đạt, cách xếp phản hồi).

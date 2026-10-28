@@ -1116,7 +1116,15 @@ components:
         google_enabled:
           type: boolean
           description: "`false` khi server chưa có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: ẩn nút Google."
-      required: [google_enabled]
+        guests_allowed:
+          type: boolean
+          description: |
+            `false` (chơi từ máy nhà, production): chỉ thành viên mới vào được: tài khoản thật đã
+            xác minh email **và được chủ phòng duyệt** (`User.approved`), hoặc staff.
+            Ẩn nút khách. Mọi API ngoài `/api/auth/`: 401 `login_required` cho người chưa đăng
+            nhập hay phiên khách cũ, 403 `not_approved` cho tài khoản chưa được duyệt. Đăng nhập
+            tài khoản chưa được duyệt cũng trả `not_approved`. WebSocket đóng với mã 4401.
+      required: [google_enabled, guests_allowed]
       additionalProperties: false
     Me:
       type: object
@@ -1140,7 +1148,13 @@ components:
           description: "`false` với khách và người chỉ đăng nhập bằng Google."
         google_connected:
           type: boolean
-      required: [id, username, email, is_guest, email_verified, has_password, google_connected]
+        member:
+          type: boolean
+          description: |
+            Vào được các phòng. Luôn `true` khi server cho khách; khi chỉ cho thành viên
+            (`guests_allowed: false`): `true` với tài khoản đã được chủ phòng duyệt (hoặc staff),
+            `false` thì hiện "đợi chủ phòng duyệt".
+      required: [id, username, email, is_guest, email_verified, has_password, google_connected, member]
       additionalProperties: false
     Username:
       type: string
@@ -1435,6 +1449,9 @@ components:
           enum:
             - validation_error
             - not_authenticated
+            - login_required
+            - guests_disabled
+            - not_approved
             - forbidden
             - room_not_found
             - room_closed
@@ -1478,13 +1495,13 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
     Unauthenticated:
-      description: Chưa đăng nhập (`not_authenticated`)
+      description: Chưa đăng nhập (`not_authenticated`), hoặc server chỉ cho thành viên mà người gửi chưa phải thành viên đã xác minh (`login_required`)
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ApiError"
     Forbidden:
-      description: Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`)
+      description: Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`), server tắt chế độ khách (`guests_disabled`), tài khoản chưa được chủ phòng duyệt (`not_approved`, cả khi đăng nhập lẫn khi gọi API phòng)
       content:
         application/json:
           schema:
