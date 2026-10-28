@@ -52,6 +52,20 @@ class TestDebugIsOffUnlessAskedFor:
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip().splitlines()[-1] == expected
 
+    @pytest.mark.parametrize(
+        ("env", "warned"),
+        [
+            ({}, True),
+            ({"DJANGO_SECRET_KEY": STRONG_SECRET}, False),
+            ({"DJANGO_DEBUG": "true"}, False),  # asked for: nothing to warn about
+        ],
+    )
+    def test_manage_py_says_so_when_it_turns_debug_on_by_itself(self, env, warned):
+        result = run(["manage.py", "check"], **env)
+        assert result.returncode == 0, result.stderr
+        assert ("chưa đặt DJANGO_SECRET_KEY nên manage.py tự bật DEBUG" in result.stderr) is warned
+        assert "DJANGO_SECRET_KEY" not in result.stdout  # stdout stays clean for scripts
+
 
 class TestHttpsBehindTheProxy:
     def test_hsts_redirect_and_secure_cookies_are_on(self):
