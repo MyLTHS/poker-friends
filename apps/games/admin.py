@@ -100,34 +100,11 @@ def invitation_sent(user: User, invitation: services.Invitation):
 
 @admin.register(User)
 class PokerUserAdmin(UserAdmin):
-    fieldsets = UserAdmin.fieldsets + (("Poker Friends", {"fields": ("is_guest", "approved")}),)
-    list_display = ("username", "email", "date_joined", "approved", "is_guest", "is_staff")
-    list_filter = ("approved", "is_guest", "is_staff", "is_active")
+    fieldsets = UserAdmin.fieldsets + (("Poker Friends", {"fields": ("is_guest",)}),)
+    list_display = ("username", "email", "date_joined", "is_active", "is_guest", "is_staff")
+    list_filter = ("is_guest", "is_staff", "is_active")
     ordering = ("-date_joined",)
-    actions = ["approve", "withdraw_approval", "invite_again"]
-
-    @admin.action(description="Duyệt (cho vào chơi, xác minh luôn email)")
-    def approve(self, request, queryset):
-        from apps.accounts.services import mark_email_verified
-
-        people = list(queryset.filter(is_guest=False).exclude(email=""))
-        for user in people:
-            mark_email_verified(user)
-        queryset.filter(pk__in=[u.pk for u in people]).update(approved=True)
-        self.message_user(request, f"Đã duyệt {len(people)} tài khoản.")
-
-    @admin.action(description="Bỏ duyệt (không cho vào chơi nữa)")
-    def withdraw_approval(self, request, queryset):
-        from asgiref.sync import async_to_sync
-
-        from apps.games.actor import drop_player_everywhere
-        from apps.games.consumers import LOGIN_REQUIRED_CLOSE_CODE
-
-        ids = list(queryset.values_list("pk", flat=True))
-        count = queryset.update(approved=False)
-        for user_id in ids:  # out of every table now, even one only watching
-            async_to_sync(drop_player_everywhere)(user_id, LOGIN_REQUIRED_CLOSE_CODE)
-        self.message_user(request, f"Đã bỏ duyệt {count} tài khoản.")
+    actions = ["invite_again"]
 
     add_form = PlayerCreationForm
     add_fieldsets = (
@@ -141,6 +118,17 @@ class PokerUserAdmin(UserAdmin):
             },
         ),
     )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if change and "is_active" in form.changed_data and not obj.is_active:
+            # Switched off: out of every table now, even one they only watch and never write to.
+            from asgiref.sync import async_to_sync
+
+            from apps.games.actor import drop_player_everywhere
+            from apps.games.consumers import LOGIN_REQUIRED_CLOSE_CODE
+
+            async_to_sync(drop_player_everywhere)(obj.pk, LOGIN_REQUIRED_CLOSE_CODE)
 
     def response_add(self, request, obj, post_url_continue=None):
         self.message_user(request, *self._invitation_message(obj, request.player_invitation))
@@ -164,12 +152,6 @@ class PokerUserAdmin(UserAdmin):
             if user.is_guest or not user.email:
                 self.message_user(
                     request, f"{user.username} không có email nên không gửi được.", messages.WARNING
-                )
-            elif not user.approved:
-                self.message_user(
-                    request,
-                    f"{user.username} chưa được duyệt; duyệt trước rồi mới gửi thư mời.",
-                    messages.WARNING,
                 )
             elif user.has_usable_password():
                 self.message_user(

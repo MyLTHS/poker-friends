@@ -6,7 +6,7 @@ Errors are ``{"code", "message", "fields"?}`` (ApiError).
 """
 
 from django.conf import settings
-from django.contrib.auth import logout
+from django.contrib.auth import login, logout
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -39,7 +39,6 @@ ERROR_STATUS = {
     "forbidden": 403,
     "email_not_verified": 403,
     "guests_disabled": 403,
-    "not_approved": 403,
     "email_taken": 409,
     "username_taken": 409,
     "not_guest": 409,
@@ -151,6 +150,8 @@ class SignupView(AccountView):
         data = self.valid(SignupSerializer)
         ratelimit.EMAIL_SENDS_PER_IP.hit(client_ip(request))
         user = services.signup(data["email"], data["username"], data["password"])
+        # Straight in: friends play from the link, nobody has to verify or let them in first.
+        login(request, user, backend=services.MODEL_BACKEND)
         return me(user, status.HTTP_201_CREATED)
 
 

@@ -297,10 +297,11 @@ export interface paths {
         put?: never;
         /**
          * Đăng ký bằng email và mật khẩu
-         * @description Tạo tài khoản chưa xác minh và gửi email có link xác minh
-         *     (`FRONTEND_URL/account/verify?token=...`). **Không** đăng nhập luôn: phải xác minh email
-         *     trước. Khách muốn giữ chip thì dùng `upgrade`, không dùng `signup`. Server mail lỗi thì
-         *     vẫn trả 201 (đã tạo tài khoản); người dùng xin gửi lại link bằng `resend`.
+         * @description Tạo tài khoản và **đăng nhập luôn** (đặt cookie phiên): bạn bè đăng ký trên link là vào
+         *     chơi được, không ai phải duyệt. Vẫn gửi email có link xác minh
+         *     (`FRONTEND_URL/account/verify?token=...`), nhưng không bắt buộc để đăng nhập hay chơi.
+         *     Khách muốn giữ chip thì dùng `upgrade`, không dùng `signup`. Server mail lỗi thì vẫn trả
+         *     201.
          */
         post: operations["signup"];
         delete?: never;
@@ -360,8 +361,8 @@ export interface paths {
         put?: never;
         /**
          * Đăng nhập bằng email và mật khẩu
-         * @description Sai email hay sai mật khẩu đều trả `invalid_credentials`. Email chưa xác minh:
-         *     `email_not_verified` (403). Giới hạn: 20 lần/10 phút mỗi IP; 5 lần sai/15 phút cho một
+         * @description Sai email hay sai mật khẩu đều trả `invalid_credentials`. Email chưa xác minh vẫn đăng
+         *     nhập được. Giới hạn: 20 lần/10 phút mỗi IP; 5 lần sai/15 phút cho một
          *     email từ một IP; 30 lần sai/giờ cho một email từ mọi IP. Quá thì `rate_limited`, kể cả khi
          *     mật khẩu đúng.
          */
@@ -762,11 +763,10 @@ export interface components {
             /** @description `false` khi server chưa có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: ẩn nút Google. */
             google_enabled: boolean;
             /**
-             * @description `false` (chơi từ máy nhà, production): chỉ thành viên mới vào được: tài khoản thật đã
-             *     xác minh email **và được chủ phòng duyệt** (`User.approved`), hoặc staff.
-             *     Ẩn nút khách. Mọi API ngoài `/api/auth/`: 401 `login_required` cho người chưa đăng
-             *     nhập hay phiên khách cũ, 403 `not_approved` cho tài khoản chưa được duyệt. Đăng nhập
-             *     tài khoản chưa được duyệt cũng trả `not_approved`. WebSocket đóng với mã 4401.
+             * @description `false` (chơi từ máy nhà, production): chỉ thành viên mới vào được: bất kỳ tài khoản
+             *     thật nào đã đăng nhập (không cần duyệt, không cần xác minh email). Ẩn nút khách. Mọi
+             *     API ngoài `/api/auth/`: 401 `login_required` cho người chưa đăng nhập hay phiên khách
+             *     cũ. WebSocket đóng với mã 4401.
              */
             guests_allowed: boolean;
         };
@@ -787,8 +787,8 @@ export interface components {
             google_connected: boolean;
             /**
              * @description Vào được các phòng. Luôn `true` khi server cho khách; khi chỉ cho thành viên
-             *     (`guests_allowed: false`): `true` với tài khoản đã được chủ phòng duyệt (hoặc staff),
-             *     `false` thì hiện "đợi chủ phòng duyệt".
+             *     (`guests_allowed: false`): `true` với mọi tài khoản thật, `false` với phiên khách cũ
+             *     (đăng nhập hay đăng ký để vào).
              */
             member: boolean;
         };
@@ -1142,7 +1142,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`), server tắt chế độ khách (`guests_disabled`), tài khoản chưa được chủ phòng duyệt (`not_approved`, cả khi đăng nhập lẫn khi gọi API phòng) */
+        /** @description Thiếu/sai CSRF token hoặc không phải chủ phòng (`forbidden`), email chưa xác minh (`email_not_verified`), đã bị chủ phòng kick (`kicked`), server tắt chế độ khách (`guests_disabled`), `not_approved` (không còn trả về, đã bỏ bước duyệt) */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -1604,7 +1604,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Đã tạo, đã gửi email xác minh */
+            /** @description Đã tạo và đã đăng nhập */
             201: {
                 headers: {
                     [name: string]: unknown;
