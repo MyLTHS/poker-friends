@@ -6,7 +6,9 @@ password on the web's reset page, and logs in. Staff never choose or see the pas
 address is vouched for by staff, and following the emailed link proves it anyway.
 """
 
+import re
 import time
+from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -60,7 +62,7 @@ def add_player(staff, **fields):
 
 class TestInvitation:
     def test_the_player_gets_an_email_sets_a_password_and_logs_in(self, client):
-        user = services.create_player(" An@Example.com ", "An")
+        user, invitation = services.create_player(" An@Example.com ", "An")
         assert (user.email, user.username, user.is_guest) == ("an@example.com", "An", False)
         assert not user.has_usable_password()
         assert services.is_email_verified(user) and user.approved  # let in by staff
@@ -69,6 +71,7 @@ class TestInvitation:
         assert message.to == ["an@example.com"]
         assert "An" in message.body and "7 ngày" in message.body
         link = link_in(message)
+        assert link == invitation.link and invitation.sent
         assert "moi=1" in link
         assert login(client, "an@example.com").status_code == 400  # no password yet
 
@@ -86,21 +89,43 @@ class TestInvitation:
         services.create_player("an@example.com", "An")
         link = link_in(mail.outbox[0])
         now = time.time()
-        monkeypatch.setattr("django.core.signing.time.time", lambda: now + 7 * 24 * 3600 + 60)
+        week = 7 * 24 * 3600
+        monkeypatch.setattr("django.core.signing.time.time", lambda: now + week + 60)
+        late = set_password(client, link)
+        assert late.status_code == 400 and late.json()["code"] == "invalid_token"
+        monkeypatch.setattr("django.core.signing.time.time", lambda: now + week - 60)
+        assert set_password(client, link).status_code == 204
+
+    def test_a_forgot_password_link_still_lasts_one_hour(self, client, monkeypatch):
+        services.create_player("an@example.com", "An")
+        services.request_password_reset("an@example.com", "10.0.0.1")
+        link = link_in(mail.outbox[1])
+        generator = services.default_token_generator
+        start = generator._now()
+        monkeypatch.setattr(generator, "_now", lambda: start + timedelta(seconds=3601))
         late = set_password(client, link)
         assert late.status_code == 400 and late.json()["code"] == "invalid_token"
 
+    def test_a_new_email_voids_the_old_link(self, client):
+        user, _ = services.create_player("an@example.cm", "An")  # mistyped
+        old = link_in(mail.outbox[0])
+        user.email = "an@example.com"
+        user.save(update_fields=["email"])
+        refused = set_password(client, old)
+        assert refused.status_code == 400 and refused.json()["code"] == "invalid_token"
+        assert set_password(client, services.invite_player(user).link).status_code == 204
+
     def test_a_link_for_one_player_does_not_open_another(self, client):
         services.create_player("an@example.com", "An")
-        other = services.create_player("binh@example.com", "Binh")
+        other, _ = services.create_player("binh@example.com", "Binh")
         mine, theirs = link_in(mail.outbox[0]), link_in(mail.outbox[1])
         assert set_password(client, mine.replace(uid_of(mine), uid_of(theirs))).status_code == 400
         other.refresh_from_db()
         assert not other.has_usable_password()
 
     def test_a_new_invitation_works_and_the_reset_email_still_does(self, client):
-        user = services.create_player("an@example.com", "An")
-        assert services.invite_player(user).startswith("http")
+        user, _ = services.create_player("an@example.com", "An")
+        assert services.invite_player(user).link.startswith("http")
         assert set_password(client, link_in(mail.outbox[1])).status_code == 204
         # "Quên mật khẩu" keeps working for invited players too.
         services.request_password_reset("an@example.com", "10.0.0.1")
@@ -109,7 +134,7 @@ class TestInvitation:
 
     def test_members_only_a_player_made_by_staff_is_already_approved(self, client, settings):
         settings.GUESTS_ALLOWED = False  # playing from home: only approved accounts get in
-        user = services.create_player("chi@example.com", "Chi")
+        user, _ = services.create_player("chi@example.com", "Chi")
         assert user.approved
         assert set_password(client, link_in(mail.outbox[0])).status_code == 204
         response = login(client, "chi@example.com")
@@ -149,6 +174,17 @@ class TestAdmin:
         assert set_password(client, link).status_code == 204
         assert login(client, "an@example.com").status_code == 200
 
+    def test_staff_are_told_when_the_email_could_not_be_sent(self, staff, client, monkeypatch):
+        def broken(*args, **kwargs):
+            raise OSError("no mail server")
+
+        monkeypatch.setattr(services, "send_mail", broken)
+        page = add_player(staff).content.decode()
+        assert "Không gửi được thư mời tới an@example.com" in page
+        assert "Đã gửi thư mời" not in page
+        link = re.search(r'href="(http[^"]*/account/reset\?[^"]*)"', page).group(1)
+        assert set_password(client, link.replace("&amp;", "&")).status_code == 204
+
     def test_email_is_required(self, staff):
         add_player(staff, email="")
         assert not User.objects.filter(username="An").exists()
@@ -167,7 +203,7 @@ class TestAdmin:
         assert User.objects.count() == 2  # the staff account and the first player
 
     def test_invite_again_from_the_list(self, staff):
-        user = services.create_player("an@example.com", "An")
+        user, _ = services.create_player("an@example.com", "An")
         guest = services.new_guest()
         response = staff.post(
             LIST_URL,
@@ -179,8 +215,17 @@ class TestAdmin:
         assert link_in(mail.outbox[1]).replace("&", "&amp;") in page
         assert "không có email" in page  # the guest is skipped, and staff are told why
 
+    def test_no_invitation_for_an_account_not_approved(self, staff):
+        # e.g. a Google sign-up still waiting: a password would only lead to "not approved".
+        waiting = User.objects.create_user("Dung", "dung@example.com", password=None)
+        response = staff.post(
+            LIST_URL, {"action": "invite_again", "_selected_action": [waiting.pk]}, follow=True
+        )
+        assert mail.outbox == []
+        assert "Dung chưa được duyệt" in response.content.decode()
+
     def test_no_new_link_for_a_player_who_already_set_a_password(self, staff, client):
-        user = services.create_player("an@example.com", "An")
+        user, _ = services.create_player("an@example.com", "An")
         assert set_password(client, link_in(mail.outbox[0])).status_code == 204
         response = staff.post(
             LIST_URL, {"action": "invite_again", "_selected_action": [user.pk]}, follow=True

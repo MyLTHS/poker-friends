@@ -63,24 +63,37 @@ class PlayerCreationForm(forms.ModelForm):
     def save(self, commit=True):
         data = self.cleaned_data
         try:
-            return services.create_player(data["email"], data["username"])
+            user, invitation = services.create_player(data["email"], data["username"])
         except services.AccountError as error:  # lost a race with another sign-up
             field, message = self.MESSAGES.get(error.code, (None, error.message))
             raise forms.ValidationError({field: message} if field else message) from error
+        self.invitation = invitation  # shown by PokerUserAdmin.response_add: one link, not two
+        return user
 
     def save_m2m(self):
         """Nothing to add: the admin calls this after save()."""
 
 
-def invitation_sent(user: User, link: str):
+def invitation_sent(user: User, invitation: services.Invitation):
+    """What staff see after inviting: the link itself, to send by chat when the email is lost
+    or could not be sent."""
     days = services.INVITE_MAX_AGE // (24 * 60 * 60)
+    link = format_html('<a href="{}">{}</a>', invitation.link, invitation.link)
+    if invitation.sent:
+        return format_html(
+            "Đã gửi thư mời tới {}. Nếu thư không tới, gửi link này cho {} qua Zalo/Messenger "
+            "(dùng một lần, trong {} ngày): {}",
+            user.email,
+            user.username,
+            days,
+            link,
+        )
     return format_html(
-        "Đã gửi thư mời tới {}. Nếu thư không tới, gửi link này cho {} qua Zalo/Messenger "
-        '(dùng một lần, trong {} ngày): <a href="{}">{}</a>',
+        "Không gửi được thư mời tới {}. Gửi link này cho {} qua Zalo/Messenger "
+        "(dùng một lần, trong {} ngày): {}",
         user.email,
         user.username,
         days,
-        link,
         link,
     )
 
@@ -130,9 +143,20 @@ class PokerUserAdmin(UserAdmin):
     )
 
     def response_add(self, request, obj, post_url_continue=None):
-        # create_player already emailed the invitation; this link is a second, equally valid one.
-        self.message_user(request, invitation_sent(obj, services.invitation_link(obj)))
+        self.message_user(request, *self._invitation_message(obj, request.player_invitation))
         return super().response_add(request, obj, post_url_continue)
+
+    def save_form(self, request, form, change):
+        obj = super().save_form(request, form, change)  # the add form's save() invites
+        if not change:
+            # Kept on the request, not on this admin (one instance serves every request).
+            request.player_invitation = form.invitation
+        return obj
+
+    @staticmethod
+    def _invitation_message(user: User, invitation: services.Invitation):
+        level = messages.SUCCESS if invitation.sent else messages.WARNING
+        return invitation_sent(user, invitation), level
 
     @admin.action(description="Gửi lại thư mời (người chơi chưa đặt mật khẩu)")
     def invite_again(self, request, queryset):
@@ -141,6 +165,12 @@ class PokerUserAdmin(UserAdmin):
                 self.message_user(
                     request, f"{user.username} không có email nên không gửi được.", messages.WARNING
                 )
+            elif not user.approved:
+                self.message_user(
+                    request,
+                    f"{user.username} chưa được duyệt; duyệt trước rồi mới gửi thư mời.",
+                    messages.WARNING,
+                )
             elif user.has_usable_password():
                 self.message_user(
                     request,
@@ -148,7 +178,9 @@ class PokerUserAdmin(UserAdmin):
                     messages.WARNING,
                 )
             else:
-                self.message_user(request, invitation_sent(user, services.invite_player(user)))
+                self.message_user(
+                    request, *self._invitation_message(user, services.invite_player(user))
+                )
 
     def has_delete_permission(self, request, obj=None):
         # Deleting cascades to seats, bans and memberships behind the table actor's back, and

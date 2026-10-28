@@ -7,6 +7,7 @@ extra column on ``User`` (which lives in ``apps.games``).
 
 import logging
 import secrets
+from dataclasses import dataclass
 from urllib.parse import urlencode
 
 from allauth.account.models import EmailAddress
@@ -115,7 +116,8 @@ def web_link(path: str, **params: str) -> str:
     return f"{base}{path}{query}"
 
 
-def _send(user: User, subject: str, template: str, link: str, max_age: int) -> None:
+def _send(user: User, subject: str, template: str, link: str, max_age: int) -> bool:
+    """Whether the email went out; a failure is logged, never raised."""
     body = render_to_string(
         f"accounts/email/{template}.txt",
         {"user": user, "link": link, "hours": max(1, max_age // 3600)},
@@ -126,6 +128,8 @@ def _send(user: User, subject: str, template: str, link: str, max_age: int) -> N
         # The account change already happened and the person can ask for the link again;
         # failing the request would only hide that. Never log the link: it holds a token.
         logger.exception("Could not send the %s email to user %s", template, user.pk)
+        return False
+    return True
 
 
 # --- Email verification -----------------------------------------------------------------
@@ -178,7 +182,15 @@ def signup(email: str, username: str, password: str) -> User:
     return user
 
 
-def create_player(email: str, username: str) -> User:
+@dataclass(frozen=True)
+class Invitation:
+    """An invitation link and whether its email went out (if not, staff send the link by chat)."""
+
+    link: str
+    sent: bool
+
+
+def create_player(email: str, username: str) -> tuple[User, Invitation]:
     """A player's account made by staff (Django admin), and its invitation email.
 
     No password yet: the player sets their own from the invitation link (``invite_player``).
@@ -197,13 +209,13 @@ def create_player(email: str, username: str) -> User:
             mark_email_verified(user)
     except IntegrityError as error:  # lost a race on the unique username
         raise AccountError("username_taken", "This name is already used.") from error
-    invite_player(user)
-    return user
+    return user, invite_player(user)
 
 
 def _invite_state(user: User) -> str:
-    # Changes once the player sets a password or logs in, so a link works once.
-    state = f"{user.pk}|{user.password}|{user.last_login}"
+    # Changes once the player sets a password or logs in, so a link works once; and when staff
+    # correct a mistyped email, so a link sent to the wrong address stops working.
+    state = f"{user.pk}|{user.email.lower()}|{user.password}|{user.last_login}"
     return salted_hmac(INVITE_SALT, state, algorithm="sha256").hexdigest()[:20]
 
 
@@ -216,11 +228,12 @@ def invitation_link(user: User) -> str:
     )
 
 
-def invite_player(user: User) -> str:
-    """Email ``user`` a fresh invitation; return its link (staff may also send it by chat)."""
+def invite_player(user: User) -> Invitation:
+    """Email ``user`` a fresh invitation. Staff are shown the same link, to send by chat."""
     link = invitation_link(user)
-    _send(user, "Lời mời vào Poker Friends", "invite", link, INVITE_MAX_AGE)
-    return link
+    return Invitation(
+        link, _send(user, "Lời mời vào Poker Friends", "invite", link, INVITE_MAX_AGE)
+    )
 
 
 def _is_invitation(user: User, token: str) -> bool:
