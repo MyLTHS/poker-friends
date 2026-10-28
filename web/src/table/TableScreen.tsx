@@ -43,6 +43,7 @@ import { FitStage, Stage } from "./Stage";
 import { useTableFx, type SeatPlace } from "./TableFx";
 import { SettingsModal, ShortcutHelp, SoundCues, useKeysPref, useTableSound } from "./TableSettings";
 import { globalCommand, isTyping } from "./shortcuts";
+import { useAuthRefusal } from "./authRefusal";
 import { useTableSocket } from "./useTableSocket";
 
 const newCommandId = () => crypto.randomUUID();
@@ -78,6 +79,7 @@ export type OwnerSlot = { open: boolean; onClose: () => void; seats: SeatOccupan
 
 export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = MOCK_HELP, loadChat, onTakeSeat, onLeaveSeat, owner, replayHref }: TableScreenProps) {
   const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
+  const refusal = useAuthRefusal(retry.final && !!retry.auth);
   const device = useDevice();
   const [tab, setTab] = useState<SideTab>("chat");
   const [drawer, setDrawer] = useState(false);
@@ -302,7 +304,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
       <div className={`scrim scrim-${device === "desktop" ? "d" : "m"}`} />
       {device === "desktop" && <ConnStrip device="desktop" />}
       <div className="rc-wrap">
-        <ReconnectCard device={device} retry={retry} myClock={myClock} canCheck={!!legal?.can_check} backHref={backHref} onRetry={reconnectNow} />
+        <ReconnectCard device={device} retry={retry} refusal={refusal} myClock={myClock} canCheck={!!legal?.can_check} backHref={backHref} onRetry={reconnectNow} />
       </div>
     </>
   );
