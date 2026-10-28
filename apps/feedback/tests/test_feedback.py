@@ -331,7 +331,15 @@ class TestClientErrors:
         assert logged_in(guest).get("/api/client-errors/").status_code == 405
 
 
-class TestFeedbackPageIsScrubbedToo:
+class TestFeedbackIsScrubbedToo:
+    def test_an_invite_link_pasted_in_the_message_loses_its_token(self, guest):
+        link = "https://poker.example/rooms/join?token=secret-invite-token"
+        body = {**FEEDBACK, "message": f"Link này không vào được: {link}"}
+        assert post(logged_in(guest), "/api/feedback/", body).status_code == 201
+        stored = Feedback.objects.get().message
+        assert "secret-invite-token" not in stored
+        assert stored.startswith("Link này không vào được: https://poker.example/rooms/join?token=")
+
     def test_a_token_in_the_page_of_feedback_is_not_stored(self, guest):
         body = {**FEEDBACK, "page": "/rooms/join?token=secret-invite-token"}
         assert post(logged_in(guest), "/api/feedback/", body).status_code == 201

@@ -95,8 +95,14 @@ async def _clean_feedback(body: dict[str, Any], user) -> dict[str, Any]:
                 fields["room_id"] = ["No such room."]
     if fields:
         raise BadRequest(fields)
-    # Cut after scrubbing: "[đã xoá]" can be longer than the token it replaced.
-    return {"kind": kind, "message": message.strip(), "page": scrub(page)[:PAGE_MAX], "room": room}
+    # A pasted invite or reset link carries its token: scrub what the player wrote too. Cut after
+    # scrubbing: "[đã xoá]" can be longer than the token it replaced.
+    return {
+        "kind": kind,
+        "message": scrub(message.strip())[:FEEDBACK_MESSAGE_MAX],
+        "page": scrub(page)[:PAGE_MAX],
+        "room": room,
+    }
 
 
 async def client_errors(request: HttpRequest) -> HttpResponse:
