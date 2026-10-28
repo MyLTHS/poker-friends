@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 
 import { csrfTokenFrom, type ClientError, type Result } from "./api";
-import { errorText, type Notice } from "./messages";
+import { FIELD_OF_CODE, errorText, invalidText, type Notice } from "./messages";
 
 export function Shell({
   title,
@@ -84,25 +84,77 @@ export function Field({ label, name, type = "text", autoComplete, required = tru
   );
 }
 
-/** Submitting state and the last error of one form. */
-export function useSubmit() {
+/**
+ * Submitting state and the last error of one form. Spread `form` on the <form> and give each box
+ * `error={submit.fieldError(name)}`: the browser's own checks (required, type=email, length) are
+ * then said in Vietnamese under the box instead of in its bubble, and so are the server's answers
+ * about one box. After a failed try the first box in error takes the focus, or the error notice
+ * (NoticeAlert) when no box is to blame: the one inside `scope` if given (an action without a
+ * form, like "play as a guest"), else the one around the <form>.
+ */
+export function useSubmit({ scope }: { scope?: RefObject<HTMLElement | null> } = {}) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<{ error: ClientError; retryAfter?: number } | null>(null);
+  const [checks, setChecks] = useState<Record<string, string>>({});
+  const [tries, setTries] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (tries === 0) return;
+    const form = formRef.current;
+    // The notice may sit just above the <form> (login, upgrade): look in its parent.
+    const area = scope?.current ?? form?.parentElement;
+    const target = form?.querySelector<HTMLElement>("[aria-invalid='true']") ?? area?.querySelector<HTMLElement>("[data-form-notice='error']");
+    target?.focus();
+  }, [tries, scope]);
 
   async function run<T>(action: () => Promise<Result<T>>): Promise<Result<T>> {
     setBusy(true);
     setFailure(null);
+    setChecks({});
     const result = await action();
     setBusy(false);
-    if (!result.ok) setFailure({ error: result.error, retryAfter: result.retryAfter });
+    if (!result.ok) {
+      setFailure({ error: result.error, retryAfter: result.retryAfter });
+      setTries((n) => n + 1);
+    }
     return result;
   }
 
+  const error = failure?.error ?? null;
+  const field = error ? FIELD_OF_CODE[error.code] : undefined;
+  const fields: Record<string, string[]> = { ...error?.fields, ...(field && error ? { [field]: [errorText(error)] } : {}) };
+  // When the answer is under a box, the notice only points there instead of saying it twice.
+  const noticeText = failure && (field ? errorText({ code: "validation_error" }) : errorText(failure.error, failure.retryAfter));
+
   return {
     busy,
-    error: failure?.error ?? null,
-    notice: failure ? ({ kind: "error", text: errorText(failure.error, failure.retryAfter) } as Notice) : null,
-    fields: (failure?.error.fields ?? {}) as Record<string, string[]>,
+    error,
+    notice: noticeText ? ({ kind: "error", text: noticeText } as Notice) : null,
+    fields,
+    fieldError: (name: string): string | undefined => checks[name] ?? fields[name]?.join(" "),
+    form: {
+      ref: formRef,
+      // `invalid` does not bubble; React still sees it in the capture phase.
+      onInvalidCapture: (event: FormEvent<HTMLFormElement>) => {
+        const input = event.target as HTMLInputElement;
+        event.preventDefault(); // no browser bubble: the text goes under the box
+        setChecks((current) => ({ ...current, [input.name]: invalidText(input) }));
+        setTries((n) => n + 1);
+      },
+      // Typing in a box clears what was said about that box only. Bubble phase, not capture: in
+      // the capture phase this update renders before the box's own onChange, and a controlled
+      // box (the passwords) would be put back to its old value, losing the keystroke.
+      onInput: (event: FormEvent<HTMLFormElement>) => {
+        const name = (event.target as HTMLInputElement).name;
+        setChecks((current) => {
+          if (!(name in current)) return current;
+          const rest = { ...current };
+          delete rest[name];
+          return rest;
+        });
+      },
+    },
     run,
   };
 }

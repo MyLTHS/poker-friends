@@ -270,6 +270,14 @@
     box-shadow: 10px 0 30px rgba(0, 0, 0, 0.4);
     z-index: var(--z-nav);
   }
+  /* the crest on top is the home link: a 44px target around the 36px crest, in the same room */
+  .d1 .navrail > a:first-child {
+    display: grid;
+    place-items: center;
+    width: var(--tap);
+    height: var(--tap);
+    margin: -4px 0;
+  }
   .d1 .navrail-tabs {
     display: flex;
     flex-direction: column;
@@ -1487,8 +1495,9 @@
   .d1 .btn.is-busy {
     cursor: progress;
   }
+  /* opacity, not visibility: a hidden label would take the button's name away from screen readers */
   .d1 .btn.is-busy > :not(.btn-spinner) {
-    visibility: hidden;
+    opacity: 0;
   }
   .d1 .btn-spinner {
     position: absolute;
