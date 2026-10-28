@@ -47,15 +47,16 @@ test("lobby → create a room → invite link → a new visitor joins and sits; 
   expect(shown).toMatch(/\/rooms\/join\?token=[\w-]+$/);
   const invite = new URL(shown!);
 
-  // A visitor with no account opens the link: the server makes them a guest.
+  // A visitor with no account opens the link: the server makes them a guest, and the room page
+  // replaces the link (the token leaves the address bar and the history).
   const binh = await (await browser.newContext()).newPage();
   await binh.goto(invite.pathname + invite.search);
+  await expect(binh).toHaveURL(new RegExp(`/rooms/${roomId}$`));
+  await expect(binh.getByText("Bạn đã vào Bàn E2E C4")).toBeVisible();
   const card = binh.getByRole("article", { name: "Thiệp mời" });
   await expect(card).toContainText("Lan mời bạn vào");
   await expect(card.getByRole("heading", { name: "Bàn E2E C4" })).toBeVisible();
-  await expect(card).toContainText("Bạn vào bằng khách");
-  await card.getByRole("link", { name: "Vào phòng" }).click();
-  await expect(binh).toHaveURL(new RegExp(`/rooms/${roomId}$`));
+  await expect(card).toContainText("(khách)");
   await binh.getByRole("button", { name: "Ngồi đây" }).first().click();
   await expect(binh.getByText("Đã ngồi ghế 1")).toBeVisible();
 

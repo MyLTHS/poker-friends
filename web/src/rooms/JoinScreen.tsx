@@ -1,30 +1,42 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, DoorOpen, Eye, Link2Off, RotateCw, Users } from "lucide-react";
+import { ArrowLeft, DoorOpen, Link2Off, RotateCw } from "lucide-react";
 
 import { errorText } from "@/account/messages";
 import { Button, ButtonLink, ErrorState, PageHead, Spinner } from "@/ui";
 
-import { createRoomsApi, type RoomDetail } from "./api";
-import { useMe, usePhone } from "./hooks";
-import { Invitation, invitationMeta, InviteFrom } from "./RoomBits";
+import { createRoomsApi } from "./api";
+import { useCountdown, useMe, usePhone, useReloadWhenOnline } from "./hooks";
 import { RoomsShell } from "./RoomsShell";
 
-type State =
-  | { kind: "joining" }
-  | { kind: "joined"; detail: RoomDetail; seated?: number }
-  | { kind: "error"; code: string; text: string };
+type State = { kind: "joining" } | { kind: "error"; code: string; text: string; retryAt?: number };
+
+const TITLE: Record<string, string> = {
+  no_token: "Link mời thiếu mã",
+  room_not_found: "Link mời không dùng được",
+  kicked: "Bạn đã bị mời ra khỏi phòng này",
+  network_error: "Không mở được link mời",
+  rate_limited: "Thử vào quá nhiều lần",
+};
+
+const TEXT: Record<string, string> = {
+  no_token: "Link bị cắt mất đoạn ?token=…. Xin chủ phòng gửi lại cả link.",
+  room_not_found: "Link sai, hoặc chủ phòng đã đổi link mời. Xin chủ phòng link mới nhé.",
+  network_error: "Mạng đang chập chờn. Có mạng lại là tự thử lại.",
+};
 
 /**
- * /rooms/join?token=… — the invite link (D1 "invite", the guest's side). Opening it joins the
- * room (there is no "preview by token" API): not logged in, the server makes the visitor a guest.
- * Then the invitation card says whose room it is, with "Vào phòng" and "Chỉ xem".
+ * /rooms/join?token=… — the invite link. Opening it joins the room (not logged in, the server
+ * makes the visitor a guest), then *replaces* this address with the room page, which greets the
+ * newcomer with the invitation card: the token leaves the address bar and the history, so Back
+ * never sends it again (an owner may have changed the link since).
  */
 export function JoinScreen({ token }: { token: string }) {
   const rooms = useMemo(() => createRoomsApi(), []);
-  const { me, whenReady, reload } = useMe();
+  const router = useRouter();
+  const { me, whenReady } = useMe();
   const phone = usePhone();
   const [state, setState] = useState<State>(token ? { kind: "joining" } : { kind: "error", code: "no_token", text: "" });
 
@@ -32,19 +44,32 @@ export function JoinScreen({ token }: { token: string }) {
     () =>
       whenReady()
         .then(() => rooms.join(token))
-        .then(async (result): Promise<State> => {
-          if (!result.ok) return { kind: "error", code: result.error.code, text: errorText(result.error, result.retryAfter) };
-          reload(); // a first-time visitor is a guest now
-          const snapshot = await rooms.snapshot(result.data.room.room_id);
-          return { kind: "joined", detail: result.data, seated: snapshot.ok ? snapshot.data.table.seats.length : undefined };
-        })
-        .then(setState),
-    [rooms, token, whenReady, reload],
+        .then((result) => {
+          if (result.ok) router.replace(`/rooms/${result.data.room.room_id}?vao=1`);
+          else
+            setState({
+              kind: "error",
+              code: result.error.code,
+              text: errorText(result.error, result.retryAfter),
+              // 429: the server says when it will listen again
+              retryAt: result.error.code === "rate_limited" ? Date.now() + (result.retryAfter ?? 60) * 1000 : undefined,
+            });
+        }),
+    [rooms, router, token, whenReady],
   );
 
   useEffect(() => {
     if (token) void join();
   }, [join, token]);
+  useReloadWhenOnline(
+    useCallback(() => {
+      if (state.kind === "error" && state.code === "network_error") {
+        setState({ kind: "joining" });
+        void join();
+      }
+    }, [join, state]),
+  );
+  const wait = useCountdown(state.kind === "error" ? state.retryAt : undefined);
 
   const stage =
     state.kind === "joining" ? (
@@ -53,35 +78,23 @@ export function JoinScreen({ token }: { token: string }) {
         <b>Đang mở thiệp mời…</b>
         <small>Vào phòng bằng link — chưa có tài khoản thì bạn vào bằng khách.</small>
       </div>
-    ) : state.kind === "error" ? (
+    ) : (
       <div className="invitation is-error">
         <ErrorState
           icon={state.code === "kicked" ? <DoorOpen size={26} strokeWidth={1.9} /> : state.code === "network_error" ? undefined : <Link2Off size={26} strokeWidth={1.9} />}
-          title={
-            state.code === "no_token"
-              ? "Link mời thiếu mã"
-              : state.code === "room_not_found"
-                ? "Link mời không dùng được"
-                : state.code === "kicked"
-                  ? "Bạn đã bị mời ra khỏi phòng này"
-                  : state.code === "network_error"
-                    ? "Không mở được thiệp mời"
-                    : "Chưa vào được phòng"
-          }
-          text={
-            state.code === "no_token"
-              ? "Link bị cắt mất đoạn ?token=…. Xin chủ phòng gửi lại cả link."
-              : state.code === "room_not_found"
-                ? "Link sai, hoặc chủ phòng đã đổi link mời. Xin chủ phòng link mới nhé."
-                : state.code === "network_error"
-                  ? "Mạng đang chập chờn. Thử lại khi có mạng."
-                  : state.text
-          }
+          title={TITLE[state.code] ?? "Chưa vào được phòng"}
+          text={TEXT[state.code] ?? state.text}
           actions={
             <>
               {(state.code === "network_error" || state.code === "rate_limited") && (
-                <Button kind="primary" size="sm" icon={<RotateCw size={15} strokeWidth={2.2} aria-hidden />} onClick={() => (setState({ kind: "joining" }), void join())}>
-                  Thử lại
+                <Button
+                  kind="primary"
+                  size="sm"
+                  icon={<RotateCw size={15} strokeWidth={2.2} aria-hidden />}
+                  disabled={wait > 0}
+                  onClick={() => (setState({ kind: "joining" }), void join())}
+                >
+                  {wait > 0 ? `Thử lại sau ${wait} giây` : "Thử lại"}
                 </Button>
               )}
               <ButtonLink kind="ghost" size="sm" href="/rooms" icon={<ArrowLeft size={15} aria-hidden />}>
@@ -91,43 +104,6 @@ export function JoinScreen({ token }: { token: string }) {
           }
         />
       </div>
-    ) : (
-      <Invitation
-        from={state.detail.owner_name ? <InviteFrom name={state.detail.owner_name} /> : undefined}
-        title={state.detail.room.name}
-        meta={invitationMeta(state.detail.room, state.seated)}
-        live={
-          state.detail.room.status === "playing" ? (
-            <>
-              <i className="dot is-live" aria-hidden /> Đang chơi
-            </>
-          ) : state.detail.room.status === "closed" ? (
-            "Phòng đã đóng"
-          ) : (
-            <>
-              <i className="dot" aria-hidden /> Đang mở · chờ người ngồi
-            </>
-          )
-        }
-        actions={
-          <>
-            <ButtonLink kind="felt" size="lg" href={`/rooms/${state.detail.room.room_id}`} icon={<Users size={17} aria-hidden />}>
-              Vào phòng
-            </ButtonLink>
-            <ButtonLink kind="paper" size="lg" href={`/rooms/${state.detail.room.room_id}/table`} icon={<Eye size={17} aria-hidden />}>
-              Chỉ xem
-            </ButtonLink>
-          </>
-        }
-        who={
-          me ? (
-            <>
-              {me.is_guest ? "Bạn vào bằng khách " : "Bạn đang đăng nhập là "}
-              <b>{me.username}</b> · <Link href="/account">{me.is_guest ? "đăng nhập" : "đổi tài khoản"}</Link>
-            </>
-          ) : undefined
-        }
-      />
     );
 
   return (

@@ -12,7 +12,7 @@ import { fmt } from "@/ui/format";
 
 import { createRoomsApi, type RoomDetail, type RoomsApi, type TableSnapshot } from "./api";
 import { useMe, usePhone, useReloadWhenOnline } from "./hooks";
-import { OwnerSheet } from "./OwnerPanel";
+import { OwnerSheet, PendingNotice } from "./OwnerPanel";
 import { Invitation, invitationMeta, InviteFrom, RoomBadges, ShareCard } from "./RoomBits";
 import { RoomsShell, useShellToast } from "./RoomsShell";
 import { blindsText, rulesLine } from "./rules";
@@ -34,7 +34,9 @@ async function loadRoom(rooms: RoomsApi, id: number): Promise<State> {
  * panel, chat. The WebSocket brings chat and says when the table changed; the room itself is
  * reloaded over REST, and a slow REST poll covers a dropped socket.
  */
-export function RoomScreen({ roomId, fresh = false }: { roomId: number; fresh?: boolean }) {
+/** `greet`: the owner just created the room (?moi=1), or a newcomer just came through the invite
+ *  link (?vao=1, from /rooms/join). */
+export function RoomScreen({ roomId, greet }: { roomId: number; greet?: "created" | "joined" }) {
   const rooms = useMemo(() => createRoomsApi(), []);
   const router = useRouter();
   const { me, whenReady } = useMe();
@@ -68,14 +70,18 @@ export function RoomScreen({ roomId, fresh = false }: { roomId: number; fresh?: 
   }, [rooms, roomId, whenReady]);
   useReloadWhenOnline(useCallback(() => void refresh(), [refresh]));
 
-  // Just created: say where the link is (once; the ?moi=1 goes away).
+  // Just created or just joined: say what to do next (once; the ?moi=1 / ?vao=1 goes away).
   const greeted = useRef(false);
   useEffect(() => {
-    if (!fresh || !loaded || greeted.current) return;
+    if (!greet || !loaded || greeted.current) return;
     greeted.current = true;
-    toast({ kind: "success", title: "Đã mở bàn", text: "Gửi link mời (hoặc cho quét QR) để hội bạn vào." });
+    toast(
+      greet === "created"
+        ? { kind: "success", title: "Đã mở bàn", text: "Gửi link mời (hoặc cho quét QR) để hội bạn vào." }
+        : { kind: "success", title: `Bạn đã vào ${state && "detail" in state ? state.detail.room.name : "phòng"}`, text: "Chọn một ghế trống để ngồi, hoặc vào bàn để xem." },
+    );
     router.replace(`/rooms/${roomId}`, { scroll: false });
-  }, [fresh, loaded, roomId, router, toast]);
+  }, [greet, loaded, roomId, router, state, toast]);
 
   // Kicked while on the page: the socket says so first (4403); the REST reload then fails too.
   const kickedSaid = useRef(false);
@@ -86,6 +92,13 @@ export function RoomScreen({ roomId, fresh = false }: { roomId: number; fresh?: 
     toast({ kind: "danger", icon: <DoorOpen size={20} strokeWidth={1.9} />, title: "Bạn đã bị mời ra khỏi phòng", text: `Chủ phòng ${name} đã mời bạn ra. Chip của bạn vẫn ghi trong lịch sử.`, duration: 0 });
     void refresh();
   }, [live.closedBy, refresh, state, toast]);
+  // The socket refused this viewer for another reason (4404: no access to a private room).
+  const refusedSaid = useRef(false);
+  useEffect(() => {
+    if (live.closedBy !== "no_access" || refusedSaid.current) return;
+    refusedSaid.current = true;
+    toast({ kind: "danger", title: "Bạn không có quyền xem phòng này", text: "Chat và người xem không cập nhật nữa. Xin chủ phòng link mời mới.", duration: 0 });
+  }, [live.closedBy, toast]);
 
   const sub = {
     title: state && "detail" in state ? state.detail.room.name : "Phòng",
@@ -237,7 +250,7 @@ export function RoomScreen({ roomId, fresh = false }: { roomId: number; fresh?: 
                     </small>
                   </span>
                   {mine && !closed && (
-                    <Button kind="quiet" size="sm" busy={busySeat === n} onClick={() => act(n, () => rooms.leaveSeat(roomId), "Đã rời ghế")}>
+                    <Button kind="quiet" size="sm" busy={busySeat === n} disabled={busySeat !== null} onClick={() => act(n, () => rooms.leaveSeat(roomId), "Đã rời ghế")}>
                       Rời ghế
                     </Button>
                   )}
@@ -248,7 +261,7 @@ export function RoomScreen({ roomId, fresh = false }: { roomId: number; fresh?: 
                     <small>Ghế trống</small>
                   </span>
                   {mySeat === null && !closed && (
-                    <Button kind="ghost" size="sm" busy={busySeat === n} onClick={() => act(n, () => rooms.takeSeat(roomId, n), `Đã ngồi ghế ${n}`)}>
+                    <Button kind="ghost" size="sm" busy={busySeat === n} disabled={busySeat !== null} onClick={() => act(n, () => rooms.takeSeat(roomId, n), `Đã ngồi ghế ${n}`)}>
                       Ngồi đây
                     </Button>
                   )}
@@ -297,6 +310,7 @@ export function RoomScreen({ roomId, fresh = false }: { roomId: number; fresh?: 
           {detail.is_owner && !closed && (
             <ShareCard detail={detail} onCopied={(ok) => toast(ok ? { kind: "success", title: "Đã chép link mời" } : { kind: "danger", title: "Không chép được", text: "Trình duyệt chặn bộ nhớ tạm. Bấm giữ vào link để chép." })} />
           )}
+          {!detail.is_owner && <PendingNotice detail={detail} />}
           {seatsPanel}
           {!phone && chat}
         </div>

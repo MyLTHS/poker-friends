@@ -57,11 +57,31 @@ export function useReloadWhenOnline(reload: () => void) {
   return online;
 }
 
+/** Whole seconds left until `until` (a Date.now() time), ticking every second; 0 when past. For
+ *  a 429's Retry-After: the retry button stays locked and says how long. */
+export function useCountdown(until: number | undefined): number {
+  const subscribe = useCallback(
+    (onTick: () => void) => {
+      if (!until) return () => undefined;
+      const timer = window.setInterval(onTick, 1000);
+      return () => window.clearInterval(timer);
+    },
+    [until],
+  );
+  return useSyncExternalStore(subscribe, () => (until ? Math.max(0, Math.ceil((until - Date.now()) / 1000)) : 0), () => 0);
+}
+
 const never = () => () => undefined;
 
 /** A browser-only value read once on the client (the server and hydration see `server`). */
 export function useClientValue<T>(read: () => T, server: T): T {
   return useSyncExternalStore(never, read, () => server);
+}
+
+/** The page's origin for links shown on screen (invite links). "" on the server and during
+ *  hydration, so nothing reads `window` while rendering there. */
+export function useOrigin(): string {
+  return useClientValue(() => window.location.origin, "");
 }
 
 /** The signed-in player (a guest counts): `undefined` while asking, `null` when nobody is. Also
