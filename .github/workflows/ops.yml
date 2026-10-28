@@ -98,6 +98,7 @@ jobs:
               -e 's/^DJANGO_ALLOWED_HOSTS=.*/DJANGO_ALLOWED_HOSTS=localhost/' \
               -e 's#^FRONTEND_URL=.*#FRONTEND_URL=http://localhost#' \
               -e 's/^DJANGO_BEHIND_HTTPS_PROXY=.*/DJANGO_BEHIND_HTTPS_PROXY=false/' \
+              -e 's/^GUESTS_ALLOWED=.*/GUESTS_ALLOWED=true/' \
               -e "s/^DJANGO_SECRET_KEY=.*/DJANGO_SECRET_KEY=$(openssl rand -hex 32)/" \
               deploy/env.production.example > .env
       - run: $DC config -q

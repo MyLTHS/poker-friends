@@ -8,7 +8,7 @@
 #   scripts/play-online.sh status   # running? which link?
 #   scripts/play-online.sh logs     # last server log lines (email links when EMAIL_URL is empty)
 #   scripts/play-online.sh links    # verification / password reset links emailed this session
-#   scripts/play-online.sh verify <email>   # vouch for a friend: mark their email verified
+#   scripts/play-online.sh verify <email>   # let a friend in: approve their account (asks first)
 #   scripts/play-online.sh admin    # create the owner's admin login (feedback, errors, users)
 #   scripts/play-online.sh down     # back up, stop the tunnel and the stack (data and the Docker
 #                                     # Desktop group are kept: ▶ starts it again)
@@ -79,6 +79,9 @@ TRUSTED_PROXIES=1
 DJANGO_ALLOWED_HOSTS=.trycloudflare.com,localhost,127.0.0.1
 FRONTEND_URL=http://localhost
 FRONTEND_URL_FROM_REQUEST=true
+# Members only: only verified accounts reach the rooms (no guests). Friends sign up, then the owner
+# vouches for each: scripts/play-online.sh verify <email>, or the "verified" box in /admin/.
+GUESTS_ALLOWED=false
 POSTGRES_DB=poker
 POSTGRES_USER=poker
 POSTGRES_PASSWORD=$password
@@ -303,7 +306,14 @@ cmd_links() {
 cmd_verify() {
   [ -n "${1:-}" ] || die "cần email, ví dụ: scripts/play-online.sh verify ban@example.com"
   [ -f "$ENV_FILE" ] || die "chưa chạy lần nào."
-  dc exec -T backend python manage.py verify_email -- "$1"
+  # Show whose account it is first: someone could have signed up with a friend's email.
+  dc exec -T backend python manage.py verify_email --show -- "$1" || exit 1
+  local answer=""
+  read -r -p "Đúng là bạn của bạn? Duyệt tài khoản này? (y/n) " answer
+  case "$answer" in
+    y | Y | yes | có | co) dc exec -T backend python manage.py verify_email -- "$1" ;;
+    *) say "Không duyệt." ;;
+  esac
 }
 
 cmd_admin() {

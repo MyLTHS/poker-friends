@@ -30,8 +30,34 @@ class ViewOnlyAdmin(admin.ModelAdmin):
 
 @admin.register(User)
 class PokerUserAdmin(UserAdmin):
-    fieldsets = UserAdmin.fieldsets + (("Poker Friends", {"fields": ("is_guest",)}),)
-    list_display = ("username", "email", "is_guest", "is_staff")
+    fieldsets = UserAdmin.fieldsets + (("Poker Friends", {"fields": ("is_guest", "approved")}),)
+    list_display = ("username", "email", "date_joined", "approved", "is_guest", "is_staff")
+    list_filter = ("approved", "is_guest", "is_staff", "is_active")
+    ordering = ("-date_joined",)
+    actions = ["approve", "withdraw_approval"]
+
+    @admin.action(description="Duyệt (cho vào chơi, xác minh luôn email)")
+    def approve(self, request, queryset):
+        from apps.accounts.services import mark_email_verified
+
+        people = list(queryset.filter(is_guest=False).exclude(email=""))
+        for user in people:
+            mark_email_verified(user)
+        queryset.filter(pk__in=[u.pk for u in people]).update(approved=True)
+        self.message_user(request, f"Đã duyệt {len(people)} tài khoản.")
+
+    @admin.action(description="Bỏ duyệt (không cho vào chơi nữa)")
+    def withdraw_approval(self, request, queryset):
+        from asgiref.sync import async_to_sync
+
+        from apps.games.actor import drop_player_everywhere
+        from apps.games.consumers import LOGIN_REQUIRED_CLOSE_CODE
+
+        ids = list(queryset.values_list("pk", flat=True))
+        count = queryset.update(approved=False)
+        for user_id in ids:  # out of every table now, even one only watching
+            async_to_sync(drop_player_everywhere)(user_id, LOGIN_REQUIRED_CLOSE_CODE)
+        self.message_user(request, f"Đã bỏ duyệt {count} tài khoản.")
 
     def has_delete_permission(self, request, obj=None):
         # Deleting cascades to seats, bans and memberships behind the table actor's back, and

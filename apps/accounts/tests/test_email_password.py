@@ -37,12 +37,12 @@ class TestConfig:
         with override_settings(GOOGLE_CLIENT_ID="", GOOGLE_CLIENT_SECRET=""):
             response = client.get("/api/auth/config/")
         assert response.status_code == 200
-        assert response.json() == {"google_enabled": False}
+        assert response.json()["google_enabled"] is False
 
     def test_google_is_on_with_both_keys(self, client):
         with override_settings(GOOGLE_CLIENT_ID="id", GOOGLE_CLIENT_SECRET="secret"):
             response = client.get("/api/auth/config/")
-        assert response.json() == {"google_enabled": True}
+        assert response.json()["google_enabled"] is True
 
     def test_config_sets_the_csrf_cookie(self, client):
         response = client.get("/api/auth/config/")
