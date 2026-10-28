@@ -1480,8 +1480,9 @@
   .d1 .btn.is-busy {
     cursor: progress;
   }
+  /* opacity, not visibility: a hidden label would take the button's name away from screen readers */
   .d1 .btn.is-busy > :not(.btn-spinner) {
-    visibility: hidden;
+    opacity: 0;
   }
   .d1 .btn-spinner {
     position: absolute;
