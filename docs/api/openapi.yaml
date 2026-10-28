@@ -10,6 +10,8 @@ info:
     - `B7`: phòng và quyền (lobby, tạo/xem phòng, link mời, quyền chủ phòng) — **đã cài**.
     - `B8`: chat, lịch sử ván, replay, bảng lời/lỗ (tag `history`) — **đã cài**. Người có quyền
       xem phòng (như `getRoom`) xem được; staff có quyền chủ phòng ở mọi phòng.
+    - `F`: phản hồi của người chơi và lỗi trình duyệt cho buổi beta (tag `feedback`) — **đã cài**.
+      Chỉ ghi; không có endpoint đọc, người quản trị xem trong Django admin.
 
     Đăng nhập dùng cookie phiên của Django (`sessionid`). Mọi request không phải GET gửi header
     `X-CSRFToken` bằng giá trị cookie `csrftoken` (gọi `GET /api/auth/config/` để có cookie này),
@@ -41,6 +43,8 @@ tags:
     description: Tài khoản (B6) — email/mật khẩu, khách, nâng cấp khách, Google
   - name: history
     description: Chat, lịch sử ván, replay, bảng lời/lỗ (B8)
+  - name: feedback
+    description: Phản hồi của người chơi và lỗi trình duyệt (F, buổi beta). Chỉ ghi.
 paths:
   /api/rooms/:
     get:
@@ -803,6 +807,71 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  /api/feedback/:
+    post:
+      tags: [feedback]
+      operationId: sendFeedback
+      summary: Gửi phản hồi (lỗi, ý tưởng, khác)
+      description: |
+        Phải đăng nhập, khách cũng được. Tối đa 10 lần mỗi giờ mỗi người. `room_id` là phòng đang
+        chơi (nếu có); phòng không có hoặc không được xem đều báo `validation_error` ở `room_id`.
+        Server tự ghi trình duyệt (`User-Agent`); token trong `page` (link mời, link đặt lại mật
+        khẩu) bị xoá trước khi lưu. Không có endpoint đọc lại.
+      x-phase: F
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackRequest"
+            example:
+              kind: bug
+              message: Bấm Theo hai lần mới ăn.
+              page: /rooms/3/table
+              room_id: 3
+      responses:
+        "201":
+          description: Đã nhận
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackCreated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/client-errors/:
+    post:
+      tags: [feedback]
+      operationId: reportClientError
+      summary: Báo một lỗi JavaScript của trình duyệt
+      description: |
+        Không cần đăng nhập. Tối đa 30 lần/10 phút mỗi người (nếu đã đăng nhập) và 60 lần/10 phút
+        mỗi IP. Trường dài hơn giới hạn bị cắt bớt, không bị từ chối. Cùng `message` và `page`
+        trong 10 phút chỉ tăng bộ đếm, không lưu thêm dòng. Trước khi lưu, server xoá cookie,
+        `sessionid`, `csrftoken`, token trong link và mảng bài (`cards`, `deck`) khỏi mọi trường;
+        client cũng không được gửi chúng. Không có endpoint đọc lại.
+      x-phase: F
+      security: [{}, {session: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientErrorReport"
+      responses:
+        "204":
+          description: Đã nhận (hoặc đã cộng vào lỗi giống hệt trong 10 phút qua)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 components:
   securitySchemes:
     session:
@@ -818,6 +887,55 @@ components:
       schema:
         $ref: "./schema/common.schema.json#/$defs/RoomId"
   schemas:
+    FeedbackRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [bug, idea, other]
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Bỏ khoảng trắng hai đầu rồi tính độ dài; toàn khoảng trắng là thiếu.
+        page:
+          type: string
+          maxLength: 500
+          description: Đường dẫn trang lúc gửi, ví dụ `/rooms/3/table`.
+        room_id:
+          type: [integer, "null"]
+          minimum: 1
+      required: [kind, message]
+      additionalProperties: false
+    FeedbackCreated:
+      type: object
+      properties:
+        feedback_id:
+          type: integer
+      required: [feedback_id]
+      additionalProperties: false
+    ClientErrorReport:
+      type: object
+      description: Trường nào dài hơn giới hạn thì server cắt bớt.
+      properties:
+        message:
+          type: string
+          minLength: 1
+          description: Server giữ tối đa 1000 ký tự.
+        stack:
+          type: string
+          description: Server giữ tối đa 8000 ký tự.
+        page:
+          type: string
+          description: Server giữ tối đa 500 ký tự.
+        user_agent:
+          type: string
+          description: Trống thì server lấy header `User-Agent`. Tối đa 500 ký tự.
+        release:
+          type: string
+          description: Phiên bản web đang chạy. Tối đa 64 ký tự.
+      required: [message]
+      additionalProperties: false
     CreateRoomRequest:
       type: object
       properties:

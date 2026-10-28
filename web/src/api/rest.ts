@@ -600,10 +600,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/feedback/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gửi phản hồi (lỗi, ý tưởng, khác)
+         * @description Phải đăng nhập, khách cũng được. Tối đa 10 lần mỗi giờ mỗi người. `room_id` là phòng đang
+         *     chơi (nếu có); phòng không có hoặc không được xem đều báo `validation_error` ở `room_id`.
+         *     Server tự ghi trình duyệt (`User-Agent`); token trong `page` (link mời, link đặt lại mật
+         *     khẩu) bị xoá trước khi lưu. Không có endpoint đọc lại.
+         */
+        post: operations["sendFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/client-errors/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Báo một lỗi JavaScript của trình duyệt
+         * @description Không cần đăng nhập. Tối đa 30 lần/10 phút mỗi người (nếu đã đăng nhập) và 60 lần/10 phút
+         *     mỗi IP. Trường dài hơn giới hạn bị cắt bớt, không bị từ chối. Cùng `message` và `page`
+         *     trong 10 phút chỉ tăng bộ đếm, không lưu thêm dòng. Trước khi lưu, server xoá cookie,
+         *     `sessionid`, `csrftoken`, token trong link và mảng bài (`cards`, `deck`) khỏi mọi trường;
+         *     client cũng không được gửi chúng. Không có endpoint đọc lại.
+         */
+        post: operations["reportClientError"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        FeedbackRequest: {
+            /** @enum {string} */
+            kind: "bug" | "idea" | "other";
+            /** @description Bỏ khoảng trắng hai đầu rồi tính độ dài; toàn khoảng trắng là thiếu. */
+            message: string;
+            /** @description Đường dẫn trang lúc gửi, ví dụ `/rooms/3/table`. */
+            page?: string;
+            room_id?: number | null;
+        };
+        FeedbackCreated: {
+            feedback_id: number;
+        };
+        /** @description Trường nào dài hơn giới hạn thì server cắt bớt. */
+        ClientErrorReport: {
+            /** @description Server giữ tối đa 1000 ký tự. */
+            message: string;
+            /** @description Server giữ tối đa 8000 ký tự. */
+            stack?: string;
+            /** @description Server giữ tối đa 500 ký tự. */
+            page?: string;
+            /** @description Trống thì server lấy header `User-Agent`. Tối đa 500 ký tự. */
+            user_agent?: string;
+            /** @description Phiên bản web đang chạy. Tối đa 64 ký tự. */
+            release?: string;
+        };
         CreateRoomRequest: {
             name: string;
             /** @default 9 */
@@ -1828,6 +1900,67 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    sendFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "kind": "bug",
+                 *       "message": "Bấm Theo hai lần mới ăn.",
+                 *       "page": "/rooms/3/table",
+                 *       "room_id": 3
+                 *     }
+                 */
+                "application/json": components["schemas"]["FeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Đã nhận */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackCreated"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    reportClientError: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientErrorReport"];
+            };
+        };
+        responses: {
+            /** @description Đã nhận (hoặc đã cộng vào lỗi giống hệt trong 10 phút qua) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
         };
     };
 }
