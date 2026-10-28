@@ -36,53 +36,83 @@ export function Panel({
   );
 }
 
+/** Fired on document after a dialog opens: the toast layer re-enters the top layer above it. */
+const DIALOG_OPENED = "d1:dialog-opened";
+
 /** Opens and closes a <dialog> with showModal() as `open` changes: focus moves in and is
- *  trapped, the page behind is inert, Esc and a click on the backdrop call onClose. */
-function useDialog(open: boolean, onClose: () => void) {
+ *  trapped, the page behind is inert. When `dismissible`, Esc and a click on the backdrop call
+ *  onClose; otherwise both do nothing. The dialog never closes behind the parent's back: a native
+ *  close (Chrome closes on a second Esc even when cancel is prevented) either reports onClose or,
+ *  for a dialog that cannot be dismissed, opens it again. */
+function useDialog(open: boolean, onClose: () => void, dismissible: boolean) {
   const ref = useRef<HTMLDialogElement>(null);
+  const latest = useRef({ open, onClose, dismissible });
+  useEffect(() => {
+    latest.current = { open, onClose, dismissible };
+  });
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      document.dispatchEvent(new Event(DIALOG_OPENED));
+    }
     if (!open && dialog.open) dialog.close();
   }, [open]);
-  const props = {
+  return {
     ref,
     onCancel: (e: SyntheticEvent) => {
       e.preventDefault();
-      onClose();
+      if (latest.current.dismissible) latest.current.onClose();
+    },
+    onClose: () => {
+      const { open: wanted, dismissible: canDismiss, onClose: report } = latest.current;
+      if (!wanted) return;
+      if (canDismiss) report();
+      else {
+        ref.current?.showModal();
+        document.dispatchEvent(new Event(DIALOG_OPENED));
+      }
     },
     onClick: (e: MouseEvent<HTMLDialogElement>) => {
-      if (e.target === e.currentTarget) onClose();
+      if (e.target === e.currentTarget && latest.current.dismissible) latest.current.onClose();
     },
   };
-  return props;
 }
+
+type DialogProps = {
+  open: boolean;
+  onClose: () => void;
+  /** false: no close button, Esc and the backdrop do nothing (e.g. "reconnecting…"); only the
+   *  parent closes it by setting `open` to false. Default true. */
+  dismissible?: boolean;
+};
 
 /** Centred dialog on the overlay card (confirmations, the reconnect notice). */
 export function Modal({
   open,
   onClose,
+  dismissible = true,
   title,
   icon,
   actions,
   children,
-}: {
-  open: boolean;
-  onClose: () => void;
+}: DialogProps & {
   title: ReactNode;
   icon?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
 }) {
-  const dialog = useDialog(open, onClose);
+  const dialog = useDialog(open, onClose, dismissible);
   const titleId = `${useId()}-title`;
   return (
     <dialog className="modal" aria-labelledby={titleId} {...dialog}>
       <div className="overlay-card modal-card">
-        <button type="button" className="iconbtn modal-x" aria-label="Đóng" onClick={onClose}>
-          <X size={18} />
-        </button>
+        {dismissible && (
+          <button type="button" className="iconbtn modal-x" aria-label="Đóng" onClick={onClose}>
+            <X size={18} />
+          </button>
+        )}
         {icon}
         <h2 id={titleId} className="modal-title">
           {title}
@@ -96,8 +126,15 @@ export function Modal({
 
 /** Side sheet from the right edge (owner panel, chat drawer); on the phone it leaves the table
  *  showing at its left. */
-export function Sheet({ open, onClose, title, aside, children }: { open: boolean; onClose: () => void; title: ReactNode; aside?: ReactNode; children: ReactNode }) {
-  const dialog = useDialog(open, onClose);
+export function Sheet({
+  open,
+  onClose,
+  dismissible = true,
+  title,
+  aside,
+  children,
+}: DialogProps & { title: ReactNode; aside?: ReactNode; children: ReactNode }) {
+  const dialog = useDialog(open, onClose, dismissible);
   const titleId = `${useId()}-title`;
   return (
     <dialog className="sheet" aria-labelledby={titleId} {...dialog}>
@@ -106,9 +143,11 @@ export function Sheet({ open, onClose, title, aside, children }: { open: boolean
           <h2 id={titleId}>{title}</h2>
           <span className="nav-right">
             {aside}
-            <button type="button" className="iconbtn" aria-label="Đóng" onClick={onClose}>
-              <X size={18} />
-            </button>
+            {dismissible && (
+              <button type="button" className="iconbtn" aria-label="Đóng" onClick={onClose}>
+                <X size={18} />
+              </button>
+            )}
           </span>
         </header>
         {children}
@@ -168,10 +207,29 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [close],
   );
   const value = useMemo(() => show, [show]);
+  // The toasts live in the top layer (popover="manual") so an open Modal or Sheet cannot cover
+  // them; re-entering it after every new toast or dialog keeps them on top of the latest one.
+  // (While a modal dialog is open the page outside it is inert: toasts show but take no clicks.)
+  const layer = useRef<HTMLDivElement>(null);
+  const hasItems = items.length > 0;
+  const raise = useCallback(() => {
+    const el = layer.current;
+    if (!el || typeof el.showPopover !== "function") return;
+    if (el.matches(":popover-open")) el.hidePopover();
+    if (el.childElementCount > 0) el.showPopover();
+  }, []);
+  useEffect(() => {
+    if (hasItems) raise();
+    else if (layer.current?.matches(":popover-open")) layer.current.hidePopover();
+  }, [hasItems, items.length, raise]);
+  useEffect(() => {
+    document.addEventListener(DIALOG_OPENED, raise);
+    return () => document.removeEventListener(DIALOG_OPENED, raise);
+  }, [raise]);
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="toasts" aria-live="polite">
+      <div ref={layer} popover="manual" className="toasts" aria-live="polite">
         {items.map((t) => (
           <Toast key={t.id} kind={t.kind} title={t.title} text={t.text} icon={t.icon} leaving={t.leaving} onClose={() => close(t.id)} />
         ))}
