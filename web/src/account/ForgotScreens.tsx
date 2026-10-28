@@ -23,6 +23,18 @@ const HERO = {
   sub: "Chip và lịch sử vẫn nằm yên ở bàn. Đặt lại mật khẩu là vào chơi tiếp.",
 };
 const PHONE = { kind: "bar" as const, title: "Lấy lại mật khẩu", sub: "Chip và lịch sử vẫn nằm yên ở bàn.", back: "/account" };
+// The invitation link (an account staff made in the admin) opens the same form.
+const INVITE_HERO = {
+  headline: (
+    <>
+      Bạn được mời
+      <br />
+      vào bàn.
+    </>
+  ),
+  sub: "Tài khoản đã có sẵn. Đặt mật khẩu là vào chơi được.",
+};
+const INVITE_PHONE = { kind: "bar" as const, title: "Lời mời vào bàn", sub: "Đặt mật khẩu là vào chơi được.", back: "/account" };
 
 function FlowArrow() {
   return (
@@ -91,12 +103,12 @@ function ForgotRequest({ api, ready }: { api: AuthApi; ready: boolean }) {
 }
 
 /** /account/reset?uid=…&token=…: the link in the password-reset email. `ready` as above. */
-export function ResetScreen({ api, uid, token, ready }: { api: AuthApi; uid: string; token: string; ready: boolean }) {
+export function ResetScreen({ api, uid, token, ready, invite = false }: { api: AuthApi; uid: string; token: string; ready: boolean; invite?: boolean }) {
   return (
-    <AuthFrame hero={HERO} phone={PHONE} layout="forgot">
+    <AuthFrame hero={invite ? INVITE_HERO : HERO} phone={invite ? INVITE_PHONE : PHONE} layout="forgot">
       <div className="auth-col only-desktop">
         <StepLabel n={1} done>
-          Xin link đặt lại
+          {invite ? "Nhận thư mời" : "Xin link đặt lại"}
         </StepLabel>
         <div className="auth-card is-quiet">
           <div className="card-head">
@@ -104,8 +116,8 @@ export function ResetScreen({ api, uid, token, ready }: { api: AuthApi; uid: str
               <Check size={20} strokeWidth={2.4} aria-hidden />
             </span>
             <span>
-              <h3>Đã có link</h3>
-              <p>Bạn đã mở link trong email. Còn một bước nữa.</p>
+              <h3>{invite ? "Đã có lời mời" : "Đã có link"}</h3>
+              <p>{invite ? "Bạn đã mở link trong thư mời. Còn một bước nữa." : "Bạn đã mở link trong email. Còn một bước nữa."}</p>
             </span>
           </div>
         </div>
@@ -114,7 +126,7 @@ export function ResetScreen({ api, uid, token, ready }: { api: AuthApi; uid: str
       <div className="auth-col">
         <StepLabel n={2}>Mở từ link</StepLabel>
         <div className="auth-card">
-          <ResetForm api={api} uid={uid} token={token} ready={ready} />
+          <ResetForm api={api} uid={uid} token={token} ready={ready} invite={invite} />
         </div>
       </div>
     </AuthFrame>
@@ -129,12 +141,14 @@ function ResetForm({
   token = "",
   ready = true,
   preview = false,
+  invite = false,
 }: {
   api?: AuthApi;
   uid?: string;
   token?: string;
   ready?: boolean;
   preview?: boolean;
+  invite?: boolean;
 }) {
   const submit = useSubmit();
   const [password, setPassword] = useState("");
@@ -152,8 +166,8 @@ function ResetForm({
   if (done) {
     return (
       <div className="form-stack">
-        <Alert kind="ok" icon={<ShieldCheck size={17} strokeWidth={1.9} aria-hidden />} title="Đã đổi mật khẩu">
-          Đăng nhập bằng mật khẩu mới nhé.
+        <Alert kind="ok" icon={<ShieldCheck size={17} strokeWidth={1.9} aria-hidden />} title={invite ? "Tài khoản đã sẵn sàng" : "Đã đổi mật khẩu"}>
+          {invite ? "Đăng nhập bằng email trong thư mời và mật khẩu vừa đặt." : "Đăng nhập bằng mật khẩu mới nhé."}
         </Alert>
         <ButtonLink href="/account" kind="primary" size="lg" block>
           Đăng nhập
@@ -177,8 +191,8 @@ function ResetForm({
           <ShieldCheck size={20} strokeWidth={1.8} aria-hidden />
         </span>
         <span>
-          <h3>Đặt mật khẩu mới</h3>
-          <p>{preview ? "Mở link trong email để dùng bước này." : "Cho tài khoản của bạn."}</p>
+          <h3>{invite ? "Đặt mật khẩu để vào chơi" : "Đặt mật khẩu mới"}</h3>
+          <p>{preview ? "Mở link trong email để dùng bước này." : invite ? "Cho tài khoản người mời đã tạo sẵn." : "Cho tài khoản của bạn."}</p>
         </span>
       </div>
       <NoticeAlert notice={submit.notice} />

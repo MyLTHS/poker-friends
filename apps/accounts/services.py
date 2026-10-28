@@ -18,6 +18,7 @@ from django.core import signing
 from django.core.mail import send_mail
 from django.db import IntegrityError, connection, transaction
 from django.template.loader import render_to_string
+from django.utils.crypto import constant_time_compare, salted_hmac
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 
@@ -28,6 +29,8 @@ from .middleware import request_origin
 
 MODEL_BACKEND = "django.contrib.auth.backends.ModelBackend"
 VERIFY_SALT = "accounts.verify-email"
+INVITE_SALT = "accounts.invite-player"
+INVITE_MAX_AGE = 7 * 24 * 60 * 60
 DEFAULT_VERIFICATION_MAX_AGE = 3 * 24 * 60 * 60
 GUEST_PREFIX = "khach-"
 
@@ -175,22 +178,55 @@ def signup(email: str, username: str, password: str) -> User:
     return user
 
 
-def create_player(email: str, username: str, password: str) -> User:
-    """A player's account made by staff (Django admin): ready to log in at once.
+def create_player(email: str, username: str) -> User:
+    """A player's account made by staff (Django admin), and its invitation email.
 
-    Staff vouch for the address, so it is verified now and no email is sent; the player can
-    change the password later with "Quên mật khẩu".
+    No password yet: the player sets their own from the invitation link (``invite_player``).
+    Staff vouch for the address, so it counts as verified from the start.
     """
     email = normalize_email(email)
     try:
         with transaction.atomic():
             lock_email(email)
             _check_unique(email, username)
-            user = User.objects.create_user(username=username, email=email, password=password)
+            user = User.objects.create_user(username=username, email=email, password=None)
             mark_email_verified(user)
     except IntegrityError as error:  # lost a race on the unique username
         raise AccountError("username_taken", "This name is already used.") from error
+    invite_player(user)
     return user
+
+
+def _invite_state(user: User) -> str:
+    # Changes once the player sets a password or logs in, so a link works once.
+    state = f"{user.pk}|{user.password}|{user.last_login}"
+    return salted_hmac(INVITE_SALT, state, algorithm="sha256").hexdigest()[:20]
+
+
+def invitation_link(user: User) -> str:
+    """The web's "set a password" page for ``user``, valid for INVITE_MAX_AGE (several days,
+    unlike a reset link) and once. ``moi=1`` makes the page greet a new player."""
+    token = signing.dumps({"u": user.pk, "s": _invite_state(user)}, salt=INVITE_SALT)
+    return web_link(
+        "/account/reset", uid=urlsafe_base64_encode(force_bytes(user.pk)), token=token, moi="1"
+    )
+
+
+def invite_player(user: User) -> str:
+    """Email ``user`` a fresh invitation; return its link (staff may also send it by chat)."""
+    link = invitation_link(user)
+    _send(user, "Lời mời vào Poker Friends", "invite", link, INVITE_MAX_AGE)
+    return link
+
+
+def _is_invitation(user: User, token: str) -> bool:
+    try:
+        data = signing.loads(token, salt=INVITE_SALT, max_age=INVITE_MAX_AGE)
+    except signing.BadSignature:  # includes SignatureExpired
+        return False
+    return data.get("u") == user.pk and constant_time_compare(
+        data.get("s", ""), _invite_state(user)
+    )
 
 
 def _email_and_ip(email: str, ip: str) -> str:
@@ -246,8 +282,9 @@ def user_for_reset(uid: str, token: str) -> User:
         user = User.objects.get(pk=pk, is_active=True)
     except (ValueError, OverflowError, User.DoesNotExist) as error:
         raise AccountError("invalid_token", "Bad reset link.") from error
-    # The token hashes the current password, so it stops working once used.
-    if not default_token_generator.check_token(user, token):
+    # The token hashes the current password, so it stops working once used. An invitation link
+    # (create_player) opens the same page with a longer-lived token of its own.
+    if not default_token_generator.check_token(user, token) and not _is_invitation(user, token):
         raise AccountError("invalid_token", "Bad, used or expired reset link.")
     return user
 

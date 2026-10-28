@@ -94,12 +94,13 @@ export function VerifyScreen({ token }: { token: string }) {
   );
 }
 
-/** /account/reset?uid=…&token=… — the link in the password-reset email. */
-export function ResetScreen({ uid, token }: { uid: string; token: string }) {
+/** /account/reset?uid=…&token=… — the link in the password-reset email, or (moi=1) in the
+ *  invitation email of an account made by staff. */
+export function ResetScreen({ uid, token, invite = false }: { uid: string; token: string; invite?: boolean }) {
   const api = useMemo(() => createAuthApi(), []);
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    window.history.replaceState(null, "", "/account/reset");
+    window.history.replaceState(null, "", invite ? "/account/reset?moi=1" : "/account/reset");
     let cancelled = false;
     void api.config().then(() => {
       if (!cancelled) setReady(true); // the csrftoken cookie the POST needs is set
@@ -107,6 +108,6 @@ export function ResetScreen({ uid, token }: { uid: string; token: string }) {
     return () => {
       cancelled = true;
     };
-  }, [api]);
-  return <D1ResetScreen api={api} uid={uid} token={token} ready={ready} />;
+  }, [api, invite]);
+  return <D1ResetScreen api={api} uid={uid} token={token} ready={ready} invite={invite} />;
 }
