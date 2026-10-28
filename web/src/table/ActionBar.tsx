@@ -13,7 +13,7 @@ import { fmt } from "@/ui";
 import { Countdown, LiveBar, type TurnClock } from "./clock";
 import type { Device } from "./geometry";
 import type { Preset } from "./seatView";
-import { isTyping, turnCommand } from "./shortcuts";
+import { isTyping, ownsArrows, turnCommand } from "./shortcuts";
 
 export type ActKind = "fold" | "check" | "call" | "raise";
 
@@ -27,6 +27,8 @@ export type TurnProps = {
   facingBet: boolean;
   clock?: TurnClock;
   enabled: boolean;
+  /** single-key shortcuts on (desktop; the table settings can turn them off) */
+  keys?: boolean;
   onAct: (kind: ActKind, amount?: number) => void;
 };
 
@@ -42,12 +44,12 @@ function useRaise(legal: LegalActions) {
   return { min, max, amount: clamp(amount, min, max), set };
 }
 
-function Slider({ raise, step, device }: { raise: ReturnType<typeof useRaise>; step: number; device: Device }) {
+function Slider({ raise, step, device, keys = false }: { raise: ReturnType<typeof useRaise>; step: number; device: Device; keys?: boolean }) {
   const frac = raise.max > raise.min ? (raise.amount - raise.min) / (raise.max - raise.min) : 1;
   const ic = device === "desktop" ? 14 : 16;
   return (
     <>
-      <button type="button" className="step-btn" aria-label="Giảm mức tố" aria-keyshortcuts="ArrowDown" onClick={() => raise.set(raise.amount - step)} disabled={raise.amount <= raise.min}>
+      <button type="button" className="step-btn" aria-label="Giảm mức tố" aria-keyshortcuts={keys ? "ArrowDown" : undefined} onClick={() => raise.set(raise.amount - step)} disabled={raise.amount <= raise.min}>
         <Minus size={ic} strokeWidth={2.2} />
       </button>
       <span className="slider">
@@ -67,7 +69,7 @@ function Slider({ raise, step, device }: { raise: ReturnType<typeof useRaise>; s
           aria-valuetext={`${fmt(raise.amount)} chip`}
         />
       </span>
-      <button type="button" className="step-btn" aria-label="Tăng mức tố" aria-keyshortcuts="ArrowUp" onClick={() => raise.set(raise.amount + step)} disabled={raise.amount >= raise.max}>
+      <button type="button" className="step-btn" aria-label="Tăng mức tố" aria-keyshortcuts={keys ? "ArrowUp" : undefined} onClick={() => raise.set(raise.amount + step)} disabled={raise.amount >= raise.max}>
         <Plus size={ic} strokeWidth={2.2} />
       </button>
     </>
@@ -97,11 +99,11 @@ function AmountBox({ raise }: { raise: ReturnType<typeof useRaise> }) {
   );
 }
 
-function Presets({ presets, raise, className }: { presets: Preset[]; raise: ReturnType<typeof useRaise>; className: string }) {
+function Presets({ presets, raise, className, keys = false }: { presets: Preset[]; raise: ReturnType<typeof useRaise>; className: string; keys?: boolean }) {
   return (
     <div className={className} role="group" aria-label="Mức tố nhanh">
       {presets.map((p, i) => (
-        <button key={p.label} type="button" className={`preset${p.amount === raise.amount ? " is-active" : ""}`} onClick={() => raise.set(p.amount)} aria-pressed={p.amount === raise.amount} aria-keyshortcuts={String(i + 1)}>
+        <button key={p.label} type="button" className={`preset${p.amount === raise.amount ? " is-active" : ""}`} onClick={() => raise.set(p.amount)} aria-pressed={p.amount === raise.amount} aria-keyshortcuts={keys ? String(i + 1) : undefined}>
           <span>{p.label}</span>
           <b>{fmt(p.amount)}</b>
         </button>
@@ -110,30 +112,31 @@ function Presets({ presets, raise, className }: { presets: Preset[]; raise: Retu
   );
 }
 
-function Acts({ legal, raise, facingBet, enabled, onAct }: { legal: LegalActions; raise: ReturnType<typeof useRaise>; facingBet: boolean; enabled: boolean; onAct: TurnProps["onAct"] }) {
+function Acts({ legal, raise, facingBet, enabled, keys = false, onAct }: { legal: LegalActions; raise: ReturnType<typeof useRaise>; facingBet: boolean; enabled: boolean; keys?: boolean; onAct: TurnProps["onAct"] }) {
+  const hint = (k: string) => (keys ? k : undefined);
   const canRaise = legal.min_raise_to !== null && legal.max_raise_to !== null;
   const allIn = canRaise && raise.amount === raise.max;
   return (
     <>
       {legal.can_fold && (
-        <button type="button" className="act act-fold" disabled={!enabled} onClick={() => onAct("fold")} aria-keyshortcuts="F">
+        <button type="button" className="act act-fold" disabled={!enabled} onClick={() => onAct("fold")} aria-keyshortcuts={hint("F")}>
           <span>Bỏ</span>
         </button>
       )}
       {legal.can_check ? (
-        <button type="button" className="act act-call" disabled={!enabled} onClick={() => onAct("check")} aria-keyshortcuts="C">
+        <button type="button" className="act act-call" disabled={!enabled} onClick={() => onAct("check")} aria-keyshortcuts={hint("C")}>
           <span>Check</span>
         </button>
       ) : (
         legal.call_amount > 0 && (
-          <button type="button" className="act act-call" disabled={!enabled} onClick={() => onAct("call")} aria-keyshortcuts="C">
+          <button type="button" className="act act-call" disabled={!enabled} onClick={() => onAct("call")} aria-keyshortcuts={hint("C")}>
             <span>Theo</span>
             <b>{fmt(legal.call_amount)}</b>
           </button>
         )
       )}
       {canRaise && (
-        <button type="button" className="act act-raise" disabled={!enabled} onClick={() => onAct("raise", raise.amount)} aria-keyshortcuts="R">
+        <button type="button" className="act act-raise" disabled={!enabled} onClick={() => onAct("raise", raise.amount)} aria-keyshortcuts={hint("R")}>
           <span>{allIn ? "All-in" : facingBet ? "Tố" : "Cược"}</span>
           <b>{fmt(raise.amount)}</b>
         </button>
@@ -150,8 +153,8 @@ function useShortcuts(enabled: boolean, legal: LegalActions, presets: Preset[], 
     if (!enabled) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.defaultPrevented || isTyping(e.target) || document.querySelector("dialog[open]")) return;
-      // the slider moves with its own arrow keys
-      if (e.key.startsWith("Arrow") && (e.target as HTMLInputElement | null)?.type === "range") return;
+      // tabs, radio groups and the slider move with their own arrow keys
+      if (e.key.startsWith("Arrow") && ownsArrows(e.target)) return;
       const cmd = turnCommand(e, legal, presets.length);
       if (!cmd) return;
       e.preventDefault();
@@ -171,9 +174,9 @@ const timeoutNote = (legal: LegalActions, short: boolean) =>
 
 /** Desktop: my turn. */
 export function TurnBar(props: TurnProps) {
-  const { legal, presets, step, facingBet, clock, enabled, onAct } = props;
+  const { legal, presets, step, facingBet, clock, enabled, keys = false, onAct } = props;
   const raise = useRaise(legal);
-  useShortcuts(enabled, legal, presets, step, raise, onAct);
+  useShortcuts(enabled && keys, legal, presets, step, raise, onAct);
   const canRaise = legal.min_raise_to !== null;
   return (
     <div className="abar" role="region" aria-label="Tới lượt bạn">
@@ -191,13 +194,13 @@ export function TurnBar(props: TurnProps) {
         <span className="abar-note">{timeoutNote(legal, false)}</span>
       </div>
       <div className="abar-main">
-        <Acts legal={legal} raise={raise} facingBet={facingBet} enabled={enabled} onAct={onAct} />
+        <Acts legal={legal} raise={raise} facingBet={facingBet} enabled={enabled} keys={keys} onAct={onAct} />
       </div>
       {canRaise && (
         <div className="abar-raise">
-          <Presets presets={presets} raise={raise} className="presets" />
+          <Presets presets={presets} raise={raise} className="presets" keys={keys} />
           <div className="slider-row">
-            <Slider raise={raise} step={step} device="desktop" />
+            <Slider raise={raise} step={step} device="desktop" keys={keys} />
             <AmountBox raise={raise} />
           </div>
         </div>

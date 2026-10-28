@@ -38,7 +38,7 @@ import {
 } from "./Side";
 import { FitStage, Stage } from "./Stage";
 import { useTableFx, type SeatPlace } from "./TableFx";
-import { SettingsModal, ShortcutHelp, SoundCues, useTableSound } from "./TableSettings";
+import { SettingsModal, ShortcutHelp, SoundCues, useKeysPref, useTableSound } from "./TableSettings";
 import { globalCommand, isTyping } from "./shortcuts";
 import { useTableSocket } from "./useTableSocket";
 
@@ -82,24 +82,27 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const [seatError, setSeatError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<"owner" | "settings" | "help" | null>(null);
   const sound = useTableSound();
+  const [keysOn, setKeysOn] = useKeysPref();
   const { table } = model;
   const closeDialog = useCallback(() => setDialog(null), []);
 
   // Keys that work any time on the desktop table: ? help, M sound (my turn's keys: ActionBar).
+  // Off with the settings' shortcut switch; a held key does not toggle again and again.
   const { prefs: soundPrefs, setPrefs: setSoundPrefs } = sound;
   useEffect(() => {
-    if (device !== "desktop") return;
+    if (device !== "desktop" || !keysOn) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || isTyping(e.target) || document.querySelector("dialog[open]")) return;
       const cmd = globalCommand(e);
       if (!cmd) return;
       e.preventDefault();
+      if (e.repeat) return;
       if (cmd.kind === "help") setDialog("help");
       else if (cmd.kind === "sound") setSoundPrefs({ ...soundPrefs, on: !soundPrefs.on });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [device, soundPrefs, setSoundPrefs]);
+  }, [device, keysOn, soundPrefs, setSoundPrefs]);
 
   // Chat said while we were away: the socket only brings new lines.
   useEffect(() => {
@@ -223,6 +226,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
         facingBet: hand.players.some((p) => p.bet > 0),
         clock: myClock,
         enabled: online && !pending,
+        keys: device === "desktop" && keysOn,
         onAct,
       }
     : null;
@@ -270,9 +274,9 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const dialogs = (
     <>
       {owner?.({ open: dialog === "owner", onClose: closeDialog, seats: table.seats, inHand })}
-      <SettingsModal open={dialog === "settings"} onClose={closeDialog} sound={sound} desktop={device === "desktop"} onHelp={() => setDialog("help")} />
+      <SettingsModal open={dialog === "settings"} onClose={closeDialog} sound={sound} keys={device === "desktop" ? { on: keysOn, set: setKeysOn } : undefined} onHelp={() => setDialog("help")} />
       {device === "desktop" && <ShortcutHelp open={dialog === "help"} onClose={closeDialog} />}
-      <SoundCues sound={sound} cues={model.fx} mySeat={occupant?.seat ?? null} myTurn={myTurn && online} deadline={myClock?.deadline ?? 0} frozen={myClock?.frozenAt !== undefined} />
+      <SoundCues sound={sound} cues={model.fx} mySeat={occupant?.seat ?? null} myTurn={myTurn} turnKey={myTurn && turn ? `${hand?.hand_id}:${turn.deadline}` : null} deadline={myClock?.deadline ?? 0} frozen={myClock?.frozenAt !== undefined} />
     </>
   );
 
@@ -289,7 +293,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   // Screen readers hear when it becomes my turn (once: the text only changes with the turn).
   const announce = (
     <p className="sr-only" role="status" aria-live="polite">
-      {myTurn && legal ? `Tới lượt bạn. ${legal.can_check ? "Có thể check." : `Theo ${fmt(legal.call_amount)}.`} ${device === "desktop" ? `Phím tắt: F bỏ, C ${legal.can_check ? "check" : "theo"}, R tố, dấu hỏi để xem thêm.` : ""}` : ""}
+      {myTurn && legal ? `Tới lượt bạn. ${legal.can_check ? "Có thể check." : `Theo ${fmt(legal.call_amount)}.`} ${device === "desktop" && keysOn ? `Phím tắt: F bỏ, C ${legal.can_check ? "check" : "theo"}, R tố, dấu hỏi để xem thêm.` : ""}` : ""}
     </p>
   );
 

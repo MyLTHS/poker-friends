@@ -4,6 +4,7 @@
 // Off by default; the choice (on/off + volume) is kept in localStorage, every access guarded
 // (private windows and blocked storage throw).
 import type { CueBody } from "./cues";
+import { readJson, writeJson } from "./prefs";
 
 export type SoundName = "deal" | "turn" | "hurry" | "pot" | "win" | "seven";
 
@@ -19,32 +20,15 @@ export const VOLUMES = [
 
 const KEY = "pf.table.sound";
 
-function storage(): Storage | null {
-  try {
-    return typeof window === "undefined" ? null : window.localStorage;
-  } catch {
-    return null;
-  }
+export function readPrefs(store?: Storage | null): SoundPrefs {
+  const data = readJson(KEY, store) as Partial<SoundPrefs> | null;
+  if (!data || typeof data !== "object") return DEFAULT_PREFS;
+  const volume = typeof data.volume === "number" && data.volume > 0 && data.volume <= 1 ? data.volume : DEFAULT_PREFS.volume;
+  return { on: data.on === true, volume };
 }
 
-export function readPrefs(store: Storage | null = storage()): SoundPrefs {
-  try {
-    const raw = store?.getItem(KEY);
-    if (!raw) return DEFAULT_PREFS;
-    const data = JSON.parse(raw) as Partial<SoundPrefs>;
-    const volume = typeof data.volume === "number" && data.volume > 0 && data.volume <= 1 ? data.volume : DEFAULT_PREFS.volume;
-    return { on: data.on === true, volume };
-  } catch {
-    return DEFAULT_PREFS;
-  }
-}
-
-export function writePrefs(prefs: SoundPrefs, store: Storage | null = storage()): void {
-  try {
-    store?.setItem(KEY, JSON.stringify(prefs));
-  } catch {
-    // storage full or blocked: the choice lasts for this page only
-  }
+export function writePrefs(prefs: SoundPrefs, store?: Storage | null): void {
+  writeJson(KEY, prefs, store);
 }
 
 /** Sounds for the animation cues of one state event. `mySeat` = my seat, null when watching. */
@@ -102,9 +86,16 @@ export function recipe(name: SoundName, count = 1): Voice[] {
 
 type AudioCtor = typeof AudioContext;
 
-export type Synth = { play: (name: SoundName, volume: number, count?: number) => void; wake: () => void };
+export type Synth = {
+  play: (name: SoundName, volume: number, count?: number) => void;
+  /** From a click or key only: makes the AudioContext, or resumes it (browsers start audio only
+   *  after a gesture). Until then play() stays silent. */
+  wake: () => void;
+  /** Leaving the table: give the audio device back. */
+  close: () => void;
+};
 
-/** A synth on one AudioContext, made on first use (a click: browsers start audio only after one). */
+/** A synth on one AudioContext, made by the first wake(). */
 export function createSynth(): Synth {
   let ctx: AudioContext | null = null;
   let noise: AudioBuffer | null = null;
@@ -127,10 +118,15 @@ export function createSynth(): Synth {
       const c = context();
       if (c && c.state === "suspended") void c.resume();
     },
+    close() {
+      if (ctx && ctx.state !== "closed") void ctx.close();
+      ctx = null;
+      noise = null;
+    },
     play(name, volume, count) {
-      const c = context();
-      if (!c || volume <= 0) return;
-      if (c.state === "suspended") void c.resume();
+      // never made or not yet allowed to run: nothing to hear, and no autoplay warning
+      const c = ctx;
+      if (!c || c.state !== "running" || volume <= 0) return;
       const out = c.createGain();
       out.gain.value = volume;
       out.connect(c.destination);

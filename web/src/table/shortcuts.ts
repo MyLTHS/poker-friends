@@ -3,6 +3,8 @@
 // the raise amount is moved by the bar's own clamp into [min_raise_to, max_raise_to].
 import type { LegalActions } from "@/api/protocol";
 
+import { readJson, writeJson } from "./prefs";
+
 export type ShortcutCommand =
   | { kind: "fold" }
   | { kind: "check" }
@@ -17,6 +19,19 @@ export type ShortcutCommand =
   | { kind: "sound" };
 
 type KeyLike = Pick<KeyboardEvent, "key" | "shiftKey" | "ctrlKey" | "metaKey" | "altKey">;
+
+const KEY = "pf.table.keys";
+
+/** Single-key shortcuts can be turned off (WCAG 2.1.4: a stray key must not fold a hand). On
+ *  unless switched off in the table settings. */
+export function readKeysOn(store?: Storage | null): boolean {
+  const data = readJson(KEY, store) as { on?: unknown } | null;
+  return !(data && typeof data === "object" && data.on === false);
+}
+
+export function writeKeysOn(on: boolean, store?: Storage | null): void {
+  writeJson(KEY, { on }, store);
+}
 
 /** One line of the help table: keys as shown, and what they do. */
 export const SHORTCUTS: { keys: string[]; text: string }[] = [
@@ -42,10 +57,20 @@ export function isTyping(target: EventTarget | null): boolean {
   return false;
 }
 
-/** Keys that work any time on the table (my turn or not). */
+/** True when the focused control moves with its own arrow keys (tabs, radio groups, sliders,
+ *  lists): then the arrows are theirs, not the raise amount's. */
+export function ownsArrows(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || typeof el.closest !== "function") return false;
+  if (el.tagName === "INPUT" && (el as HTMLInputElement).type === "range") return true;
+  return !!el.closest("[role=tablist], [role=tab], [role=radiogroup], [role=radio], [role=slider], [role=listbox], [role=menu], [role=menubar], select");
+}
+
+/** Keys that work any time on the table (my turn or not). `?` also arrives as Shift + `/` on
+ *  some layouts and automation. */
 export function globalCommand(e: KeyLike): ShortcutCommand | null {
   if (e.ctrlKey || e.metaKey || e.altKey) return null;
-  if (e.key === "?") return { kind: "help" };
+  if (e.key === "?" || (e.key === "/" && e.shiftKey)) return { kind: "help" };
   if (e.key.toLowerCase() === "m") return { kind: "sound" };
   return null;
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LegalActions } from "@/api/protocol";
 
-import { globalCommand, isTyping, turnCommand } from "./shortcuts";
+import { globalCommand, isTyping, ownsArrows, readKeysOn, turnCommand, writeKeysOn } from "./shortcuts";
 
 const key = (k: string, mods: Partial<KeyboardEvent> = {}) => ({ key: k, shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, ...mods });
 
@@ -43,6 +43,8 @@ describe("turnCommand", () => {
 describe("globalCommand", () => {
   it("opens help with ? and toggles sound with M", () => {
     expect(globalCommand(key("?", { shiftKey: true }))).toEqual({ kind: "help" });
+    expect(globalCommand(key("/", { shiftKey: true }))).toEqual({ kind: "help" });
+    expect(globalCommand(key("/"))).toBeNull();
     expect(globalCommand(key("M"))).toEqual({ kind: "sound" });
     expect(globalCommand(key("f"))).toBeNull();
   });
@@ -60,5 +62,48 @@ describe("isTyping", () => {
     expect(isTyping(el("BUTTON"))).toBe(false);
     expect(isTyping(el("INPUT", { type: "range" }))).toBe(false);
     expect(isTyping(null)).toBe(false);
+  });
+});
+
+describe("ownsArrows", () => {
+  const el = (tagName: string, inside: string | null, type = "") =>
+    ({ tagName, type, closest: (sel: string) => (inside && sel.includes(inside) ? {} : null) }) as unknown as EventTarget;
+  it("leaves the arrows to tabs, radio groups and sliders", () => {
+    expect(ownsArrows(el("BUTTON", "[role=tab]"))).toBe(true);
+    expect(ownsArrows(el("BUTTON", "[role=radiogroup]"))).toBe(true);
+    expect(ownsArrows(el("INPUT", null, "range"))).toBe(true);
+  });
+  it("gives them to the raise amount elsewhere", () => {
+    expect(ownsArrows(el("BUTTON", null))).toBe(false);
+    expect(ownsArrows(el("BODY", null))).toBe(false);
+    expect(ownsArrows(null)).toBe(false);
+  });
+});
+
+describe("keyboard shortcuts switch", () => {
+  const memory = () => {
+    const data = new Map<string, string>();
+    return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) } as unknown as Storage;
+  };
+  it("is on by default and remembers being turned off", () => {
+    const store = memory();
+    expect(readKeysOn(store)).toBe(true);
+    writeKeysOn(false, store);
+    expect(readKeysOn(store)).toBe(false);
+    writeKeysOn(true, store);
+    expect(readKeysOn(store)).toBe(true);
+  });
+  it("stays on when storage is blocked", () => {
+    const blocked = {
+      getItem: () => {
+        throw new Error("SecurityError");
+      },
+      setItem: () => {
+        throw new Error("SecurityError");
+      },
+    } as unknown as Storage;
+    expect(readKeysOn(blocked)).toBe(true);
+    expect(() => writeKeysOn(false, blocked)).not.toThrow();
+    expect(readKeysOn(null)).toBe(true);
   });
 });

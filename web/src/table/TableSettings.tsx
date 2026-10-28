@@ -11,7 +11,7 @@ import { Choices } from "@/rooms/Choices";
 import { Button, Modal, Toggle } from "@/ui";
 
 import type { Cue } from "./cues";
-import { SHORTCUTS } from "./shortcuts";
+import { readKeysOn, SHORTCUTS, writeKeysOn } from "./shortcuts";
 import { createSynth, readPrefs, soundsForCues, VOLUMES, writePrefs, type SoundName, type SoundPrefs, type Synth } from "./sound";
 
 export type TableSound = {
@@ -29,26 +29,34 @@ export function useTableSound(): TableSound {
   useEffect(() => {
     current.current = prefs;
   }, [prefs]);
+  // Leaving the table closes the AudioContext.
+  useEffect(
+    () => () => {
+      synth.current?.close();
+      synth.current = null;
+    },
+    [],
+  );
 
   const play = useCallback((name: SoundName, count?: number) => {
     const p = current.current;
     if (!p.on || typeof document === "undefined" || document.hidden) return;
-    synth.current ??= createSynth();
-    synth.current.play(name, p.volume, count);
+    synth.current?.play(name, p.volume, count);
   }, []);
 
   const setPrefs = useCallback((next: SoundPrefs) => {
     current.current = next;
     setState(next);
     writePrefs(next);
-    // a click turned it on: start audio now (browsers allow it only from a click) and let them hear it
+    // a click or key turned it on: start audio now (allowed in a gesture) and let them hear it
     if (next.on) {
       synth.current ??= createSynth();
+      synth.current.wake();
       synth.current.play("turn", next.volume);
     }
   }, []);
 
-  // Sound kept on from a past visit: audio may start only after the first click or key.
+  // Sound kept on from a past visit: audio may start only at the first click or key.
   useEffect(() => {
     if (!prefs.on) return;
     const wake = () => {
@@ -66,12 +74,23 @@ export function useTableSound(): TableSound {
   return { prefs, setPrefs, play };
 }
 
+/** The single-key shortcuts switch (on by default), kept in localStorage. */
+export function useKeysPref(): [boolean, (on: boolean) => void] {
+  const [on, setOn] = useState(() => readKeysOn());
+  const set = useCallback((next: boolean) => {
+    setOn(next);
+    writeKeysOn(next);
+  }, []);
+  return [on, set];
+}
+
 /** Plays the table's moments. Renders nothing. */
 export function SoundCues({
   sound,
   cues,
   mySeat,
   myTurn,
+  turnKey,
   deadline,
   frozen,
 }: {
@@ -79,6 +98,8 @@ export function SoundCues({
   cues: Cue[];
   mySeat: number | null;
   myTurn: boolean;
+  /** one value per turn of mine (hand + server deadline): a reconnect keeps it, so no second chime */
+  turnKey: string | null;
   /** my turn's deadline in local ms (0 when none) */
   deadline: number;
   frozen: boolean;
@@ -92,9 +113,12 @@ export function SoundCues({
     for (const s of soundsForCues(fresh, mySeat)) play(s.name, s.count);
   }, [cues, mySeat, play]);
 
+  const chimed = useRef<string | null>(null);
   useEffect(() => {
-    if (myTurn) play("turn");
-  }, [myTurn, play]);
+    if (!turnKey || chimed.current === turnKey) return;
+    chimed.current = turnKey;
+    play("turn");
+  }, [turnKey, play]);
 
   // Five seconds left on my clock (and not yet past it).
   useEffect(() => {
@@ -107,7 +131,20 @@ export function SoundCues({
   return null;
 }
 
-export function SettingsModal({ open, onClose, sound, desktop, onHelp }: { open: boolean; onClose: () => void; sound: TableSound; desktop: boolean; onHelp: () => void }) {
+export function SettingsModal({
+  open,
+  onClose,
+  sound,
+  keys,
+  onHelp,
+}: {
+  open: boolean;
+  onClose: () => void;
+  sound: TableSound;
+  /** desktop: the shortcuts switch */
+  keys?: { on: boolean; set: (on: boolean) => void };
+  onHelp: () => void;
+}) {
   const { prefs, setPrefs, play } = sound;
   return (
     <Modal open={open} onClose={onClose} title="Cài đặt bàn">
@@ -139,21 +176,31 @@ export function SettingsModal({ open, onClose, sound, desktop, onHelp }: { open:
             disabled={!prefs.on}
           />
         </div>
-        {desktop && (
-          <div className="tset-row">
-            <span className="tset-icon" aria-hidden>
-              <Keyboard size={18} strokeWidth={1.9} />
-            </span>
-            <span className="tset-text">
-              <b>Phím tắt</b>
-              <small>
-                Bấm <kbd className="kbd">?</kbd> trên bàn để mở bảng này
-              </small>
-            </span>
-            <Button kind="quiet" size="sm" onClick={onHelp}>
-              Xem phím tắt
-            </Button>
-          </div>
+        {keys && (
+          <>
+            <div className="tset-row">
+              <span className="tset-icon" aria-hidden>
+                <Keyboard size={18} strokeWidth={1.9} />
+              </span>
+              <span className="tset-text">
+                <b>Phím tắt một phím</b>
+                <small>F, C, R, 1–4, mũi tên, M, ?. Tắt nếu hay lỡ tay hoặc dùng trình đọc màn hình.</small>
+              </span>
+              <Toggle on={keys.on} label="Phím tắt một phím" onChange={keys.set} />
+            </div>
+            {keys.on && (
+              <div className="tset-row tset-volume">
+                <span className="tset-text">
+                  <small>
+                    Bấm <kbd className="kbd">?</kbd> trên bàn để xem lại
+                  </small>
+                </span>
+                <Button kind="quiet" size="sm" onClick={onHelp}>
+                  Xem phím tắt
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </Modal>
