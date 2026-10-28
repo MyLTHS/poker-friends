@@ -58,7 +58,8 @@ services:
   web:
     image: poker-friends-web:${APP_VERSION:-local}
     build:
-      context: ./web
+      context: .
+      dockerfile: web/Dockerfile
       args:
         # Baked into the browser bundle at build time: where the table's WebSocket connects.
         NEXT_PUBLIC_DJANGO_WS: ${NEXT_PUBLIC_DJANGO_WS:?set NEXT_PUBLIC_DJANGO_WS in .env}
