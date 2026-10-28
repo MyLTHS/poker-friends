@@ -80,7 +80,7 @@ test("a stranger goes to the login, which offers no guest; an invite link surviv
 
 test("an unsafe next is ignored: the login stays on this site", async ({ page }) => {
   const friend = account("An", true);
-  await page.goto("/account?next=%2F%2Fevil.example%2F");
+  await page.goto(`/account?next=${encodeURIComponent("/.//evil.example/x")}`); // normalises to "//evil.example/x"
   await logIn(page, friend);
   await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
   expect(new URL(page.url()).origin).toBe(WEB);
@@ -132,7 +132,13 @@ test("approval taken back: the API sends to the waiting screen, the table closes
 
   setApproved(email, true);
   await page.getByRole("button", { name: "Thử lại" }).click();
+  // Approved again: back to the page that was refused (remembered), not the profile.
+  await expect(page).toHaveURL(/\/rooms$/);
+  await expect(page.getByRole("heading", { name: "Chọn một bàn" })).toBeVisible();
+  // ...and only once: the account page now stays the account page.
+  await page.goto("/account");
   await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
+  await expect(page).toHaveURL(/\/account$/);
 });
 
 test("an old guest session is told to upgrade", async ({ browser }) => {

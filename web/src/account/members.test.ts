@@ -22,6 +22,11 @@ describe("safeNext", () => {
       "/\t/evil.example",
       " /rooms",
       "/rooms\n/x",
+      // dot segments that normalise into "//host" (PR #41 review)
+      "/.//evil.example/x",
+      "/..//evil.example",
+      "/%2e//evil.example",
+      "/a/..//evil.example",
     ]) {
       expect(safeNext(bad), String(bad)).toBeNull();
     }

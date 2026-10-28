@@ -31,7 +31,11 @@ export function safeNext(next: string | null | undefined): string | null {
     return null;
   }
   if (url.origin !== BASE || url.pathname === "/account" || url.pathname.startsWith("/account/")) return null;
-  return url.pathname + url.search + url.hash;
+  // Check what is returned, not only what came in: dot segments normalise away ("/.//evil.example",
+  // "/a/..//evil.example", "/%2e//evil.example" all become "//evil.example", another site).
+  const out = url.pathname + url.search + url.hash;
+  if (out.startsWith("//") || out.startsWith("/\\")) return null;
+  return out;
 }
 
 const withNext = (path: string, next: string | null | undefined) => {
@@ -79,5 +83,13 @@ export function takeRememberedNext(store: Store | null = browserStore(), now = D
  *  page, which shows "Đợi chủ phòng duyệt". Never from the account pages themselves. */
 export function goToAuth(block: AuthBlock) {
   if (typeof window === "undefined" || window.location.pathname.startsWith("/account")) return;
-  window.location.assign(block === "login" ? loginPath(herePath()) : "/account");
+  if (block === "login") {
+    window.location.assign(loginPath(herePath()));
+    return;
+  }
+  // Waiting can take days: remember this page (an invite link) for when the owner approves.
+  rememberNext(herePath());
+  // A full load on purpose (as for the login above): nothing of the refused page should survive.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+  window.location.assign("/account");
 }
