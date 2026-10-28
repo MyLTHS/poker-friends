@@ -1,23 +1,44 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowLeft, Eye, Wifi, WifiOff } from "lucide-react";
-import { useEffect, useState } from "react";
-import { ActionBar, type BarAction } from "@/club/ActionBar";
-import { ChipAmount } from "@/club/chips";
-import { Table } from "@/club/Table";
-import { SevenDeuceMoment } from "./SevenDeuceMoment";
-import { useTableSocket } from "./useTableSocket";
-import { describeAction, raisePresets, tableView } from "./view";
+// The D1 table over one WebSocket (design screens-table.tsx / screens-social.tsx chat): desktop
+// 1440×900 = top bar, stage, action bar, side column; landscape phone 844×390 = stage with its bar,
+// right column, chat drawer. State is the reducer's (server truth); TableFx only animates it.
+// `url` is the mock server's (`/table`) or Django's (`/rooms/<id>/table`); the protocol is the same.
+import "./table.css";
 
-function useNow(intervalMs: number) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-  return now;
-}
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Coffee, Crown, Hourglass } from "lucide-react";
+
+import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
+import { Button, ButtonLink, CardText, D1Root, Spinner, fmt, signed } from "@/ui";
+
+import { IdleBar, PreAction, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
+import { secondsLeft, useNow, type TurnClock } from "./clock";
+import { useDevice } from "./device";
+import type { Device } from "./geometry";
+import type { LogEntry } from "./log";
+import { ConnStrip, PausedCard, ReconnectCard } from "./Overlays";
+import { describeAction, raisePresets, tableView, type SeatView, type TableView } from "./seatView";
+import { SevenDeuceStage, SevenLedger, SevenMedal } from "./SevenDeuce";
+import {
+  ChatComposer,
+  ChatDrawer,
+  ChatList,
+  HandFooter,
+  MobileTableBar,
+  MobileTools,
+  PlayerList,
+  SidePanel,
+  Spectators,
+  TableTools,
+  TableTopBar,
+  WatchersBlock,
+  type SideTab,
+} from "./Side";
+import { FitStage, Stage } from "./Stage";
+import { useTableFx } from "./TableFx";
+import { useTableSocket } from "./useTableSocket";
 
 const newCommandId = () => crypto.randomUUID();
 
@@ -27,149 +48,558 @@ const MOCK_HELP = (
   </>
 );
 
-/**
- * The table over one WebSocket. `url` is the mock server's (`/table`) or Django's
- * (`/rooms/<id>/table`, B4b); the protocol is the same.
- */
-export function TableScreen({
-  url,
-  backHref = "/",
-  backLabel = "Chọn người chơi khác",
-  help = MOCK_HELP,
-}: {
+/** Chat lines shown as bubbles over the seats: the last 6 seconds. */
+const BUBBLE_MS = 6000;
+
+export type TableScreenProps = {
   url: string;
   backHref?: string;
   backLabel?: string;
-  help?: React.ReactNode;
-}) {
-  const { model, dispatch } = useTableSocket(url);
+  help?: ReactNode;
+  /** Chat said before this connection (REST), fetched on every (re)connect. */
+  loadChat?: () => Promise<ChatMessage[]>;
+  /** Spectator picks an empty seat; resolves with an error text, or null when seated. */
+  onTakeSeat?: (seat: number) => Promise<string | null>;
+  /** Leave my seat (keep watching). */
+  onLeaveSeat?: () => Promise<string | null>;
+  /** Room owner: link to the owner panel. */
+  ownerHref?: string;
+  /** Replay of a finished hand. */
+  replayHref?: (handId: number) => string;
+};
+
+export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = MOCK_HELP, loadChat, onTakeSeat, onLeaveSeat, ownerHref, replayHref }: TableScreenProps) {
+  const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
+  const device = useDevice();
   const now = useNow(250);
+  const [tab, setTab] = useState<SideTab>("chat");
+  const [drawer, setDrawer] = useState(false);
+  const [seen, setSeen] = useState(0);
+  const [seatError, setSeatError] = useState<string | null>(null);
   const { table } = model;
 
-  if (!table) {
+  // Chat said while we were away: the socket only brings new lines.
+  useEffect(() => {
+    if (model.status !== "open" || !loadChat) return;
+    let cancelled = false;
+    loadChat().then((messages) => !cancelled && dispatch({ type: "chat.history", messages }));
+    return () => {
+      cancelled = true;
+    };
+  }, [model.status, loadChat, dispatch]);
+
+  // Unread chat: lines that came while the chat was not on screen.
+  const chatOpen = device === "desktop" ? tab === "chat" : drawer;
+  const markRead = () => setSeen(model.chat.length);
+  const openTab = (next: SideTab) => {
+    if (tab === "chat" || next === "chat") markRead();
+    setTab(next);
+  };
+  const openDrawer = (open: boolean) => {
+    markRead();
+    setDrawer(open);
+  };
+
+  const view = useMemo(
+    () =>
+      table
+        ? tableView(table, {
+            lastActions: model.lastActions,
+            results: model.results,
+            bubbles: model.chat.filter((m) => now - Date.parse(m.sent_at) - model.clockOffsetMs < BUBBLE_MS),
+          })
+        : null,
+    [table, model.lastActions, model.results, model.chat, model.clockOffsetMs, now],
+  );
+  const spotOf = useCallback((seat: number) => view?.seats.find((s) => s.seat === seat)?.spot, [view]);
+  const { layer, fx } = useTableFx({ cues: model.fx, epoch: model.fxEpoch, device, spotOf });
+
+  const dismissNotice = useCallback(() => dispatch({ type: "dismiss.notice" }), [dispatch]);
+  const onAct = useCallback((kind: ActKind, amount?: number) => dispatch({ type: "act", kind, amount, commandId: newCommandId() }), [dispatch]);
+  const say = useCallback((text: string) => dispatch({ type: "chat.send", text }), [dispatch]);
+
+  if (!table || !view) {
     return (
-      <div className="club-theme grid min-h-screen place-items-center p-6 text-center">
-        <div>
-          <p className="text-lg font-bold">Đang nối tới bàn chơi…</p>
-          <p className="mt-2 text-sm text-[var(--muted)]">
+      <D1Root bg="table" className="tbl-wait">
+        <div className="tbl-wait-box">
+          <Spinner size={56} />
+          <b>Đang nối tới bàn chơi…</b>
+          <p>
             {model.status === "reconnecting" ? "Chưa nối được, đang thử lại. " : ""}
             {help}
           </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">{url}</p>
+          <small>{url}</small>
+          <ButtonLink kind="ghost" href={backHref}>
+            {backLabel}
+          </ButtonLink>
         </div>
-      </div>
+      </D1Root>
     );
   }
 
   const { hand, turn, room, you } = table;
-  const view = tableView(table);
   const legal = hand?.legal_actions ?? null;
   const suspended = room.status === "suspended";
+  const online = model.status === "open";
   const myTurn = !!legal && !!hand && !hand.complete && !suspended;
+  const me = view.seats.find((s) => s.isMe);
+  const occupant = table.seats.find((s) => s.player_id === you.player_id);
+  const sittingOut = !!occupant?.sitting_out;
   const pending = !!model.pending;
 
-  const remainingSec = turn ? Math.max(0, Math.ceil((Date.parse(turn.deadline) - (now + model.clockOffsetMs)) / 1000)) : undefined;
-  const actor = hand?.actor ? table.seats.find((s) => s.player_id === hand.actor) : undefined;
+  // The turn clock runs on the server: deadline − measured offset. Suspended: frozen.
+  const clock: TurnClock | undefined = turn
+    ? { deadline: Date.parse(turn.deadline) - model.clockOffsetMs, total: turn.think_time_seconds, frozenAt: suspended ? secondsLeft(Date.parse(turn.deadline) - model.clockOffsetMs, now) : undefined }
+    : undefined;
+  const left = clock ? (clock.frozenAt ?? secondsLeft(clock.deadline, now)) : undefined;
+  const myClock = myTurn ? clock : undefined;
 
-  const online = model.status === "open";
-  let status: string | undefined;
-  if (!online) status = "Mất kết nối — đang nối lại…";
-  else if (suspended) status = "Bàn tạm dừng — chưa đánh được.";
-  else if (you.seat === null) status = "Bạn đang xem.";
-  else if (!hand) status = "Chờ ván mới…";
-  else if (hand.complete) status = "Ván đã xong, chờ ván mới…";
-  else if (pending) status = "Đang gửi…";
-  else if (!myTurn) status = actor ? `Chờ ${actor.display_name}…` : undefined;
-
-  const presets = hand && legal ? raisePresets(hand, legal) : [];
-  const minRaise = legal?.min_raise_to ?? 0;
-  const maxRaise = legal?.max_raise_to ?? 0;
-  const someoneBet = !!hand && hand.players.some((p) => p.bet > 0);
-  const lastAction = model.lastAction ? describeAction(model.lastAction, table) : undefined;
+  const handNo = hand?.hand_no;
+  const blinds = `${fmt(room.small_blind)}/${fmt(room.big_blind)}`;
+  const winners = (model.results ?? []).filter((r) => r.hand_net > 0);
   const myResult = model.results?.find((r) => r.player_id === you.player_id);
+  const nameOf = (playerId: string) => table.seats.find((s) => s.player_id === playerId)?.display_name ?? "?";
+  const celebration = model.celebration;
+  const sevenSpot = celebration ? spotOf(celebration.seat) : undefined;
+  const unread = chatOpen ? 0 : Math.max(0, model.chat.length - seen);
 
-  const onAction = (kind: BarAction, amount?: number) => dispatch({ type: "act", kind, amount, commandId: newCommandId() });
+  const sit = async (seat: number) => {
+    if (!onTakeSeat) return;
+    setSeatError(await onTakeSeat(seat));
+  };
+  const leave = onLeaveSeat
+    ? {
+        label: "Rời ghế",
+        onLeave: async () => setSeatError(await onLeaveSeat()),
+      }
+    : undefined;
+  const toggleSit = () => dispatch({ type: "sit", out: !sittingOut, commandId: newCommandId() });
 
-  return (
-    <div className="club-theme game-page">
-      <div className="game-shell">
-        <div className="game-head">
-          <div>
-            <Link className="icon-btn" href={backHref} aria-label={backLabel}>
-              <ArrowLeft />
-            </Link>
-            <div>
-              <b>{room.name}</b>
+  const turnProps = legal && hand
+    ? {
+        device,
+        legal,
+        presets: raisePresets(hand, legal),
+        step: room.big_blind,
+        facingBet: hand.players.some((p) => p.bet > 0),
+        clock: myClock,
+        now,
+        enabled: online && !pending,
+        onAct,
+      }
+    : null;
+  const decisionKey = `${hand?.hand_id}-${hand?.board.length}-${legal?.min_raise_to}-${legal?.max_raise_to}-${legal?.call_amount}`;
+
+  const meHint = myTurn && left !== undefined ? (
+    <span className="turn-hint">
+      <b>{left}s</b>
+      <small>Tới lượt bạn</small>
+    </span>
+  ) : hand?.complete && myResult ? (
+    <span className="turn-hint">
+      <b className={myResult.hand_net + myResult.seven_deuce_net < 0 ? "is-loss" : "is-gain"}>{signed(myResult.hand_net + myResult.seven_deuce_net)}</b>
+      <small>Ván này</small>
+    </span>
+  ) : undefined;
+
+  const stage = (
+    <Stage
+      device={device}
+      seats={view.seats}
+      board={view.board}
+      pot={view.pot}
+      mark={`${room.name} · ${blinds}`}
+      clock={clock}
+      now={now}
+      meHint={meHint}
+      showPot={!hand?.complete}
+      fx={fx}
+      onSit={you.seat === null && onTakeSeat ? sit : undefined}
+      className={celebration ? "is-seven" : ""}
+    >
+      {layer}
+      {hand?.complete && winners.length > 0 && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} />}
+      {celebration && sevenSpot && (
+        <SevenDeuceStage key={hand?.hand_id} device={device} award={celebration} seats={table.seats} spot={sevenSpot} pot={Math.max(0, (model.results?.find((r) => r.player_id === celebration.player_id)?.hand_net ?? 0))} quiet={model.celebrationQuiet} />
+      )}
+      {device === "desktop" && hand?.complete && <Spectators device="desktop" spectators={model.spectators} />}
+    </Stage>
+  );
+
+  const overlay = !online && (
+    <>
+      <div className={`scrim scrim-${device === "desktop" ? "d" : "m"}`} />
+      {device === "desktop" && <ConnStrip device="desktop" />}
+      <div className="rc-wrap">
+        <ReconnectCard device={device} retry={retry} now={now} myClock={myClock} canCheck={!!legal?.can_check} backHref={backHref} onRetry={reconnectNow} />
+      </div>
+    </>
+  );
+
+  const idle = idleContent({ table, view, me, myResult, winners, nameOf, sittingOut, left, celebration: !!celebration });
+
+  if (device === "mobile") {
+    let panel: ReactNode;
+    if (suspended) {
+      panel = (
+        <aside className="ppanel paused-panel">
+          <PausedCard device="mobile" handNo={handNo} frozenAt={myTurn ? left : undefined} onReload={reload} backHref={backHref} />
+        </aside>
+      );
+    } else if (myTurn && turnProps) {
+      panel = <TurnPanel key={decisionKey} {...turnProps} device="mobile" />;
+    } else if (celebration) {
+      panel = (
+        <aside className="ppanel sd-panel">
+          <SevenLedger device="mobile" award={celebration} seats={table.seats} />
+          <NextHand />
+        </aside>
+      );
+    } else {
+      panel = (
+        <aside className="ppanel idle-panel">
+          <div className="ip-next">
+            <span className="abar-eyebrow">{idle.eyebrow}</span>
+            {hand?.complete ? <NextHand /> : <span className="ip-status">{idle.status}</span>}
+          </div>
+          {idle.win && (
+            <div className="ip-win">
+              <Crown size={16} strokeWidth={2} />
               <span>
-                <i className="live-dot" /> {hand ? `Ván #${hand.hand_no}` : "Giữa hai ván"} · <ChipAmount value={room.small_blind} /> / <ChipAmount value={room.big_blind} />
-                {room.seven_deuce_bonus > 0 && <> · thưởng 7–2 <ChipAmount value={room.seven_deuce_bonus} /></>}
+                <b>{idle.win}</b>
+                {idle.winSub && <small>{idle.winSub}</small>}
               </span>
             </div>
+          )}
+          {idle.mine && <span className="ip-me">{idle.mine}</span>}
+          {seatError && <span className="ip-error" role="alert">{seatError}</span>}
+          <Spectators device="mobile" spectators={model.spectators} />
+          <div className="ip-actions">
+            {you.seat !== null && (
+              <Button kind="quiet" block icon={<Coffee size={16} />} onClick={toggleSit} aria-pressed={sittingOut}>
+                {sittingOut ? "Quay lại chơi" : "Nghỉ ván sau"}
+              </Button>
+            )}
+            {hand?.complete && replayHref && (
+              <ButtonLink kind="ghost" block href={replayHref(hand.hand_id)}>
+                Xem lại ván
+              </ButtonLink>
+            )}
+            {leave && you.seat !== null && !hand?.complete && !myTurn && (
+              <Button kind="ghost" block onClick={leave.onLeave}>
+                {leave.label}
+              </Button>
+            )}
           </div>
-          <div className="game-tools">
-            {myResult && (
-              <span className={`pill ${myResult.hand_net + myResult.seven_deuce_net >= 0 ? "pill-green" : "pill-red"}`}>
-                Ván trước: {myResult.hand_net + myResult.seven_deuce_net >= 0 ? "+" : "−"}
-                {Math.abs(myResult.hand_net + myResult.seven_deuce_net)} chip
+        </aside>
+      );
+    }
+    return (
+      <D1Root bg="table" className="tbl tbl-mobile">
+        <div className={`table-area-m${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`}>
+          <FitStage device="mobile">{stage}</FitStage>
+          <MobileTableBar
+            backHref={backHref}
+            title={room.name}
+            sub={`Blind ${blinds}${handNo ? ` · Ván #${handNo}` : ""}`}
+            right={
+              !online ? (
+                <span className="conn-strip conn-strip-m" role="status">
+                  <span className="conn-dot" />
+                  Mất kết nối · đang thử lại
+                </span>
+              ) : (
+                <MobileTools watchers={model.spectators.length} unread={unread} onChat={() => openDrawer(true)} />
+              )
+            }
+          />
+        </div>
+        {panel}
+        {overlay}
+        <ChatDrawer open={drawer} onClose={() => openDrawer(false)} messages={model.chat} me={you.player_id} spectators={model.spectators} onSend={say} />
+        <Notice model={model} onDismiss={dismissNotice} />
+      </D1Root>
+    );
+  }
+
+  /* ---------- desktop ---------- */
+  const bar =
+    myTurn && turnProps ? (
+      <TurnBar key={decisionKey} {...turnProps} device="desktop" />
+    ) : (
+      <IdleBar
+        left={
+          <span className="idle-hand">
+            <small>{idle.eyebrow}</small>
+            <b>{idle.mine ?? idle.status}</b>
+          </span>
+        }
+        center={
+          celebration ? (
+            <span className="idle-msg is-seven">
+              <SevenMedal size={30} />
+              <span>
+                <b>
+                  {nameOf(celebration.player_id)} +{fmt(celebration.total)}
+                </b>{" "}
+                từ thưởng 7-2
               </span>
-            )}
-            {you.seat === null && (
-              <span className="pill pill-neutral">
-                <Eye size={13} /> Đang xem
-              </span>
-            )}
-            <span className={`pill ${online ? "pill-green" : "pill-red"}`} role="status">
-              {online ? <Wifi size={13} /> : <WifiOff size={13} />}
-              {online ? "Đã kết nối" : "Mất kết nối — đang nối lại"}
             </span>
-          </div>
-        </div>
-        <div className="game-grid">
-          <main className="game-main">
-            <Table
-              players={view.players}
-              board={view.board}
-              pot={view.pot}
-              lastAction={lastAction}
-              heroIndex={view.heroIndex}
-              dealerIndex={view.dealerIndex}
-              smallBlindIndex={view.smallBlindIndex}
-              bigBlindIndex={view.bigBlindIndex}
-              countdown={remainingSec}
-            >
-              {model.celebration && (
-                <SevenDeuceMoment
-                  award={model.celebration}
-                  seats={table.seats}
-                  youId={you.player_id}
-                  onClose={() => dispatch({ type: "dismiss.celebration" })}
-                />
-              )}
-            </Table>
-            {!model.celebration && (
-              <ActionBar
-                // New decision (hand, street or raise range) -> fresh slider at the minimum raise.
-                key={`${hand?.hand_id}-${hand?.board.length}-${minRaise}-${maxRaise}`}
-                minRaise={minRaise}
-                maxRaise={Math.max(minRaise, maxRaise)}
-                step={1}
-                initialRaise={minRaise}
-                presets={presets}
-                onAction={onAction}
-                enabled={online && myTurn && !pending}
-                canFold={legal?.can_fold ?? false}
-                canCheck={legal?.can_check ?? false}
-                callAmount={legal?.call_amount ?? 0}
-                canRaise={legal?.min_raise_to !== null && legal?.min_raise_to !== undefined}
-                raiseLabel={someoneBet ? "TỐ" : "CƯỢC"}
-                status={status}
-                notice={model.notice?.text}
-                onDismissNotice={() => dispatch({ type: "dismiss.notice" })}
-              />
+          ) : idle.win ? (
+            <span className="idle-msg">
+              <Crown size={18} strokeWidth={2} />
+              <span>
+                <b>{idle.win}</b> {idle.winSub}
+              </span>
+            </span>
+          ) : (
+            <span className="idle-msg is-quiet">{seatError ?? idle.center}</span>
+          )
+        }
+        right={
+          <>
+            {you.seat !== null && <PreAction label="Nghỉ ván sau" on={sittingOut} onToggle={toggleSit} disabled={!online} />}
+            {hand?.complete && replayHref && (
+              <Link className="tbar-btn is-quiet" href={replayHref(hand.hand_id)}>
+                Xem lại ván
+              </Link>
             )}
-          </main>
-        </div>
+            {hand?.complete && <NextHand />}
+          </>
+        }
+      />
+    );
+
+  return (
+    <D1Root bg="table" className="tbl tbl-desktop">
+      <TableTopBar
+        backHref={backHref}
+        back={backLabel}
+        title={room.name}
+        meta={
+          <>
+            <span>Blind {blinds}</span>
+            {handNo && (
+              <>
+                <i />
+                <span>Ván #{handNo}</span>
+              </>
+            )}
+            {room.seven_deuce_bonus > 0 && (
+              <>
+                <i />
+                <span className="is-brass">Thưởng 7-2 · {fmt(room.seven_deuce_bonus)}</span>
+              </>
+            )}
+          </>
+        }
+        right={
+          <TableTools
+            watchers={model.spectators.length}
+            sittingOut={sittingOut}
+            canSit={you.seat !== null}
+            onSitToggle={toggleSit}
+            ownerHref={ownerHref}
+            leave={you.seat !== null ? leave : undefined}
+          />
+        }
+      />
+      <div className={`table-area${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`}>
+        <FitStage device="desktop">{stage}</FitStage>
       </div>
+      <div className={`abar-slot${!online || suspended ? " is-dimmed" : ""}`}>{bar}</div>
+      {suspended ? (
+        <aside className="side side-variant">
+          <PausedCard device="desktop" handNo={handNo} frozenAt={myTurn ? left : undefined} onReload={reload} backHref={backHref} />
+        </aside>
+      ) : (
+        <SidePanel
+          tab={tab}
+          onTab={openTab}
+          counts={{ chat: tab === "chat" ? undefined : unread || undefined, players: view.seats.filter((s) => s.state !== "empty").length }}
+          footer={tab === "chat" ? <ChatComposer onSend={say} /> : tab === "log" && hand && !hand.complete ? <HandFooter pot={view.potTotal} bets={view.bets} inHand={view.inHand} /> : undefined}
+        >
+          {tab === "chat" && (
+            <>
+              <WatchersBlock device="desktop" spectators={model.spectators} />
+              <ChatList messages={model.chat} me={you.player_id} spectators={model.spectators} />
+            </>
+          )}
+          {tab === "players" && <PlayerList seats={view.seats} />}
+          {tab === "log" && (
+            <>
+              {celebration && <SevenLedger device="desktop" award={celebration} seats={table.seats} />}
+              <LogList entries={model.log} seats={table.seats} you={you.player_id} />
+            </>
+          )}
+        </SidePanel>
+      )}
+      {overlay}
+      <Notice model={model} onDismiss={dismissNotice} />
+    </D1Root>
+  );
+}
+
+/* ---------- pieces ---------- */
+
+function NextHand() {
+  return (
+    <span className="next-hand">
+      <Hourglass size={15} strokeWidth={2} />
+      Ván mới sắp bắt đầu…
+    </span>
+  );
+}
+
+function WinnerBanner({ device, winners, nameOf }: { device: Device; winners: PlayerResult[]; nameOf: (id: string) => string }) {
+  const names = winners.map((w) => nameOf(w.player_id));
+  const total = winners.reduce((s, w) => s + w.hand_net, 0);
+  return (
+    <div className={`win-banner win-${device}`} role="status">
+      <span className="win-crown">
+        <Crown size={device === "desktop" ? 16 : 13} strokeWidth={2.2} />
+      </span>
+      <b>{winners.length === 1 ? `${names[0]} thắng ${fmt(total)}` : `${names.join(", ")} chia pot`}</b>
+      {winners.length > 1 && <small>Mỗi người {winners.map((w) => `+${fmt(w.hand_net)}`).join(" · ")}</small>}
     </div>
+  );
+}
+
+function Notice({ model, onDismiss }: { model: ReturnType<typeof useTableSocket>["model"]; onDismiss: () => void }) {
+  const text = model.notice?.text;
+  const id = model.notice?.id;
+  useEffect(() => {
+    if (!id) return;
+    const timer = setTimeout(onDismiss, 5000);
+    return () => clearTimeout(timer);
+  }, [id, onDismiss]);
+  if (!text) return null;
+  return (
+    <div className="tbl-notice" role="status" key={id}>
+      <span>{text}</span>
+      <button type="button" onClick={onDismiss} aria-label="Đóng">
+        ×
+      </button>
+    </div>
+  );
+}
+
+type Idle = { eyebrow: string; status: string; center: string; mine?: string; win?: string; winSub?: string };
+
+/** Words of the idle bar / phone column for whatever is going on when it is not my turn. */
+function idleContent({
+  table,
+  view,
+  me,
+  myResult,
+  winners,
+  nameOf,
+  sittingOut,
+  left,
+  celebration,
+}: {
+  table: TableState;
+  view: TableView;
+  me: SeatView | undefined;
+  myResult: PlayerResult | undefined;
+  winners: PlayerResult[];
+  nameOf: (id: string) => string;
+  sittingOut: boolean;
+  left: number | undefined;
+  celebration: boolean;
+}): Idle {
+  const { hand, room, you } = table;
+  const seated = table.seats.length;
+  if (room.status === "suspended") return { eyebrow: "Bàn tạm dừng", status: "Chờ máy chủ khôi phục", center: "Bàn tạm dừng để khôi phục." };
+  if (room.status === "closed") return { eyebrow: "Phòng đã đóng", status: "Không có ván mới", center: "Chủ phòng đã đóng phòng." };
+  if (hand?.complete) {
+    const net = myResult ? myResult.hand_net + myResult.seven_deuce_net : null;
+    const showdown = hand.players.filter((p) => p.in_hand && p.cards.length && p.cards.every((c) => c !== "??")).length > 1;
+    const win = winners.length === 1 ? `${nameOf(winners[0].player_id)} thắng ${fmt(winners[0].hand_net)}` : winners.length > 1 ? `${winners.map((w) => nameOf(w.player_id)).join(", ")} chia pot` : undefined;
+    return {
+      eyebrow: `Ván #${hand.hand_no} đã xong`,
+      status: "Chờ ván mới",
+      center: "Ván mới sắp bắt đầu.",
+      mine: net === null ? (you.seat === null ? "Bạn đang xem" : undefined) : net > 0 ? `Bạn: thắng ${signed(net)}` : net < 0 ? `Bạn: thua ${fmt(net)}` : "Bạn: hoà vốn",
+      win: celebration ? undefined : win,
+      winSub: showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined,
+    };
+  }
+  if (!hand) {
+    const waiting = seated < 2 ? "Cần ít nhất 2 người ngồi để chia bài" : "Ván mới sắp bắt đầu";
+    return {
+      eyebrow: you.seat === null ? "Bạn đang xem" : sittingOut ? "Bạn đang nghỉ" : "Giữa hai ván",
+      status: waiting,
+      center: you.seat === null ? "Bấm một ghế trống để ngồi." : waiting + ".",
+    };
+  }
+  const actor = hand.actor ? nameOf(hand.actor) : null;
+  const thinking = actor ? `${actor} suy nghĩ${left !== undefined ? ` · ${left}s` : ""}` : "Đang chờ";
+  if (you.seat === null) return { eyebrow: "Bạn đang xem", status: thinking, center: "Người xem không thấy bài úp." };
+  if (me?.state === "folded") return { eyebrow: "Bạn đã bỏ bài", status: thinking, center: thinking };
+  if (!view.seats.some((s) => s.isMe && (s.cards?.length ?? 0) > 0)) return { eyebrow: "Chờ ván sau", status: thinking, center: "Bạn vào từ ván sau." };
+  return { eyebrow: "Đang chờ", status: thinking, center: thinking };
+}
+
+/** The side panel log, names resolved now. */
+function LogList({ entries, seats, you }: { entries: LogEntry[]; seats: SeatOccupant[]; you: string }) {
+  const name = (seat: number) => seats.find((s) => s.seat === seat)?.display_name ?? `Ghế ${seat}`;
+  const mySeat = seats.find((s) => s.player_id === you)?.seat;
+  if (entries.length === 0) return <p className="log-empty">Nhật ký bắt đầu từ lúc bạn vào bàn.</p>;
+  return (
+    <ol className="log">
+      {entries.map((e, i) => {
+        switch (e.kind) {
+          case "hand":
+            return (
+              <li key={i} className="is-street">
+                Ván #{e.handNo} · {name(e.button)} cầm nút · {name(e.sb)} blind nhỏ {fmt(e.small)} · {name(e.bb)} blind lớn {fmt(e.big)}
+              </li>
+            );
+          case "action":
+            return (
+              <li key={i} className={e.action.seat === mySeat ? "is-me" : ""}>
+                {describeAction(e.action, name(e.action.seat))}
+              </li>
+            );
+          case "street":
+            return (
+              <li key={i} className="is-street">
+                {e.name}{" "}
+                {e.cards.map((c) => (
+                  <CardText key={c} card={c} />
+                ))}
+              </li>
+            );
+          case "show":
+            return (
+              <li key={i}>
+                Lật bài: {name(e.seat)}{" "}
+                {e.cards.map((c) => (
+                  <CardText key={c} card={c} />
+                ))}
+              </li>
+            );
+          case "win":
+            return (
+              <li key={i} className="is-win">
+                {name(e.seat)} ăn {fmt(e.amount)}
+              </li>
+            );
+          case "seven":
+            return (
+              <li key={i} className="is-pay">
+                Thưởng 7-2: {e.payers} người × {fmt(e.bonus)} = +{fmt(e.total)} cho {name(e.seat)}
+              </li>
+            );
+          case "warn":
+            return (
+              <li key={i} className="is-warn">
+                {e.text}
+              </li>
+            );
+        }
+      })}
+    </ol>
   );
 }

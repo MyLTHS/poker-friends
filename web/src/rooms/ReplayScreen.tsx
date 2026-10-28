@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { errorText, type Notice } from "@/account/messages";
 import { Card, NoticeBox, Shell } from "@/account/ui";
 import { PlayingCard } from "@/club/PlayingCard";
-import { toClubCard } from "@/table/view";
+const toClubCard = (c: string) => c;
 
 import { createRoomsApi, type HandReplay } from "./api";
 import { describeStep } from "./replay";
