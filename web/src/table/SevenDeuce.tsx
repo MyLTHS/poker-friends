@@ -104,13 +104,17 @@ export function SevenDeuceStage({ device, award, seats, spot, pot, quiet }: { de
   return (
     <>
       {phase === "burst" && <Confetti count={40} spread={1.25} className="cf-d" />}
-      <div className={`sd-reveal-cards${moment}`} style={{ left: Math.min(bp.x + 168, 900), top: bp.y - 6 }}>
-        <span className="sd-ribbon">Tự lật</span>
-        <span className="sd-cards">
-          {award.cards.map((c, i) => (still ? <PlayingCard key={i} card={c} w={68} rotate={i === 0 ? -7 : 7} /> : <FlipCard key={i} card={c} faceUp={up} w={68} className={`sf-${i}`} />))}
-        </span>
-        <span className="sd-reveal">Bài của {winner} · cả bàn và người xem đều thấy</span>
-      </div>
+      {/* My own 7-2 is already face up in front of me: the big reveal is for the others' seats,
+          beside the seat toward the middle of the table. */}
+      {spot !== 1 && (
+        <div className={`sd-reveal-cards${moment}`} style={{ left: bp.x <= 550 ? bp.x + 168 : bp.x - 168, top: Math.min(bp.y - 6, 520) }}>
+          <span className="sd-ribbon">Tự lật</span>
+          <span className="sd-cards">
+            {award.cards.map((c, i) => (still ? <PlayingCard key={i} card={c} w={68} rotate={i === 0 ? -7 : 7} /> : <FlipCard key={i} card={c} faceUp={up} w={68} className={`sf-${i}`} />))}
+          </span>
+          <span className="sd-reveal">Bài của {winner} · cả bàn và người xem đều thấy</span>
+        </div>
+      )}
       <div className={`sd-banner sd-banner-d${moment}`} role="status">
         <SevenMedal size={76} />
         <span className="sd-eyebrow">Bluff 7-2 thành công</span>

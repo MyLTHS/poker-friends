@@ -3459,6 +3459,28 @@
     margin-left: -10px;
   }
 
+  /* top seats: shown cards beside the avatar (above it they would leave the stage) */
+  .d1 .seat.is-top .seat-shown {
+    top: -30px;
+    transform: none;
+  }
+  .d1 .seat.is-top.toward-r .seat-shown {
+    left: calc(50% + 34px);
+  }
+  .d1 .seat.is-top.toward-l .seat-shown {
+    left: auto;
+    right: calc(50% + 34px);
+  }
+  .d1 .stage-mobile .seat.is-top .seat-shown {
+    top: -6px;
+  }
+  .d1 .stage-mobile .seat.is-top.toward-r .seat-shown {
+    left: calc(50% + 22px);
+  }
+  .d1 .stage-mobile .seat.is-top.toward-l .seat-shown {
+    right: calc(50% + 22px);
+  }
+
   /* animation layer (TableFx): ghosts of chips and cards that no longer exist in the state */
   .d1 .fx-layer {
     inset: 0;

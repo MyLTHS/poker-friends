@@ -106,10 +106,11 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
         ? tableView(table, {
             lastActions: model.lastActions,
             results: model.results,
+            myCards: model.myCards,
             bubbles: model.chat.filter((m) => now - Date.parse(m.sent_at) - model.clockOffsetMs < BUBBLE_MS),
           })
         : null,
-    [table, model.lastActions, model.results, model.chat, model.clockOffsetMs, now],
+    [table, model.lastActions, model.results, model.myCards, model.chat, model.clockOffsetMs, now],
   );
   const spotOf = useCallback((seat: number) => view?.seats.find((s) => s.seat === seat)?.spot, [view]);
   const { layer, fx } = useTableFx({ cues: model.fx, epoch: model.fxEpoch, device, spotOf });

@@ -83,6 +83,8 @@ export type TableModel = {
   celebrationQuiet: boolean;
   /** Side panel log since this page joined (log.ts). */
   log: LogEntry[];
+  /** My hole cards in the hand on the table (kept when the completed hand drops them). */
+  myCards: string[];
 };
 
 /** Cues kept: the player only ever needs the ones not played yet. */
@@ -121,6 +123,7 @@ export const initialModel = (): TableModel => ({
   fxEpoch: 0,
   celebrationQuiet: false,
   log: [],
+  myCards: [],
 });
 
 const REJECT_TEXT: Partial<Record<RejectCode, string>> = {
@@ -262,6 +265,7 @@ function onSnapshot(model: TableModel, table: TableState, version: number): Tabl
     awaitingSnapshot: false,
     fxEpoch: model.fxEpoch + 1,
     lastActions: sameHand ? model.lastActions : {},
+    myCards: myCards(table, sameHand ? model.myCards : []),
   };
   const buffered = model.buffered.filter((e) => e.version > version).sort((a, b) => a.version - b.version);
   next = { ...next, buffered: [] };
@@ -307,13 +311,20 @@ function onStateEvent(model: TableModel, event: StateEvent, quiet = false): Tabl
 function applyEvent(model: TableModel, event: StateEvent, quiet: boolean): TableModel {
   const entries = logFor(model.table!, event);
   const applied = applyState(model, event);
-  const next = entries.length ? { ...applied, log: [...model.log, ...entries].slice(-LOG_KEPT) } : applied;
+  const logged = entries.length ? { ...applied, log: [...model.log, ...entries].slice(-LOG_KEPT) } : applied;
+  const next = { ...logged, myCards: myCards(logged.table, event.type === "hand.started" ? [] : model.myCards) };
   if (quiet) return { ...next, celebrationQuiet: next.celebration !== model.celebration ? true : next.celebrationQuiet };
   const bodies = cuesFor(model.table!, event);
   if (bodies.length === 0) return next.celebration !== model.celebration ? { ...next, celebrationQuiet: false } : next;
   let id = model.fx.at(-1)?.id ?? 0;
   const cues = bodies.map((body) => ({ ...body, id: ++id }) as Cue);
   return { ...next, fx: [...model.fx, ...cues].slice(-FX_KEPT), celebrationQuiet: false };
+}
+
+/** My visible hole cards in the table's hand, or what was kept so far. */
+function myCards(table: TableState | null, kept: string[]): string[] {
+  const mine = table?.hand?.players.find((p) => p.player_id === table.you.player_id)?.cards ?? [];
+  return mine.length && mine.every((c) => c !== "??") ? mine : kept;
 }
 
 function applyState(model: TableModel, event: StateEvent): TableModel {

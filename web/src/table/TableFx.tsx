@@ -184,9 +184,9 @@ export function useTableFx({ cues, epoch, device, spotOf }: { cues: Cue[]; epoch
           const end = t + cue.pots.length * DURATION.collect;
           if (!reduced) {
             cue.pots.forEach((pot, i) => {
-              for (const seat of pot.winners) {
+              for (const { seat, amount } of pot.winners) {
                 const spot = spotOf(seat);
-                if (spot) ghost({ kind: "pot", amount: Math.round(pot.amount / pot.winners.length), from: g.pot, to: spotPos(device, spot), delay: t + i * DURATION.collect, duration: DURATION.collect, easing: EASE.out, lift: 0, fadeOut: true, small: !d });
+                if (spot) ghost({ kind: "pot", amount, from: g.pot, to: spotPos(device, spot), delay: t + i * DURATION.collect, duration: DURATION.collect, easing: EASE.out, lift: 0, fadeOut: true, small: !d });
               }
             });
             holdClass("fx-hold-result", end);
@@ -221,16 +221,15 @@ function GhostPiece({ ghost, onDone, track }: { ghost: Ghost; onDone: (key: numb
     if (!el || typeof el.animate !== "function") return onDone(ghost.key);
     const dx = ghost.from.x - ghost.to.x;
     const dy = ghost.from.y - ghost.to.y;
+    // The easing shapes the flight only (keyframe easing); the short fade at the end is linear,
+    // so an "out" curve does not swallow the whole trip.
+    const fly = ghost.kind === "cards" ? 1 : 0.84;
     const frames: Keyframe[] = [
-      { transform: `translate(${dx}px, ${dy}px)`, opacity: ghost.kind === "cards" ? 1 : 1 },
-      { transform: "translate(0px, 0px)", opacity: 1, offset: ghost.fadeOut ? 0.82 : 1 },
+      { transform: `translate(${dx}px, ${dy}px)`, opacity: 1, easing: ghost.easing },
+      { transform: "translate(0px, 0px)", opacity: ghost.kind === "cards" ? 0 : 1, offset: fly },
     ];
-    if (ghost.fadeOut) frames.push({ transform: "translate(0px, 0px)", opacity: 0 });
-    if (ghost.kind === "cards") {
-      frames[1] = { transform: `translate(${dx * 0.3}px, ${dy * 0.3}px) scale(0.85)`, opacity: 0.6, offset: 0.6 };
-      frames[2] = { transform: "translate(0px, 0px) scale(0.7)", opacity: 0 };
-    }
-    const a = el.animate(frames, { duration: ghost.duration, delay: ghost.delay, easing: ghost.easing, fill: "both" });
+    if (fly < 1) frames.push({ transform: "translate(0px, 0px)", opacity: 0 });
+    const a = el.animate(frames, { duration: ghost.duration / fly, delay: ghost.delay, easing: "linear", fill: "both" });
     track(a);
     a.addEventListener("finish", () => onDone(ghost.key));
     a.addEventListener("cancel", () => onDone(ghost.key));

@@ -98,6 +98,9 @@ export type ViewExtras = {
   results?: PlayerResult[] | null;
   /** Recent chat lines, shown as bubbles over the speakers' seats. */
   bubbles?: ChatMessage[];
+  /** My hole cards of the hand on the table: the completed hand drops a showdown loser's cards,
+   *  but I saw mine, so they stay in front of me until the next hand. */
+  myCards?: string[];
 };
 
 export function tableView(table: TableState, extras: ViewExtras = {}): TableView {
@@ -120,15 +123,19 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
     const result = results?.find((r) => r.player_id === occupant.player_id);
     const net = result ? result.hand_net + result.seven_deuce_net : 0;
 
+    // A completed hand reports showdown losers as out of the hand too: only a real fold (seen in
+    // this hand's actions) is drawn as folded then.
+    const folded = player && !player.in_hand && (live || extras.lastActions?.[seat]?.kind === "fold" || !extras.lastActions);
     let state: SeatState = "waiting";
     if (result && result.hand_net > 0) state = "winner";
     else if (live && hand.actor === occupant.player_id) state = "turn";
-    else if (player && !player.in_hand) state = "folded";
+    else if (folded) state = "folded";
     else if (!occupant.connected) state = "disconnected";
     else if (occupant.sitting_out) state = "sitting-out";
     else if (live && player && player.stack === 0) state = "all-in";
 
-    const cards = player && player.in_hand ? player.cards : [];
+    let cards = player && player.in_hand ? player.cards : [];
+    if (isMe && hand?.complete && !folded && cards.length === 0 && extras.myCards?.length) cards = extras.myCards;
     const faceUp = cards.length > 0 && cards.every((c) => c !== "??");
     const last = extras.lastActions?.[seat];
     let lastAction: string | undefined;

@@ -160,7 +160,7 @@ function SeatPod({ device, s, cx, clock, now, fx, onSit }: { device: Device; s: 
   const hidden = cards.length > 0 && !s.shown;
   const turning = fx.unflipped?.has(s.seat) ?? false;
   return (
-    <div className={`seat st-${s.state} toward-${side}`} style={at(p)} data-seat={s.seat} role="group" aria-label={`Ghế ${s.seat}: ${s.name}`}>
+    <div className={`seat st-${s.state} toward-${side}${p.y < 100 ? " is-top" : ""}`} style={at(p)} data-seat={s.seat} role="group" aria-label={`Ghế ${s.seat}: ${s.name}`}>
       {s.delta && <span className={`delta delta-${s.delta.kind}`}>{s.delta.text}</span>}
       {s.bubble && <span className="bubble">{s.bubble}</span>}
       {s.shown && (

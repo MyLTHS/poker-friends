@@ -21,8 +21,8 @@ export type CueBody =
   | { kind: "board"; from: number; to: number }
   /** hands turned over at showdown, in order. */
   | { kind: "showdown"; order: number[] }
-  /** each pot to its winners, one after the other. */
-  | { kind: "award"; pots: { amount: number; winners: number[] }[] }
+  /** each pot to its winners, one after the other (`amount` = chips each winner takes). */
+  | { kind: "award"; pots: { winners: { seat: number; amount: number }[] }[] }
   /** the 7-2 moment. */
   | { kind: "seven"; seat: number };
 
@@ -79,17 +79,18 @@ export function cuesFor(prev: TableState, event: StateEvent): CueBody[] {
         const order = showdownOrder(hand).filter((s) => turned.includes(s));
         cues.push({ kind: "showdown", order });
       }
-      // Pots as they stood before the payout (the completed hand reports them emptied).
+      // Pots as they stood before the payout (the completed hand reports them emptied). When the
+      // last fold already paid them out, each winner's gain stands in for the pot.
       const winners = results.filter((r) => r.hand_net > 0);
       const pots = before.pots
-        .map((pot, i) => ({
-          amount: pot.amount + (i === before.pots.length - 1 ? sumBets(before) : 0),
-          winners: winners.filter((w) => pot.eligible.includes(w.player_id)).map((w) => w.seat),
-        }))
-        .filter((p) => p.amount > 0);
-      const paid = pots.filter((p) => p.winners.length > 0);
-      if (paid.length) cues.push({ kind: "award", pots: paid });
-      else if (winners.length) cues.push({ kind: "award", pots: [{ amount: sumBets(before) + before.pots.reduce((s, p) => s + p.amount, 0), winners: winners.map((w) => w.seat) }] });
+        .map((pot, i) => {
+          const amount = pot.amount + (i === before.pots.length - 1 ? sumBets(before) : 0);
+          const takers = winners.filter((w) => pot.eligible.includes(w.player_id));
+          return { winners: takers.map((w) => ({ seat: w.seat, amount: Math.round(amount / takers.length) })) };
+        })
+        .filter((p) => p.winners.length > 0 && p.winners.every((w) => w.amount > 0));
+      if (pots.length) cues.push({ kind: "award", pots });
+      else if (winners.length) cues.push({ kind: "award", pots: [{ winners: winners.map((w) => ({ seat: w.seat, amount: w.hand_net })) }] });
       if (seven_deuce) cues.push({ kind: "seven", seat: seven_deuce.seat });
       return cues;
     }
