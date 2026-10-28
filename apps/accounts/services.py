@@ -175,6 +175,24 @@ def signup(email: str, username: str, password: str) -> User:
     return user
 
 
+def create_player(email: str, username: str, password: str) -> User:
+    """A player's account made by staff (Django admin): ready to log in at once.
+
+    Staff vouch for the address, so it is verified now and no email is sent; the player can
+    change the password later with "Quên mật khẩu".
+    """
+    email = normalize_email(email)
+    try:
+        with transaction.atomic():
+            lock_email(email)
+            _check_unique(email, username)
+            user = User.objects.create_user(username=username, email=email, password=password)
+            mark_email_verified(user)
+    except IntegrityError as error:  # lost a race on the unique username
+        raise AccountError("username_taken", "This name is already used.") from error
+    return user
+
+
 def _email_and_ip(email: str, ip: str) -> str:
     return f"{email}|{ip}"
 
