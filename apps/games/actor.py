@@ -213,7 +213,7 @@ class TableActor:
         await self._call(lambda: self._kick(user_id))
 
     async def drop_player(self, user_id: int, code: int) -> None:
-        """Close this player's sockets here, at once (the owner withdrew their approval)."""
+        """Close this player's sockets here, at once (staff switched the account off)."""
         await self._call(lambda: self._drop_player(user_id, code))
 
     async def close(self) -> bool:
