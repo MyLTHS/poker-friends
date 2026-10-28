@@ -519,3 +519,21 @@ class TestRestFlooding:
             assert not await RoomMember.objects.filter(room=room, user=eve).aexists()
 
         run_async(body)
+
+    def test_friends_on_one_wifi_all_get_in_with_the_real_link(self):
+        """The limit is for guessing: a whole table opening the real link, several times each,
+        from one shared IP, must not be locked out."""
+        room = make_room(is_private=True, invite_token="the-real-invite-token")
+        friends = [make_user(f"friend{i}") for i in range(12)]
+
+        async def body():
+            for friend in friends:
+                client = await alogged_in(friend)
+                for _ in range(3):
+                    joined = await apost(
+                        client, "/api/rooms/join/", {"invite_token": "the-real-invite-token"}
+                    )
+                    assert joined.status_code == 200
+            assert await RoomMember.objects.filter(room=room).acount() >= len(friends)
+
+        run_async(body)

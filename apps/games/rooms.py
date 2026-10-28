@@ -406,8 +406,11 @@ async def rotate_invite(request: HttpRequest, room_id: int) -> JsonResponse:
 async def join(request: HttpRequest) -> JsonResponse:
     if request.method != "POST":
         return error("method_not_allowed", "POST.")
+    ip = client_ip(request)
     try:
-        JOINS_PER_IP.hit(client_ip(request))  # every try counts, wrong tokens above all
+        # Only wrong tokens count (below): friends at one table share a Wi-Fi, so one IP, and
+        # each of them opens the invite link, maybe several times.
+        JOINS_PER_IP.check(ip)
     except RateLimited as exc:
         return rate_limited(exc)
     try:
@@ -418,6 +421,7 @@ async def join(request: HttpRequest) -> JsonResponse:
         return error("validation_error", "Invalid body.", exc.fields)
     room = await Room.objects.select_related("owner").filter(invite_token=token).afirst()
     if room is None:
+        JOINS_PER_IP.hit(ip)
         return error("room_not_found", "Bad or old invite link.")
     try:
         user = await player_for_request(request)

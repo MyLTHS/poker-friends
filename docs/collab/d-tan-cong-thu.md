@@ -54,7 +54,7 @@ nếu đoán trúng UUID của người ngồi cùng bàn, nên để nguyên.
 |---|---|
 | `DEBUG` mặc định tắt | Server khởi động mà quên cấu hình thì không bao giờ chạy chế độ debug (debug lộ cấu hình khi có lỗi). Quên cả `DJANGO_SECRET_KEY` thì không chạy, kèm lời nhắc. Dev vẫn tiện: `manage.py` tự bật debug khi chưa có `DJANGO_SECRET_KEY` (máy dev, server e2e của CI); pytest tự bật qua `config/settings_test.py`; Docker dev đọc `.env`. |
 | HSTS + `SECURE_*` sau proxy HTTPS | `DJANGO_BEHIND_HTTPS_PROXY=true` giờ bật thêm chuyển hướng `http→https` và HSTS 30 ngày (không gồm subdomain, không preload, dễ gỡ khi tên miền còn mới; chỉnh bằng `DJANGO_HSTS_SECONDS`). `manage.py check --deploy` không còn cảnh báo HSTS/HTTPS/cookie. Ghi vào `docs/deploy.md`. |
-| Rate limit REST vào ghế / rời ghế / vào phòng | Vào và rời ghế: chung 10 lần mỗi phút cho một người. Thử link mời: 20 lần mỗi 10 phút cho một địa chỉ IP, tính cả lần sai. Quá thì 429 kèm `Retry-After` (đã có trong `openapi.yaml`, không đổi hợp đồng). |
+| Rate limit REST vào ghế / rời ghế / vào phòng | Vào và rời ghế: chung 10 lần mỗi phút cho một người. Thử link mời: 20 lần **sai** mỗi 10 phút cho một địa chỉ IP; mở link đúng thì không tính, vì cả bàn bạn bè thường dùng chung một Wi-Fi (sửa sau review). Quá thì 429 kèm `Retry-After` (đã có trong `openapi.yaml`, không đổi hợp đồng). |
 | Lưu người trả thưởng 7-2 vào `Hand` | Cột mới `Hand.seven_deuce`: người thắng, mức thưởng lúc đó, ai trả bao nhiêu, tổng. Ghi cùng transaction với kết quả ván, đọc từ chính bút toán của ván nên luôn khớp sổ chip. **Không đổi luật** (vẫn `min(bonus, chip còn lại)`, vẫn chỉ thưởng khi thắng vì mọi người fold). Ván cũ được điền lại từ sổ chip khi chạy migration. |
 
 ## 4. Chưa làm, chưa chắc
