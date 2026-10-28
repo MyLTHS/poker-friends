@@ -65,9 +65,32 @@ def save_completed_hand(
                 hand=hand,
             )
         hand.result = result
+        hand.seven_deuce = seven_deuce_award(engine, entries)
         hand.completed_at = timezone.now()
-        hand.save(update_fields=["result", "completed_at"])
+        hand.save(update_fields=["result", "seven_deuce", "completed_at"])
     return hand
+
+
+def seven_deuce_award(engine: HandEngine, entries: list[EngineLedgerEntry]) -> dict | None:
+    """Rule #27 as settled for this hand, or ``None``: the bluffer, the room's bonus at the
+    time, and what each other seated player actually paid (never more than the bonus or than
+    their chips; someone with nothing left is not listed). Read from the hand's own entries, so
+    it always agrees with the ledger.
+    """
+    winner = engine.seven_deuce_bluff_winner()
+    bonus = engine.config.seven_deuce_bonus
+    if bonus <= 0 or winner is None:
+        return None
+    payments = sorted(
+        (
+            {"player_id": e.player_id, "amount": -e.amount}
+            for e in entries
+            if e.kind == EngineLedgerKind.SEVEN_DEUCE and e.amount < 0
+        ),
+        key=lambda payment: int(payment["player_id"]),
+    )
+    total = sum(payment["amount"] for payment in payments)
+    return {"player_id": winner, "bonus": bonus, "payments": payments, "total": total}
 
 
 def _check_entries(hand_no: int, engine: HandEngine, entries: list[EngineLedgerEntry]) -> None:

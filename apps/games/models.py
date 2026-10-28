@@ -199,6 +199,10 @@ class Hand(models.Model):
     # ``HandResult`` as computed when the hand finished, kept to check replays against; or
     # ``{"voided": true, "reason": ...}`` for an unfinished hand voided by ``void_hand`` (B5).
     result = models.JSONField(null=True, blank=True)
+    # Rule #27 as settled for this hand, or null when there was no award:
+    # {"player_id": bluffer, "bonus": room's bonus then, "payments": [{"player_id", "amount"}],
+    #  "total": sum of payments}. Written with the result (services.save_completed_hand).
+    seven_deuce = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
