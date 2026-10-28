@@ -207,7 +207,7 @@ class TestGuestLimit:
         room, a, b = heads_up_room()
 
         async def body():
-            for _ in range(GUESTS_PER_IP.limit):
+            for _ in range(GUESTS_PER_IP.cap):
                 response = await AsyncClient().get(f"/api/rooms/{room.pk}/snapshot/")
                 assert response.status_code == 200
             response = await AsyncClient().get(f"/api/rooms/{room.pk}/snapshot/")
@@ -225,7 +225,7 @@ class TestGuestLimit:
         room, a, b = heads_up_room()
 
         async def body():
-            for _ in range(GUESTS_PER_IP.limit):
+            for _ in range(GUESTS_PER_IP.cap):
                 GUESTS_PER_IP.hit("10.0.0.1")  # this IP already made its guests
             conn = await socket(room, AnonymousUser(), SessionStore())
             connected, _ = await conn.connect()

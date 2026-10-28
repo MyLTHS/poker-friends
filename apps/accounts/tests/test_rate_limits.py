@@ -171,11 +171,20 @@ class TestEmailSendingEndpoints:
         from django.conf import settings
 
         assert settings.ACCOUNTS_GUESTS_PER_IP_HOUR == 20
-        assert ratelimit.GUESTS_PER_IP.limit == settings.ACCOUNTS_GUESTS_PER_IP_HOUR
+        assert ratelimit.GUESTS_PER_IP.cap == 20
+
+    def test_guest_limit_is_read_when_used(self, client, settings):
+        from rest_framework.test import APIClient
+
+        settings.ACCOUNTS_GUESTS_PER_IP_HOUR = 2
+        assert ratelimit.GUESTS_PER_IP.cap == 2
+        for _ in range(2):
+            assert APIClient().post("/api/auth/guest/").status_code == 201
+        assert APIClient().post("/api/auth/guest/").status_code == 429
 
     def test_guest_creation_from_one_ip_is_limited(self, client):
         from rest_framework.test import APIClient
 
-        for _ in range(ratelimit.GUESTS_PER_IP.limit):
+        for _ in range(ratelimit.GUESTS_PER_IP.cap):
             assert APIClient().post("/api/auth/guest/").status_code == 201
         assert APIClient().post("/api/auth/guest/").status_code == 429
