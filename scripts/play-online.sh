@@ -10,6 +10,9 @@
 # Secrets live in .env.home (created on the first `up`, never committed). Messages are in
 # Vietnamese: the owner runs this before and after each game night.
 set -euo pipefail
+# Every file this script writes (.env.home holds the secret key and the DB password, and the
+# set_env rewrites below replace it) is readable by this user only.
+umask 077
 cd "$(dirname "$0")/.."
 
 ENV_FILE=.env.home
@@ -47,14 +50,17 @@ set_env() { # set_env KEY VALUE: replace the line KEY=... in .env.home, or add i
     { print }
     END { if (!done) print k "=" v }' "$ENV_FILE" >"$tmp"
   mv "$tmp" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
 }
 
 ensure_env() {
-  [ -f "$ENV_FILE" ] && return
+  if [ -f "$ENV_FILE" ]; then
+    chmod 600 "$ENV_FILE" # also fixes a file left 0644 by an older version of this script
+    return
+  fi
   local secret password
   secret=$(openssl rand -hex 32)
   password=$(openssl rand -hex 24)
-  umask 077
   cat >"$ENV_FILE" <<EOF
 # Created by scripts/play-online.sh: secrets for playing from this Mac. Never commit this file.
 # The script rewrites DJANGO_ALLOWED_HOSTS and FRONTEND_URL on every "up" (the link changes).
@@ -83,20 +89,65 @@ EOF
   say "Đã tạo $ENV_FILE (mật khẩu, khoá bí mật ngẫu nhiên)."
 }
 
-has_tables() {
+table_count() { # number of tables in the database; fails if the database cannot be asked
   local n
   n=$(echo "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'" |
-    dc exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' 2>/dev/null || echo 0)
-  [ "${n:-0}" -gt 0 ]
+    dc exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' 2>/dev/null) || return 1
+  case "$n" in '' | *[!0-9]*) return 1 ;; esac
+  echo "$n"
 }
 
-backup() {
+backup() { # fails (never silently skips) when the database cannot be asked or the dump fails
   mkdir -p backups
-  if has_tables; then
+  local n="" _
+  for _ in 1 2 3 4 5; do
+    n=$(table_count) && break
+    n=""
+    sleep 3 # the database may still be starting
+  done
+  if [ -z "$n" ]; then
+    say "   KHÔNG hỏi được database (đang khởi động hay bị lỗi?): CHƯA sao lưu." >&2
+    return 1
+  fi
+  if [ "$n" -gt 0 ]; then
     dc run --rm -T tools scripts/backup.sh
   else
     say "   (database còn trống, chưa cần sao lưu)"
   fi
+}
+
+# The quick-tunnel link from cloudflared's banner. Only the banner counts: on a network error
+# the log also mentions https://api.trycloudflare.com, which is not our link.
+tunnel_url() {
+  awk '/Your quick Tunnel has been created/ { banner = 1; next }
+    banner && match($0, /https:\/\/[a-z0-9-]+\.trycloudflare\.com/) {
+      url = substr($0, RSTART, RLENGTH)
+      if (url != "https://api.trycloudflare.com") { print url; exit }
+    }' "$STATE/cloudflared.log" 2>/dev/null || true
+}
+
+# The production file names the backend container: another stack using that name (an older
+# test, a production try-out) would make `up` fail with a cryptic Docker error.
+check_backend_name() {
+  local owner
+  owner=$(docker ps -a --filter 'name=^/poker-friends-backend$' \
+    --format '{{.Label "com.docker.compose.project"}}' | head -n 1)
+  if [ -n "$owner" ] && [ "$owner" != "$PROJECT" ]; then
+    die "đang có container poker-friends-backend của bộ \"$owner\" (không phải \"$PROJECT\"). \
+Chỉ được một server chạy: tắt bộ kia trước bằng \"docker compose -p $owner down\" rồi chạy lại."
+  fi
+}
+
+# Cleanup for an `up` that did not finish: close the tunnel and stop the containers (the data
+# volume stays). Runs on any error, die, or Ctrl-C until `up` has printed the link.
+UP_DONE=0
+abort_up() {
+  [ "$UP_DONE" = 1 ] && return
+  say "Chưa bật xong: đang đóng đường hầm và tắt server (dữ liệu vẫn giữ)..." >&2
+  stop_pid cloudflared
+  stop_pid caffeinate
+  rm -f "$STATE/url"
+  dc down >/dev/null 2>&1 || true
 }
 
 public_url() { cat "$STATE/url" 2>/dev/null || true; }
@@ -113,32 +164,29 @@ cmd_up() {
     say "Đang chạy rồi. Link: $(public_url)"
     exit 0
   fi
+  check_backend_name
   mkdir -p "$STATE"
   ensure_env
+  trap abort_up EXIT
+  trap 'exit 130' INT TERM
 
   say "1/5 Bật database..."
   dc up -d --wait db
   say "2/5 Sao lưu trước khi chơi..."
-  backup
+  backup || die "không sao lưu được nên không bật (tránh mất dữ liệu). Thử lại sau một phút."
 
   say "3/5 Mở đường hầm Cloudflare..."
   nohup cloudflared tunnel --no-autoupdate --url "http://127.0.0.1:$HOME_PORT" \
     >"$STATE/cloudflared.log" 2>&1 &
   echo $! >"$STATE/cloudflared.pid"
-  # From here on, a failure closes the tunnel again: never leave it open half set up.
-  trap 'say "Có lỗi, đang đóng đường hầm..."; stop_pid cloudflared' ERR
-  trap 'say "Đã dừng giữa chừng, đang đóng đường hầm..."; stop_pid cloudflared; exit 130' INT TERM
   local url=""
   for _ in $(seq 1 60); do
-    url=$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' "$STATE/cloudflared.log" | head -n 1 || true)
+    url=$(tunnel_url)
     [ -n "$url" ] && break
-    alive cloudflared || break
+    alive cloudflared || die "cloudflared đã thoát (mất mạng?). Xem $STATE/cloudflared.log"
     sleep 1
   done
-  if [ -z "$url" ]; then
-    stop_pid cloudflared
-    die "không lấy được link (mạng?). Xem $STATE/cloudflared.log"
-  fi
+  [ -n "$url" ] || die "không lấy được link sau 60 giây (mạng?). Xem $STATE/cloudflared.log"
   echo "$url" >"$STATE/url"
   set_env DJANGO_ALLOWED_HOSTS "${url#https://},localhost,127.0.0.1"
   set_env FRONTEND_URL "$url"
@@ -159,7 +207,8 @@ cmd_up() {
     [ "$code" = 200 ] && break
     sleep 2
   done
-  trap - ERR INT TERM
+  UP_DONE=1
+  trap - EXIT INT TERM
   say ""
   if [ "$code" = 200 ]; then
     say "XONG. Gửi link này cho bạn bè:"
@@ -173,9 +222,16 @@ cmd_up() {
 }
 
 cmd_down() {
-  if [ -f "$ENV_FILE" ] && [ -n "$(dc ps -q db 2>/dev/null)" ]; then
+  if [ -f "$ENV_FILE" ] && [ -z "$(dc ps -q db 2>/dev/null)" ]; then
+    say "Database không chạy nên không sao lưu được lúc này; lần \"up\" sau sẽ sao lưu trước." >&2
+  elif [ -f "$ENV_FILE" ]; then
     say "Sao lưu cuối buổi..."
-    backup || say "   (sao lưu lỗi, xem dòng trên; vẫn tắt tiếp)"
+    if ! backup; then
+      say "" >&2
+      say "CẢNH BÁO: buổi này CHƯA được sao lưu. Dữ liệu vẫn nằm trong Docker; lần \"up\" sau" >&2
+      say "sẽ sao lưu trước khi bật. Vẫn tắt tiếp." >&2
+      say "" >&2
+    fi
   fi
   say "Đóng đường hầm..."
   stop_pid cloudflared
