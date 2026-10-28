@@ -1,7 +1,7 @@
 // Members only (server GUESTS_ALLOWED off, account/members.ts): run on its own with
 // `npm run e2e:members` (E2E_MEMBERS_ONLY=1 starts Django with guests off; the other specs need
 // them on, and Next allows one dev server per folder, so the two cannot share a run).
-// Accounts are made and approved the way the owner does it: manage.py verify_email.
+// Any real account plays: no approval, no email to verify, a signup is logged in at once.
 
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -23,20 +23,20 @@ function manage(...args: string[]): string {
   }).toString();
 }
 
-/** A real account; `approved`: the owner let it in (verify_email, which also verifies the email). */
-function account(name: string, approved: boolean) {
+/** A real account, made the way a signup makes it (its email is not verified: it needs not be). */
+function account(name: string) {
   const email = `${name.toLowerCase()}-${RUN}@example.com`;
   manage(
     "shell",
     "-c",
     `from apps.games.models import User; User.objects.create_user(username=${JSON.stringify(`${name}${RUN}`)}, email=${JSON.stringify(email)}, password=${JSON.stringify(PASSWORD)})`,
   );
-  if (approved) manage("verify_email", "--", email);
   return email;
 }
 
-const setApproved = (email: string, approved: boolean) =>
-  manage("shell", "-c", `from apps.games.models import User; User.objects.filter(email=${JSON.stringify(email)}).update(approved=${approved ? "True" : "False"})`);
+/** The admin switches an account off (is_active): it stops being a member. */
+const switchOff = (email: string) =>
+  manage("shell", "-c", `from apps.games.models import User; User.objects.filter(email=${JSON.stringify(email)}).update(is_active=False)`);
 
 /** A browser logged in through the API (the login form is tested below). */
 async function loggedIn(browser: Browser, email: string): Promise<Page> {
@@ -53,13 +53,13 @@ async function logIn(page: Page, email: string) {
 }
 
 test("a stranger goes to the login, which offers no guest; an invite link survives it", async ({ browser, page }) => {
-  const owner = await loggedIn(browser, account("Chu", true));
+  const owner = await loggedIn(browser, account("Chu"));
   const room = await api(owner, "POST", "/api/rooms/", { name: "Bàn thành viên", small_blind: 1, big_blind: 2, is_private: true });
-  const friend = account("Ban", true);
+  const friend = account("Ban");
 
   await page.goto("/rooms");
   await expect(page).toHaveURL(/\/account\?next=%2Frooms$/);
-  await expect(page.getByText("Chỉ thành viên. Đăng ký rồi nhờ chủ phòng duyệt.")).toBeVisible();
+  await expect(page.getByText("Chỉ thành viên: đăng ký tài khoản là vào chơi được.").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Chơi ngay bằng khách" })).toHaveCount(0);
   // and the server makes none, even asked directly (with the CSRF token, so the answer is about guests)
   const csrf = (await page.context().cookies(WEB)).find((c) => c.name === "csrftoken")?.value ?? "";
@@ -79,66 +79,62 @@ test("a stranger goes to the login, which offers no guest; an invite link surviv
 });
 
 test("an unsafe next is ignored: the login stays on this site", async ({ page }) => {
-  const friend = account("An", true);
+  const friend = account("An");
   await page.goto(`/account?next=${encodeURIComponent("/.//evil.example/x")}`); // normalises to "//evil.example/x"
   await logIn(page, friend);
   await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
   expect(new URL(page.url()).origin).toBe(WEB);
 });
 
-test("signing up: request sent, the login waits for the owner, approval lets them in", async ({ page }) => {
-  const email = `moi-${RUN}@example.com`;
-  await page.goto("/account/signup?next=%2Frooms");
-  await page.getByLabel("Email").fill(email);
+test("signing up from an invite link: logged in at once and straight into the room", async ({ browser, page }) => {
+  const owner = await loggedIn(browser, account("Chu2"));
+  const room = await api(owner, "POST", "/api/rooms/", { name: "Bàn ai cũng vào", small_blind: 1, big_blind: 2, is_private: true });
+
+  await page.goto(`/rooms/join?token=${room.invite_token}`);
+  await expect(page).toHaveURL(/\/account\?next=%2Frooms%2Fjoin%3Ftoken%3D/);
+  await page.getByRole("link", { name: "Đăng ký" }).click();
+  await expect(page).toHaveURL(/\/account\/signup\?next=%2Frooms%2Fjoin%3Ftoken%3D/);
+  await page.getByLabel("Email").fill(`moi-${RUN}@example.com`);
   await page.getByLabel("Tên ở bàn").fill(`Moi${RUN}`);
   await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Tạo tài khoản" }).click();
-  await expect(page.getByRole("heading", { name: "Đã gửi yêu cầu" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Thử đăng nhập" }).click();
-  await expect(page).toHaveURL(/\/account\?next=%2Frooms$/);
-  await logIn(page, email);
-  const wait = page.getByRole("heading", { name: "Đợi chủ phòng duyệt" });
-  await expect(wait).toBeVisible();
-  await expect(page.getByText(email)).toBeVisible();
-
-  await page.getByRole("button", { name: "Thử lại" }).click();
-  await expect(page.getByText("Chủ phòng chưa duyệt. Thử lại sau ít phút nhé.")).toBeVisible();
-
-  manage("verify_email", "--", email); // the owner lets them in
-  await page.getByRole("button", { name: "Thử lại" }).click();
-  await expect(page).toHaveURL(/\/rooms$/); // back where the signup started
+  // no email to open, no one to wait for: the invite opens the room
+  await expect(page).toHaveURL(new RegExp(`/rooms/${room.room.room_id}(\\?|$)`));
+  await expect(page.getByText("Bàn ai cũng vào").first()).toBeVisible();
+  await expect(page.getByText("Đợi chủ phòng duyệt")).toHaveCount(0);
 });
 
-test("approval taken back: the API sends to the waiting screen, the table closes 4401 and says so", async ({ browser }) => {
-  const email = account("Chi", true);
-  const page = await loggedIn(browser, email);
-  const room = await api(page, "POST", "/api/rooms/", { name: "Bàn bỏ duyệt", small_blind: 1, big_blind: 2 });
-  await page.goto(`/rooms/${room.room.room_id}/table`);
-  await expect(page.getByRole("button", { name: /^Gửi 👍/ })).toBeEnabled();
-
-  setApproved(email, false);
-  // The socket checks each message: the next one is refused with 4401, and the table says why.
-  await page.getByRole("button", { name: /^Gửi 👍/ }).click();
-  const card = page.getByRole("alertdialog", { name: "Đợi chủ phòng duyệt" });
-  await expect(card).toBeVisible();
-  await expect(card.getByRole("link", { name: "Xem tài khoản" })).toHaveAttribute("href", "/account");
-
-  // Any room page now: 403 not_approved → the account page waits; never back to the login.
-  await page.goto("/rooms");
-  await expect(page).toHaveURL(/\/account$/);
-  await expect(page.getByRole("heading", { name: "Đợi chủ phòng duyệt" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Đăng xuất" })).toBeVisible();
-
-  setApproved(email, true);
-  await page.getByRole("button", { name: "Thử lại" }).click();
-  // Approved again: back to the page that was refused (remembered), not the profile.
+test("a plain signup lands in the lobby, logged in", async ({ page }) => {
+  await page.goto("/account/signup");
+  await expect(page.getByText("Chỉ thành viên: đăng ký tài khoản là vào chơi được.")).toBeVisible();
+  await page.getByLabel("Email").fill(`thuong-${RUN}@example.com`);
+  await page.getByLabel("Tên ở bàn").fill(`Thuong${RUN}`);
+  await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Tạo tài khoản" }).click();
   await expect(page).toHaveURL(/\/rooms$/);
   await expect(page.getByRole("heading", { name: "Chọn một bàn" })).toBeVisible();
-  // ...and only once: the account page now stays the account page.
-  await page.goto("/account");
-  await expect(page.getByRole("heading", { name: "Hồ sơ" })).toBeVisible();
-  await expect(page).toHaveURL(/\/account$/);
+});
+
+test("an account switched off: the table closes 4401 and offers the login back to it; pages go to the login", async ({ browser }) => {
+  const email = account("Chi");
+  const page = await loggedIn(browser, email);
+  const room = await api(page, "POST", "/api/rooms/", { name: "Bàn bị khoá", small_blind: 1, big_blind: 2 });
+  const table = `/rooms/${room.room.room_id}/table`;
+  await page.goto(table);
+  await expect(page.getByRole("button", { name: /^Gửi 👍/ })).toBeEnabled();
+
+  switchOff(email);
+  // The socket checks each message: the next one is refused with 4401, and the table says why.
+  await page.getByRole("button", { name: /^Gửi 👍/ }).click();
+  const card = page.getByRole("alertdialog", { name: "Cần đăng nhập để chơi tiếp" });
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute("href", `/account?next=${encodeURIComponent(table)}`);
+
+  // Any room page now: 401 login_required → the login, coming back here afterwards.
+  await page.goto("/rooms");
+  await expect(page).toHaveURL(/\/account\?next=%2Frooms$/);
+  await expect(page.getByRole("heading", { name: "Chào mừng trở lại" }).first()).toBeVisible();
 });
 
 test("an old guest session is told to upgrade", async ({ browser }) => {
