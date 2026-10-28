@@ -10,6 +10,9 @@ on:
     - cron: "0 20 * * 0" # every Sunday 03:00 Vietnam time: the drill keeps proving itself
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   restore-drill:
     # Bằng chứng "backup đã thử khôi phục": play hands into Postgres, back up with
@@ -41,16 +44,20 @@ jobs:
       - name: Play hands into the database
         run: |
           uv run python manage.py migrate --noinput -v0
-          uv run python manage.py simulate_hands --hands 200 --players 9 --seed ${{ github.run_number }}
-          uv run python manage.py simulate_hands --hands 300 --players 2 --seven-deuce-bonus 150 --seed ${{ github.run_number }}
-          uv run python manage.py simulate_hands --hands 50 --players 5 --leave-unfinished
+          # Fixed seeds: the drill tests backup and restore, so a PR never goes red by chance.
+          uv run python manage.py simulate_hands --hands 200 --players 9 --seed 1
+          uv run python manage.py simulate_hands --hands 300 --players 2 --seven-deuce-bonus 150 --seed 2
+          uv run python manage.py simulate_hands --hands 50 --players 5 --seed 3 --leave-unfinished
           uv run python manage.py check_ledger
       - name: Back up
         run: $PG scripts/backup.sh -d "$DATABASE_URL" -o backups/drill.dump
       - name: Restore refuses a database that has data
         run: |
-          if $PG scripts/restore.sh -d "$DATABASE_URL" backups/drill.dump; then
-            echo "restore.sh restored over a database with data" >&2
+          # Exit code 3 is "target has tables"; any other failure is a different bug.
+          code=0
+          $PG scripts/restore.sh -d "$DATABASE_URL" backups/drill.dump || code=$?
+          if [ "$code" != 3 ]; then
+            echo "restore.sh over a database with data: exit $code, expected 3" >&2
             exit 1
           fi
       - name: Restore into a new, empty database
@@ -127,8 +134,9 @@ jobs:
           EOF
       - name: Backup through the tools service, then check_ledger
         run: |
+          mkdir -p backups
           $DC run --rm -T tools scripts/backup.sh
-          ls -l backups/
+          scripts/check-backup-age.sh
           $DC exec -T backend python manage.py check_ledger
       - name: Only one backend (one Daphne), tried last
         run: |

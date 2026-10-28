@@ -33,7 +33,15 @@
 2. `git clone` repo vào `/srv/poker-friends`, `cp deploy/env.production.example .env`, sửa mọi
    chỗ có "doi-ten" / "thay-bang" (mục 2 ở trên).
 3. `docker compose -f docker-compose.prod.yml up -d --build`. Caddy tự lấy chứng chỉ HTTPS.
-4. Đặt backup hằng ngày: [runbook.md](runbook.md#backup-hằng-ngày-và-diễn-tập).
+4. Backup lần đầu và kiểm nó (thư mục `backups/` không có trong git nên tạo trước):
+
+   ```bash
+   mkdir -p backups
+   docker compose -f docker-compose.prod.yml run --rm tools scripts/backup.sh
+   scripts/check-backup-age.sh
+   ```
+
+5. Đặt backup hằng ngày bằng cron: [runbook.md](runbook.md#backup-hằng-ngày-và-diễn-tập).
 
 Sao lưu và khôi phục (`scripts/backup.sh`, `scripts/restore.sh`, rồi `check_ledger`), bàn tạm
 dừng, lệch chip, đổi bản và quay về bản trước: [runbook.md](runbook.md).

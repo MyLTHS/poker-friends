@@ -27,6 +27,7 @@ alias dc='docker compose -f docker-compose.prod.yml'
 | Log server (Django, Daphne) | `dc logs --tail 200 backend` |
 | Sổ chip có lệch không | `dc exec backend python manage.py check_ledger` |
 | Ổ đĩa còn trống không | `df -h` |
+| Backup hằng ngày có còn chạy không (có bản trong 26 giờ qua) | `scripts/check-backup-age.sh` |
 
 `check_ledger` in từng phòng: `[ok ]` là ổn, `[LỖI]` kèm danh sách lỗi. Dòng "ván #N đang chơi
 dở" là **bình thường** (có bàn đang chơi, hoặc server tắt giữa ván; server sẽ chơi tiếp). Lệnh
@@ -101,40 +102,52 @@ Khi nào: database hỏng hoặc mất (ổ đĩa hỏng, xoá nhầm, máy ch�
 1. Dừng app, giữ database chạy: `dc stop caddy web backend`.
 2. Chọn file backup: `ls -lt backups/` (mới nhất ở trên). Nếu server mới, chép file từ chỗ lưu
    ngoài vào `backups/`.
-3. Tạo một database **mới, trống** và khôi phục vào đó (không ghi đè database cũ):
+3. Tạo một database **mới, trống** và khôi phục vào đó (không ghi đè database cũ). Các lệnh dưới
+   đây lấy tên người dùng và mật khẩu từ `.env` bên trong container, nên **không gõ mật khẩu**
+   ra dòng lệnh (dòng lệnh được lưu lại trong lịch sử shell). Giữ nguyên dấu nháy đơn `'...'`:
 
    ```bash
-   dc exec db createdb -U poker poker_restored
-   dc run --rm tools scripts/restore.sh \
-     -d postgres://poker:<mật-khẩu>@db:5432/poker_restored backups/<tên-file>.dump
+   dc exec db sh -c 'createdb -U "$POSTGRES_USER" poker_restored'
+   dc run --rm tools sh -c \
+     'scripts/restore.sh -d "${DATABASE_URL%/*}/poker_restored" backups/<tên-file>.dump'
    ```
+
+   (`${DATABASE_URL%/*}/poker_restored` là địa chỉ database trong `.env`, đổi tên cuối thành
+   `poker_restored`.)
 
    Script từ chối nếu database đích đã có bảng. Cờ `--overwrite-existing-data` cho phép ghi đè,
    **chỉ dùng khi chắc chắn** database đích là bản hỏng không cần giữ.
 4. Kiểm bản vừa khôi phục, phải ra `OK`:
 
    ```bash
-   dc run --rm --no-deps -e DATABASE_URL=postgres://poker:<mật-khẩu>@db:5432/poker_restored \
-     backend python manage.py check_ledger
+   dc run --rm --no-deps backend sh -c \
+     'DATABASE_URL="${DATABASE_URL%/*}/poker_restored" python manage.py check_ledger'
    ```
 
 5. Đổi tên để app dùng bản khôi phục, giữ bản cũ lại để điều tra:
 
    ```bash
-   dc exec db psql -U poker -d postgres -c "ALTER DATABASE poker RENAME TO poker_hong_$(date +%Y%m%d)"
-   dc exec db psql -U poker -d postgres -c "ALTER DATABASE poker_restored RENAME TO poker"
+   dc exec db sh -c 'psql -U "$POSTGRES_USER" -d postgres -c "ALTER DATABASE \"$POSTGRES_DB\" RENAME TO poker_hong"'
+   dc exec db sh -c 'psql -U "$POSTGRES_USER" -d postgres -c "ALTER DATABASE poker_restored RENAME TO \"$POSTGRES_DB\""'
    ```
 
-   (Database cũ mất hẳn thì bỏ lệnh đầu.)
+   (Database cũ mất hẳn thì bỏ lệnh đầu. Đã có `poker_hong` từ lần trước thì đổi tên khác, ví dụ
+   `poker_hong_2`.)
 6. `dc up -d`, vào thử một bàn, chạy `check_ledger` lần nữa.
 
 ### Backup hằng ngày và diễn tập
 
-- Hằng ngày lúc 4 giờ sáng (thêm bằng `crontab -e` trên server):
+- Hằng ngày lúc 4 giờ sáng (thêm bằng `crontab -e` trên server). `mkdir -p backups` đứng trước
+  vì thư mục này không có trong git: thiếu nó thì shell không mở được file log và cron không
+  chạy gì cả, lặng lẽ:
 
   ```
-  0 4 * * * cd /srv/poker-friends && docker compose -f docker-compose.prod.yml run --rm -T tools scripts/backup.sh >> backups/backup.log 2>&1
+  0 4 * * * cd /srv/poker-friends && mkdir -p backups && { docker compose -f docker-compose.prod.yml run --rm -T tools scripts/backup.sh && scripts/check-backup-age.sh; } >> backups/backup.log 2>&1
   ```
+
+- Ngay sau khi thêm cron, **chạy tay một lần** cùng lệnh đó (bỏ phần `0 4 * * *`), rồi
+  `scripts/check-backup-age.sh` phải ra `OK`. Sau đó mỗi lần lên server (ít nhất mỗi tuần) chạy
+  lại `scripts/check-backup-age.sh`: báo `FAIL` nghĩa là cron đã ngừng, xem `backups/backup.log`.
 
 - Backup nằm cùng ổ với database thì hỏng ổ là mất cả hai: **chép ra ngoài** (máy khác, Google
   Drive...) ít nhất mỗi tuần. Xoá bản cũ trên server khi đã chép:
@@ -148,21 +161,22 @@ Khi nào: database hỏng hoặc mất (ổ đĩa hỏng, xoá nhầm, máy ch�
 Mỗi bản production là một tag `vX.Y.Z`. Chỉ có **một** backend: `dc up -d` dừng bản cũ rồi mới
 chạy bản mới, nên bàn đang chơi gián đoạn vài giây rồi tự dựng lại.
 
-1. Backup: `dc run --rm tools scripts/backup.sh` (bản mới có thể chạy migration).
-2. Lấy code và build:
+Image được đặt tên theo `APP_VERSION` trong `.env`. Build khi `APP_VERSION` vẫn là tag cũ thì
+image mới **đè lên** image của bản cũ, và không còn gì để quay về. Nên luôn đổi `APP_VERSION`
+**trước** khi build, đúng thứ tự dưới đây.
 
-   ```bash
-   git fetch --tags && git checkout vX.Y.Z
-   ```
-
-   Sửa `APP_VERSION=vX.Y.Z` trong `.env`, rồi `dc up -d --build`.
-3. `dc ps` (tất cả `healthy`), vào thử một bàn, chạy `check_ledger`.
-
-Ghi lại tag cũ trước khi đổi (đang ở `APP_VERSION` trong `.env`): cần nó để quay về.
+1. Ghi lại tag đang chạy (`grep APP_VERSION .env`): cần nó để quay về.
+2. Backup: `dc run --rm tools scripts/backup.sh` (bản mới có thể chạy migration).
+3. Lấy code: `git fetch --tags && git checkout vX.Y.Z`.
+4. Sửa `APP_VERSION=vX.Y.Z` trong `.env` (đúng tag vừa checkout), **rồi mới** build và chạy:
+   `dc up -d --build`.
+5. `dc ps` (tất cả `healthy`), vào thử một bàn, chạy `check_ledger`. `docker image ls poker-friends-backend`
+   phải thấy cả tag cũ lẫn tag mới.
 
 ## Quay về bản trước
 
-Khi bản mới lỗi. Image của bản cũ vẫn còn trên server (cùng tên, tag cũ), nên không cần build.
+Khi bản mới lỗi. Image của bản cũ vẫn còn trên server (cùng tên, tag cũ, nếu lúc đổi bản đã đổi
+`APP_VERSION` trước khi build), nên không cần build.
 
 1. Sửa `APP_VERSION=<tag cũ>` trong `.env`, rồi:
 
