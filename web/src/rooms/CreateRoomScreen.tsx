@@ -248,7 +248,7 @@ function CreateFields({ draft, set, errors, phone }: { draft: Draft; set: (patch
             value={draft.small_blind}
             onChange={(e) => set({ small_blind: digits(e.target.value) })}
             aria-invalid={errors.small_blind ? true : undefined}
-            aria-describedby={`${id}-blind-hint`}
+            aria-describedby={blindHint ? `${id}-blind-hint` : undefined}
           />
           <span className="blind-sep" aria-hidden>
             /
@@ -260,7 +260,7 @@ function CreateFields({ draft, set, errors, phone }: { draft: Draft; set: (patch
             value={draft.big_blind}
             onChange={(e) => set({ big_blind: digits(e.target.value) })}
             aria-invalid={errors.small_blind ? true : undefined}
-            aria-describedby={`${id}-blind-hint`}
+            aria-describedby={blindHint ? `${id}-blind-hint` : undefined}
           />
         </span>
         {blindHint && (
@@ -280,8 +280,13 @@ function CreateFields({ draft, set, errors, phone }: { draft: Draft; set: (patch
           onChange={(max_seats) => set({ max_seats })}
           className="seat-picker"
           itemClass="sp"
+          describedBy={errors.max_seats ? `${id}-seats-error` : undefined}
         />
-        {errors.max_seats && <span className="field-hint is-error">{errors.max_seats}</span>}
+        {errors.max_seats && (
+          <span id={`${id}-seats-error`} className="field-hint is-error" role="alert">
+            {errors.max_seats}
+          </span>
+        )}
       </div>
       <div className="field f-secs">
         <span className="field-label" id={`${id}-secs`}>
@@ -294,9 +299,12 @@ function CreateFields({ draft, set, errors, phone }: { draft: Draft; set: (patch
           onChange={(think_time_seconds) => set({ think_time_seconds })}
           className="seg seg-fill"
           itemClass="seg-item"
+          describedBy={errors.think_time_seconds ? `${id}-secs-error` : undefined}
         />
         {errors.think_time_seconds ? (
-          <span className="field-hint is-error">{errors.think_time_seconds}</span>
+          <span id={`${id}-secs-error`} className="field-hint is-error" role="alert">
+            {errors.think_time_seconds}
+          </span>
         ) : (
           !phone && <span className="field-hint">Hết giờ: tự check nếu được, không thì bỏ bài. Không có thời gian cộng.</span>
         )}

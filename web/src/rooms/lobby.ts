@@ -52,7 +52,13 @@ export function inviteToken(pasted: string): string | null {
   const text = pasted.trim();
   if (!text) return null;
   const inQuery = /[?&]token=([^&#\s]+)/.exec(text);
-  if (inQuery) return decodeURIComponent(inQuery[1]);
+  if (inQuery) {
+    try {
+      return decodeURIComponent(inQuery[1]);
+    } catch {
+      return null; // a broken %-escape: not a link we made
+    }
+  }
   return /^[A-Za-z0-9_-]{8,}$/.test(text) ? text : null;
 }
 

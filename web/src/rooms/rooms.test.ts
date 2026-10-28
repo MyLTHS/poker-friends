@@ -61,6 +61,7 @@ describe("lobby", () => {
     expect(inviteToken("localhost:3000/rooms/join?x=1&token=abc%2Ddef#top")).toBe("abc-def");
     expect(inviteToken("Ab_c-123456789")).toBe("Ab_c-123456789");
     expect(inviteToken("bàn thứ sáu")).toBeNull();
+    expect(inviteToken("/rooms/join?token=%E0%A4%A")).toBeNull();
     expect(inviteToken("")).toBeNull();
   });
 });
@@ -128,7 +129,7 @@ describe("qrModules", () => {
     const hole = Math.max(3, Math.round(n / 5) | 1);
     const at = (n - hole) / 2;
     const scale = 6;
-    const quiet = 4;
+    const quiet = 2; // the frame @/ui QR draws (viewBox -2 … n + 4): a thinner quiet zone than the standard 4
     const size = (n + quiet * 2) * scale;
     const pixels = new Uint8ClampedArray(size * size * 4).fill(255);
     for (let y = 0; y < size; y++) {

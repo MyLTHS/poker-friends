@@ -8,6 +8,7 @@ import { useRef, type KeyboardEvent, type ReactNode } from "react";
 export function Choices<T extends string | number>({
   label,
   labelledBy,
+  describedBy,
   items,
   value,
   onChange,
@@ -17,6 +18,8 @@ export function Choices<T extends string | number>({
 }: {
   label?: string;
   labelledBy?: string;
+  /** id of the error under the group */
+  describedBy?: string;
   items: { value: T; label: ReactNode; title?: string }[];
   value: T;
   onChange: (value: T) => void;
@@ -40,7 +43,7 @@ export function Choices<T extends string | number>({
     refs.current[next]?.focus();
   };
   return (
-    <span role="radiogroup" aria-label={label} aria-labelledby={labelledBy} className={className}>
+    <span role="radiogroup" aria-label={label} aria-labelledby={labelledBy} aria-describedby={describedBy} aria-invalid={describedBy ? true : undefined} className={className}>
       {items.map((it, i) => {
         const on = it.value === value;
         return (
