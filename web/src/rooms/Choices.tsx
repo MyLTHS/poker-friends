@@ -20,7 +20,8 @@ export function Choices<T extends string | number>({
   labelledBy?: string;
   /** id of the error under the group */
   describedBy?: string;
-  items: { value: T; label: ReactNode; title?: string }[];
+  /** `name`: the radio's accessible name when its label is more than plain text. */
+  items: { value: T; label: ReactNode; title?: string; name?: string }[];
   value: T;
   onChange: (value: T) => void;
   className: string;
@@ -55,6 +56,7 @@ export function Choices<T extends string | number>({
             type="button"
             role="radio"
             aria-checked={on}
+            aria-label={it.name}
             title={it.title}
             // one tab stop for the group: the picked one (or the first when none matches)
             tabIndex={on || (current < 0 && i === 0) ? 0 : -1}

@@ -168,7 +168,7 @@ export function OwnerPanel({ detail, seats, inHand, onChanged, rooms, noticeInHe
             <b id="owner-close">Đóng phòng</b>
             <small>{closeError ?? (phone ? "Kết thúc bàn, hiện bảng lời/lỗ." : "Kết thúc bàn, mọi người thấy bảng tổng kết lời/lỗ.")}</small>
           </span>
-          <Button kind="danger" size="sm" disabled={detail.closing} onClick={() => setConfirm({ kind: "close" })}>
+          <Button kind="danger" size="sm" disabled={detail.closing} onClick={() => setConfirm({ kind: "close" })} aria-label={detail.closing ? "Đang chờ đóng" : "Đóng phòng"}>
             {detail.closing ? "Đang chờ đóng" : "Đóng phòng"}
           </Button>
         </section>
