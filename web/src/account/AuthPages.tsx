@@ -8,15 +8,27 @@ import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 import { createAuthApi } from "./api";
+import { rememberNext } from "./members";
 import { ForgotScreen } from "./ForgotScreens";
 import { SignupScreen } from "./SignupScreen";
 import { useAuthBoot } from "./useAuthBoot";
 
-export function SignupPage() {
+/** `next`: already checked by safeNext (app/account/signup/page.tsx); remembered for the first
+ *  login, days later, after the owner's approval. */
+export function SignupPage({ next = null }: { next?: string | null }) {
   const api = useMemo(() => createAuthApi(), []);
   const [boot] = useAuthBoot(api);
   useLoggedInToAccount(boot.me !== null);
-  return <SignupScreen api={api} googleEnabled={boot.config?.google_enabled ?? false} ready={boot.loaded} />;
+  useEffect(() => rememberNext(next), [next]);
+  return (
+    <SignupScreen
+      api={api}
+      googleEnabled={boot.config?.google_enabled ?? false}
+      ready={boot.loaded}
+      membersOnly={boot.config?.guests_allowed === false}
+      next={next}
+    />
+  );
 }
 
 export function ForgotPage() {
