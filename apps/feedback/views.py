@@ -97,9 +97,11 @@ async def client_errors(request: HttpRequest) -> HttpResponse:
         return error("method_not_allowed", "POST.")
     user = await request.auser()
     try:
-        CLIENT_ERRORS_PER_IP.hit(client_ip(request))
+        # The player's own cap first: a refused report then does not count against the address
+        # the whole party shares.
         if user.is_authenticated:
             CLIENT_ERRORS_PER_USER.hit(str(user.pk))
+        CLIENT_ERRORS_PER_IP.hit(client_ip(request))
     except RateLimited as exc:
         return rate_limited(exc)
     try:

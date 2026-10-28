@@ -209,6 +209,16 @@ class TestClientErrors:
         refused = post(client, "/api/client-errors/", ERROR)
         assert refused.status_code == 429 and int(refused["Retry-After"]) > 0
 
+    def test_a_player_in_an_error_loop_does_not_use_up_the_shared_address(self, guest):
+        # Friends at one party share one address: a page throwing in a loop on one phone is
+        # stopped by that player's own cap, before it counts against everyone's.
+        looping = logged_in(guest)
+        for i in range(views.CLIENT_ERRORS_PER_IP.limit + 10):
+            post(looping, "/api/client-errors/", {**ERROR, "message": f"e{i}"})
+        assert post(looping, "/api/client-errors/", ERROR).status_code == 429
+        friend = logged_in(User.objects.create_user(username="khach-2", is_guest=True))
+        assert post(friend, "/api/client-errors/", ERROR).status_code == 204
+
     def test_rate_limited_per_address(self):
         client = Client()  # not logged in: only the address counts
         for i in range(views.CLIENT_ERRORS_PER_IP.limit):
