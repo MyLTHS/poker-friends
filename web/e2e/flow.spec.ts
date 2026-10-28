@@ -1,11 +1,12 @@
-// C5: the whole evening in two browsers, through the pages only (no REST shortcuts): the owner
-// creates a private room, sends the invite link, a friend with no account opens it; both sit,
-// the owner grants chips from the panel on the table itself, one hand is played to the end with
-// the keyboard shortcuts, and the history lists that hand with its replay.
+// C5: the whole evening in two browsers. Every step a player takes goes through the pages: the
+// owner creates a private room, sends the invite link, a friend with no account opens it; both
+// sit, the owner grants chips from the panel on the table itself, one hand is played to the end
+// with the C key, and the history lists that hand with its replay. REST is only used to make the
+// owner a guest and to read the result for checking.
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { api } from "./helpers";
+import { api, checkOrCallWithKey, turnBar, watchActions } from "./helpers";
 
 const RUN = Date.now().toString(36).slice(-4);
 
@@ -15,12 +16,11 @@ async function guestPage(page: Page, name: string) {
   await api(page, "POST", "/api/auth/guest/", { username: name });
 }
 
-const turnBar = (page: Page) => page.getByRole("region", { name: "Tới lượt bạn" });
-
 test("private room → invite link → friend joins → both sit → chips from the table → one hand → history", async ({ browser }) => {
   test.setTimeout(240_000);
   const ownerCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const owner = await ownerCtx.newPage();
+  const ownerSeen = watchActions(owner);
   await guestPage(owner, `Chu${RUN}`);
 
   // 1. Create a private room from the lobby.
@@ -41,6 +41,7 @@ test("private room → invite link → friend joins → both sit → chips from 
   // 2. The friend (no account) opens the link and sits.
   const friendCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const friend = await friendCtx.newPage();
+  const friendSeen = watchActions(friend);
   await friend.goto(invite.pathname + invite.search);
   await expect(friend).toHaveURL(new RegExp(`/rooms/${roomId}$`));
   await expect(friend.getByText("Bạn đã vào Tối thứ Sáu")).toBeVisible();
@@ -63,18 +64,17 @@ test("private room → invite link → friend joins → both sit → chips from 
   await owner.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
 
-  // 4. The hand deals; whoever is to act checks or calls with the C key until it is over.
+  // 4. The hand deals; whoever is to act checks or calls with the C key until it is over. Each
+  // press must reach the server as exactly one check/call of that player (not a timeout).
   for (const p of [owner, friend]) await expect(p.locator("[data-hand=live]")).toBeVisible();
   for (let moves = 0; moves < 20; moves++) {
-    if ((await owner.locator("[data-hand=complete]").count()) > 0) break;
-    const actor = await expect
-      .poll(async () => ((await turnBar(owner).count()) ? "owner" : (await turnBar(friend).count()) ? "friend" : (await owner.locator("[data-hand=complete]").count()) ? "done" : ""), { timeout: 20_000 })
+    const next = await expect
+      .poll(async () => ((await owner.locator("[data-hand=complete]").count()) ? "done" : (await turnBar(owner).count()) ? "owner" : (await turnBar(friend).count()) ? "friend" : ""), { timeout: 20_000 })
       .not.toBe("")
-      .then(async () => ((await turnBar(owner).count()) ? owner : (await turnBar(friend).count()) ? friend : null));
-    if (!actor) break;
-    const version = await actor.locator("[data-version]").getAttribute("data-version");
-    await actor.keyboard.press("c");
-    await expect(actor.locator("[data-version]")).not.toHaveAttribute("data-version", version ?? "");
+      .then(async () => ((await owner.locator("[data-hand=complete]").count()) ? "done" : (await turnBar(owner).count()) ? "owner" : "friend"));
+    if (next === "done") break;
+    if (next === "owner") await checkOrCallWithKey(owner, ownerSeen, 1);
+    else await checkOrCallWithKey(friend, friendSeen, 2);
   }
   for (const p of [owner, friend]) await expect(p.locator("[data-hand=complete]")).toBeVisible();
   await expect(owner.getByRole("status").filter({ hasText: /thắng|chia pot/ }).first()).toBeVisible();

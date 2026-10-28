@@ -4,7 +4,7 @@
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { PHONES, api, newGuest, outOfView, pageWidth, phone, smallTargets } from "./helpers";
+import { PHONES, api, checkOrCallWithKey, newGuest, outOfView, pageWidth, phone, readyToAct, settled, smallTargets, watchActions, type Applied } from "./helpers";
 
 /** Guest names are unique: a suffix lets the spec run again on the same database. */
 const RUN = Date.now().toString(36).slice(-4);
@@ -52,7 +52,19 @@ test("phone: tables of 2–9 seats, the chat drawer and the owner's sheet fit ev
   }
   const state = await owner.context.storageState();
 
-  for (const size of PHONES) {
+  // One table per phone size (9, 6 and 3 seats) is brought to the owner's turn, so the phone's
+  // action panel is measured too: the friend checks/calls from a desktop page until it is.
+  const turnRooms = [7, 4, 1].map((i) => ({ id: rooms[i], seat: i + 2 }));
+  const friendTables: { page: Page; seen: Applied[] }[] = [];
+  for (const r of turnRooms) {
+    const page = await friend.context.newPage();
+    const seen = watchActions(page);
+    await page.goto(`/rooms/${r.id}/table`);
+    await expect(page.locator("[data-hand]")).toBeVisible();
+    friendTables.push({ page, seen });
+  }
+
+  for (const [n, size] of PHONES.entries()) {
     const context = await browser.newContext({ ...phone(size), storageState: state });
     const page = await context.newPage();
     for (const [i, id] of rooms.entries()) {
@@ -62,19 +74,39 @@ test("phone: tables of 2–9 seats, the chat drawer and the owner's sheet fit ev
       await expect(page.locator(".seat, .me")).toHaveCount(i + 2);
       await expectFits(page, where);
     }
+    // My turn: the action panel (clock, sizes, slider, Fold/Call/Raise) fits too.
+    const turnRoom = turnRooms[n];
+    const other = friendTables[n];
+    await page.goto(`/rooms/${turnRoom.id}/table`);
+    await expect
+      .poll(
+        async () => {
+          if (await page.locator(".tpanel .act-call").isVisible()) return true;
+          if (await readyToAct(other.page)) await checkOrCallWithKey(other.page, other.seen, turnRoom.seat);
+          return false;
+        },
+        { timeout: 90_000, intervals: [500] },
+      )
+      .toBe(true);
+    await settled(page);
+    await expect(page.locator(".tpanel .act-fold, .tpanel .act-call").first()).toBeVisible();
+    await expectFits(page, `${size.name}, ${turnRoom.seat} ghế, tới lượt mình`);
+    await page.goto(`/rooms/${rooms[7]}/table`);
+    await expect(page.locator("[data-hand]")).toBeVisible();
     // On the 9-seat table: the chat drawer, the settings and the owner's sheet.
     await page.getByRole("button", { name: /^Chat/ }).click();
     await expect(page.getByRole("dialog", { name: "Chat và người xem" })).toBeVisible();
-    await page.waitForTimeout(400); // the drawer slides in
+    await settled(page); // the drawer slides in
     await expectFits(page, `${size.name}, chat`);
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Thêm tuỳ chọn" }).click();
     await expect(page.getByRole("dialog", { name: "Cài đặt bàn" })).toBeVisible();
+    await settled(page);
     await expectFits(page, `${size.name}, cài đặt`);
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Bảng chủ phòng" }).click();
     await expect(page.getByRole("dialog", { name: /Bảng chủ phòng/ })).toBeVisible();
-    await page.waitForTimeout(400);
+    await settled(page);
     await expectFits(page, `${size.name}, bảng chủ phòng`);
     await context.close();
   }
@@ -99,16 +131,19 @@ test("phone: tables of 2–9 seats, the chat drawer and the owner's sheet fit ev
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       await expect(page.locator(".d1").first()).toBeVisible();
-      await page.waitForTimeout(300);
-      if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/p-${size.width}-${path.replace(/\W+/g, "_")}.png` });
+      await settled(page);
       const width = await pageWidth(page);
       expect(width.scroll, `${where}: scrolls sideways`).toBeLessThanOrEqual(width.view);
       expect(await outOfView(page, "button, a[href], input, .panel, .m-card, .room-card, .room-row, .sheet-panel", true), `${where}: out of the screen`).toEqual([]);
-      expect(await smallTargets(page), `${where}: under 44 px`).toEqual([]);
+      const small = await smallTargets(page);
+      // SHOTS=<folder>: keep a picture of each screen as measured
+      if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${size.width}-${path.replace(/\W+/g, "_")}.png` });
+      expect(small, `${where}: under 44 px`).toEqual([]);
     }
     await context.close();
   }
 
+  for (const t of friendTables) await t.page.close();
   await owner.context.close();
   await friend.context.close();
 });

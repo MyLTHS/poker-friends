@@ -5,7 +5,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { api, newGuest, phone } from "./helpers";
+import { api, newGuest, phone, settled } from "./helpers";
 
 const RUN = Date.now().toString(36).slice(-4);
 
@@ -58,17 +58,37 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
   // The owner's sheet, settings and key help on the desktop table.
   await owner.page.getByRole("button", { name: "Bảng chủ phòng" }).click();
   await expect(owner.page.getByRole("dialog", { name: /Bảng chủ phòng/ })).toBeVisible();
-  await owner.page.waitForTimeout(400);
+  await settled(owner.page);
   await audit(owner.page, "bảng chủ phòng");
   await owner.page.keyboard.press("Escape");
   await owner.page.getByRole("button", { name: "Cài đặt bàn" }).click();
   await expect(owner.page.getByRole("dialog", { name: "Cài đặt bàn" })).toBeVisible();
-  await owner.page.waitForTimeout(400);
+  await settled(owner.page);
   await audit(owner.page, "cài đặt bàn");
   await owner.page.getByRole("button", { name: "Xem phím tắt" }).click();
   await expect(owner.page.getByRole("dialog", { name: "Phím tắt trên bàn" })).toBeVisible();
-  await owner.page.waitForTimeout(400);
+  await settled(owner.page);
   await audit(owner.page, "phím tắt");
+  await owner.page.keyboard.press("Escape");
+
+  // Single-key shortcuts can be switched off (WCAG 2.1.4), and the choice is kept on reload.
+  await expect(owner.page.getByRole("dialog")).toHaveCount(0);
+  await owner.page.getByRole("button", { name: "Cài đặt bàn" }).click();
+  const keysSwitch = owner.page.getByRole("switch", { name: "Phím tắt một phím" });
+  await expect(keysSwitch).toHaveAttribute("aria-checked", "true");
+  await keysSwitch.click();
+  await expect(keysSwitch).toHaveAttribute("aria-checked", "false");
+  await owner.page.keyboard.press("Escape");
+  await owner.page.reload();
+  await expect(owner.page.locator("[data-hand]")).toBeVisible();
+  await owner.page.keyboard.press("?");
+  await expect(owner.page.getByRole("dialog", { name: "Phím tắt trên bàn" })).toBeHidden();
+  await owner.page.getByRole("button", { name: "Cài đặt bàn" }).click();
+  await expect(keysSwitch).toHaveAttribute("aria-checked", "false");
+  await keysSwitch.click();
+  await owner.page.keyboard.press("Escape");
+  await owner.page.keyboard.press("?");
+  await expect(owner.page.getByRole("dialog", { name: "Phím tắt trên bàn" })).toBeVisible();
   await owner.page.keyboard.press("Escape");
 
   // Phone table with the chat drawer open.
@@ -78,7 +98,7 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
   await expect(mobile.locator("[data-hand]")).toBeVisible();
   await audit(mobile, "bàn điện thoại");
   await mobile.getByRole("button", { name: /^Chat/ }).click();
-  await mobile.waitForTimeout(400);
+  await settled(mobile);
   await audit(mobile, "ngăn chat điện thoại");
   await mobile.context().close();
 
@@ -86,7 +106,7 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
   for (const path of ["/rooms", "/rooms/new", `/rooms/${id}`, `/rooms/${id}/history`, "/rooms/join?token=khong-co-ma-nay-123"]) {
     await owner.page.goto(path);
     await owner.page.waitForLoadState("networkidle");
-    await owner.page.waitForTimeout(500); // entrance animations settle (contrast is read on the final colours)
+    await settled(owner.page); // entrance animations settle (contrast is read on the final colours)
     await audit(owner.page, path);
   }
 
