@@ -1054,6 +1054,13 @@
   .d1 .tbar-btn.is-quiet {
     color: var(--ivory-3);
   }
+  /* a window under 980 px: "Mời bạn" and "Chủ phòng" keep their icon (and name) only; at 1000 px a
+     seated owner's full bar still fits */
+  @media (max-width: 979px) {
+    .d1 .tbar-btn .tbar-label {
+      display: none;
+    }
+  }
 
   /* side column */
   .d1 .side {

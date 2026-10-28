@@ -324,7 +324,9 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
 
   const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, isOwner: !!owner });
   // The owner seated with no chips grants them to themselves: the owner's sheet, one tap away.
-  const grantMine = owner && me && (me.stack ?? 0) === 0 && !hand?.complete ? () => setDialog("owner") : undefined;
+  // Not while their all-in is still being played; yes on a finished hand they lost it all in (the
+  // table keeps that hand on screen until the next one, which may never come heads-up).
+  const grantMine = owner && me && (me.stack ?? 0) === 0 && !inHand(you.player_id) ? () => setDialog("owner") : undefined;
   const grantButton = (block: boolean) =>
     grantMine && (
       <Button kind="primary" block={block} icon={<Crown size={16} strokeWidth={2} aria-hidden />} onClick={grantMine}>
@@ -448,6 +450,9 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
                 từ thưởng 7-2
               </span>
             </span>
+          ) : grantMine && !seatError ? (
+            // before the winner's banner: busted, the owner's next move is to grant chips
+            grantButton(false)
           ) : idle.win ? (
             <span className="idle-msg">
               <Crown size={18} strokeWidth={2} />
@@ -457,8 +462,6 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
             </span>
           ) : pre && !seatError ? (
             pre
-          ) : grantMine && !seatError ? (
-            grantButton(false)
           ) : (
             <span className="idle-msg is-quiet">{seatError ?? idle.center}</span>
           )

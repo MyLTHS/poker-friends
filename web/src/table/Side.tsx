@@ -86,15 +86,15 @@ export function TableTools({
         </button>
       )}
       {onInvite && (
-        <button type="button" className="tbar-btn" aria-haspopup="dialog" onClick={onInvite}>
+        <button type="button" className="tbar-btn" aria-haspopup="dialog" aria-label="Mời bạn" onClick={onInvite}>
           <UserPlus size={15} strokeWidth={1.9} aria-hidden />
-          Mời bạn
+          <span className="tbar-label">Mời bạn</span>
         </button>
       )}
       {owner && (
         <button type="button" className={`tbar-btn${owner.open ? " is-on" : ""}`} aria-haspopup="dialog" aria-label="Bảng chủ phòng" title="Cấp chip, ghế, luật bàn" onClick={owner.onOpen}>
           <Crown size={15} strokeWidth={1.9} aria-hidden />
-          Chủ phòng
+          <span className="tbar-label">Chủ phòng</span>
         </button>
       )}
       <IconButton label="Cài đặt bàn" aria-haspopup="dialog" onClick={onSettings}>
