@@ -1943,9 +1943,10 @@
       padding: 20px 16px;
       border-radius: 18px;
     }
+    /* not sticky: the chat card under it would slide over the pinned invitation and hide its
+       buttons ("Về bàn", "Lịch sử") while scrolling */
     .d1 .room-page .invite-stage {
-      position: sticky;
-      top: calc(var(--appbar-h) + 14px);
+      position: static;
     }
     .d1 .invite-stage.is-full {
       min-height: calc(100dvh - var(--appbar-h) - 14px - var(--safe-b));
@@ -2261,7 +2262,6 @@
       grid-template-columns: minmax(0, 1fr);
     }
     .d1 .room-page .invite-stage {
-      position: static;
       min-height: 0;
     }
     /* history: the ledger beside a 284 px hand list leaves names no room; one column */
