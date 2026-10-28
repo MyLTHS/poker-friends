@@ -80,3 +80,31 @@ describe("inviteUrl", () => {
     expect(inviteUrl("http://localhost:3000", "a-b_c")).toBe("http://localhost:3000/rooms/join?token=a-b_c");
   });
 });
+
+describe("members only", () => {
+  it("hands a refusal for who the player is to one place: log in, or wait for the owner", async () => {
+    const blocked = vi.fn();
+    const login = createRoomsApi(fakeFetch(401, { code: "login_required", message: "x" }), () => "", blocked);
+    const result = await login.lobby();
+    expect(result.ok).toBe(false); // the screen still gets the error
+    expect(blocked).toHaveBeenLastCalledWith("login");
+
+    const wait = createRoomsApi(fakeFetch(403, { code: "not_approved", message: "x" }), () => "", blocked);
+    await wait.snapshot(3);
+    expect(blocked).toHaveBeenLastCalledWith("approval");
+  });
+
+  it("leaves every other refusal to the screen", async () => {
+    const blocked = vi.fn();
+    for (const [status, code] of [
+      [403, "forbidden"],
+      [404, "room_not_found"],
+      [403, "kicked"],
+      [401, "not_authenticated"],
+    ] as const) {
+      await createRoomsApi(fakeFetch(status, { code, message: "x" }), () => "", blocked).lobby();
+    }
+    await createRoomsApi(fakeFetch(200, {}), () => "", blocked).lobby();
+    expect(blocked).not.toHaveBeenCalled();
+  });
+});
