@@ -107,9 +107,12 @@ async def list_hands(request: HttpRequest, room_id: int) -> JsonResponse:
     return JsonResponse({"hands": rows})
 
 
-def replay_steps(hand: Hand, viewer: str | None) -> tuple[list[dict[str, Any]], str | None]:
-    """Every state of ``hand`` as ``viewer`` saw it, from the deal to the end, and the 7-2
-    bluff winner by rule #27 (even when nobody had chips left to pay the bonus)."""
+def replay_steps(
+    hand: Hand, viewer: str | None
+) -> tuple[list[dict[str, Any]], str | None, list[dict[str, Any]]]:
+    """Every state of ``hand`` as ``viewer`` saw it, from the deal to the end, the 7-2 bluff
+    winner by rule #27 (even when nobody had chips left to pay the bonus) and the hands named
+    at the showdown (the same for everyone: only cards shown to the whole table)."""
     engine = HandEngine.replay({"config": hand.config, "actions": []})
     seated = viewer if viewer in engine.player_order else None
     seats = _seats(hand)
@@ -137,7 +140,7 @@ def replay_steps(hand: Hand, viewer: str | None) -> tuple[list[dict[str, Any]], 
         }
         steps.append({"action": applied, "hand": view()})
     winner = engine.seven_deuce_bluff_winner() if hand.config.get("seven_deuce_bonus") else None
-    return steps, winner
+    return steps, winner, engine.showdown_hands()
 
 
 async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
@@ -151,7 +154,7 @@ async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
         return error("hand_voided", "This hand was voided by an admin.")
     viewer = str(user.pk) if user.is_authenticated else None
     # Replaying touches the ORM (hand.commands) and PokerKit: run it off the event loop.
-    steps, winner = await sync_to_async(replay_steps)(hand, viewer)
+    steps, winner, showdown = await sync_to_async(replay_steps)(hand, viewer)
 
     hand_net: dict[str, int] = defaultdict(int)
     bonus_net: dict[str, int] = defaultdict(int)
@@ -178,6 +181,7 @@ async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
             "steps": steps,
             "results": results,
             "seven_deuce_winner": winner,
+            "showdown": showdown,
         }
     )
 

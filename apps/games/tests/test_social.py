@@ -240,6 +240,25 @@ class TestHistory:
         assert replay["seven_deuce_winner"] == str(b.pk)
         nets = {r["player_id"]: r["seven_deuce_net"] for r in replay["results"]}
         assert nets == {str(a.pk): -50, str(b.pk): 50}
+        assert replay["showdown"] == []  # a win by folds names no hand, not even a shown 7-2
+
+    def test_the_replay_names_the_hands_shown_at_the_showdown(self):
+        room, a, b = heads_up_room(seven_deuce_bonus=0)
+        check_down = [(a, "call"), (b, "check")] + [(b, "check"), (a, "check")] * 3
+        hand = unfinished_hand(room, a, b, commands=check_down)
+
+        async def body():
+            await actor_module.get_actor(room.pk)  # recovery settles the finished hand
+
+        run_async(body)
+        replay = Client().get(f"/api/hands/{hand.pk}/replay/").json()
+        final = replay["steps"][-1]["hand"]
+        assert final["complete"] and len(final["board"]) == 5
+        shown = {p["player_id"]: p["cards"] for p in final["players"] if p["cards"]}
+        assert replay["showdown"], "a showdown always shows at least the winner"
+        for entry in replay["showdown"]:
+            assert "??" not in shown[entry["player_id"]]
+            assert set(entry["cards"]) <= set(shown[entry["player_id"]]) | set(final["board"])
 
     def test_a_voided_hand_is_listed_but_not_replayed(self):
         from django.core.management import call_command

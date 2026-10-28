@@ -217,6 +217,42 @@ def _settlement_errors(payload: dict[str, Any]) -> list[str]:
     return found
 
 
+def _showdown_errors(payload: dict[str, Any], viewer: str) -> list[str]:
+    """A hand name only for cards everyone sees face up after a showdown, and for all of them."""
+    found = []
+    hand, showdown = payload["hand"], payload["showdown"]
+    players = {p["player_id"]: p for p in hand["players"]}
+    if showdown and payload["seven_deuce"] is not None:
+        found.append("showdown: a 7-2 bluff is won by folds, there is no showdown")
+    if showdown and len(hand["board"]) != 5:
+        found.append("showdown: a showdown needs the whole board")
+    named = [entry["player_id"] for entry in showdown]
+    if len(set(named)) != len(named):
+        found.append("showdown: a player is named twice")
+    for entry in showdown:
+        pid = entry["player_id"]
+        player = players.get(pid)
+        where = f"showdown/{pid}"
+        if (
+            player is None
+            or not player["in_hand"]
+            or not player["cards"]
+            or HIDDEN in player["cards"]
+        ):
+            found.append(f"{where}: names a hand whose cards are not shown")
+            continue
+        if entry["seat"] != player["seat"]:
+            found.append(f"{where}: seat does not match the hand")
+        if not set(entry["cards"]) <= set(player["cards"]) | set(hand["board"]):
+            found.append(f"{where}: cards are not the player's shown cards and the board")
+    if payload["seven_deuce"] is None:
+        for pid, player in players.items():
+            shown = player["cards"] and HIDDEN not in player["cards"]
+            if pid != viewer and shown and pid not in named:
+                found.append(f"showdown: {pid}'s cards are shown without a hand name")
+    return found
+
+
 def semantic_errors(message: dict[str, Any], viewer: str) -> list[str]:
     """Problems with sending this schema-valid server ``message`` to player ``viewer``."""
     found = _secret_keys(message)
@@ -246,6 +282,7 @@ def semantic_errors(message: dict[str, Any], viewer: str) -> list[str]:
                     found.append("action: the player is not in that seat of this hand")
             if message["type"] == "hand.completed":
                 found += _settlement_errors(payload)
+                found += _showdown_errors(payload, viewer)
     return found
 
 

@@ -1362,7 +1362,14 @@ components:
           anyOf:
             - $ref: "./schema/common.schema.json#/$defs/PlayerId"
             - type: "null"
-      required: [hand_id, hand_no, room_id, completed_at, steps, results, seven_deuce_winner]
+        showdown:
+          type: array
+          description: |
+            Bộ bài của từng người còn ngửa bài sau showdown (như `hand.completed.payload.showdown`),
+            theo số ghế; `[]` nếu ván kết thúc vì mọi người bỏ bài (kể cả khi lật 7-2).
+          items:
+            $ref: "./schema/common.schema.json#/$defs/ShowdownHand"
+      required: [hand_id, hand_no, room_id, completed_at, steps, results, seven_deuce_winner, showdown]
       additionalProperties: false
     RoomSummary:
       type: object

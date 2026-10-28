@@ -68,6 +68,20 @@
         "stack": 1110
       }
     ],
-    "seven_deuce": null
+    "seven_deuce": null,
+    "showdown": [
+      {
+        "player_id": "2",
+        "seat": 3,
+        "category": "one_pair",
+        "cards": [
+          "Ac",
+          "Ad",
+          "Qh",
+          "Jh",
+          "7d"
+        ]
+      }
+    ]
   }
 }

@@ -880,6 +880,11 @@ export interface components {
             }[];
             /** @description Người ăn thưởng luật 7-2 ở ván này (#27), `null` nếu không có. */
             seven_deuce_winner: components["schemas"]["PlayerId"] | null;
+            /**
+             * @description Bộ bài của từng người còn ngửa bài sau showdown (như `hand.completed.payload.showdown`),
+             *     theo số ghế; `[]` nếu ván kết thúc vì mọi người bỏ bài (kể cả khi lật 7-2).
+             */
+            showdown: components["schemas"]["ShowdownHand"][];
         };
         RoomSummary: {
             players: {
@@ -1076,6 +1081,22 @@ export interface components {
             kind: "raise";
             amount: number;
             timeout: boolean;
+        };
+        /**
+         * HandCategory
+         * @description A made poker hand, from PokerKit's hand labels. Stable codes: the client shows its own words for them.
+         * @enum {string}
+         */
+        HandCategory: "high_card" | "one_pair" | "two_pair" | "three_of_a_kind" | "straight" | "flush" | "full_house" | "four_of_a_kind" | "straight_flush";
+        /**
+         * ShowdownHand
+         * @description The made hand of one player whose cards are face up at the end of a showdown. Never for a player who folded or mucked, nor for a win by folds (a revealed 7-2 bluff included). cards are the best five, from the player's two cards and the board, most significant first (bigger groups, then higher ranks; the ace of a five-high straight last).
+         */
+        ShowdownHand: {
+            player_id: components["schemas"]["PlayerId"];
+            seat: components["schemas"]["SeatNumber"];
+            category: components["schemas"]["HandCategory"];
+            cards: components["schemas"]["VisibleCard"][];
         };
     };
     responses: {

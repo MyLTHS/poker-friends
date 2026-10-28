@@ -308,6 +308,7 @@ class MockTable:
             }
             for p in players
         ]
+        showdown = hand.showdown_hands()
         seven_deuce = None
         winner = hand.seven_deuce_bluff_winner()
         if hand.config.seven_deuce_bonus > 0 and winner is not None:
@@ -327,7 +328,12 @@ class MockTable:
             }
         return self._broadcast(
             "hand.completed",
-            lambda viewer: {"hand": views[viewer], "results": results, "seven_deuce": seven_deuce},
+            lambda viewer: {
+                "hand": views[viewer],
+                "results": results,
+                "seven_deuce": seven_deuce,
+                "showdown": showdown,
+            },
             hand_id=hand_id,
         )
 
