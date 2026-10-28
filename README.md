@@ -36,7 +36,7 @@ sửa trước C của đợt kiểm tra chỉ-đọc toàn bộ B; phần để
 ### A. Nền móng codebase
 
 - [x] Repo GitHub, monorepo `apps/` (Django), `web/` (Next.js), `docs/`
-- [x] Docker Compose dev: Django/Daphne, Postgres 17, Redis 7
+- [x] Docker Compose dev: Django/Daphne, Postgres 17 (Redis bỏ từ 28/10/2026, xem ADR-001)
 - [x] Settings đọc `.env`; chặn secret yếu khi tắt `DEBUG`
 - [x] GitHub Actions: ruff, Django check, kiểm migration, pytest, mô phỏng 500 ván — xanh trên `main`
 - [x] `CONTRIBUTING.md`, mẫu PR

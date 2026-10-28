@@ -67,3 +67,19 @@ Chạy trên SQLite và kênh phát tin trong bộ nhớ, server một process n
 - **6 bot, lần 2** (sau khi sửa và cho bot bớt liều): 185 ván (dừng khi chỉ còn một người có
   chip), 1945 lệnh, 84 lần hết giờ, 1002 lần rớt mạng, 232 lệnh gửi lại sau khi vào lại (server
   nhận ra là lệnh cũ, không áp hai lần). Không lỗi; log server sạch.
+
+## Chạy trên bộ Docker production (28/10/2026)
+
+Cùng cấu hình chạy thật: Caddy, Postgres, Daphne, `DJANGO_DEBUG=false`. Bot chạy ngay trong container
+backend: `docker compose ... exec backend python manage.py soak --url ws://caddy:80 ...`.
+
+| Kênh phát tin | Ván | Lần ngắt kết nối | Hụt `version` | Sổ chip, phát lại ván |
+|---|---|---|---|---|
+| Redis | 100 | 733 | **16** | đúng |
+| Trong bộ nhớ | 100 | 818 | **0** | đúng |
+
+Mỗi lần hụt đều rơi đúng vào lúc có người ngắt kết nối, và tin bị thiếu không bao giờ tới.
+channels_redis dùng chung một hàng đợi cho mọi kết nối trong process, nên một kết nối bị huỷ giữa
+lúc đang nhận hộ có thể làm rơi tin của kết nối khác. Vì server chỉ có một process (ADR-001), đã bỏ
+Redis ([ADR-001, "Bỏ Redis"](adr/ADR-001-table-actor.md)).
+

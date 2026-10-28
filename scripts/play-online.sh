@@ -75,9 +75,6 @@ POSTGRES_DB=poker
 POSTGRES_USER=poker
 POSTGRES_PASSWORD=$password
 DATABASE_URL=postgres://poker:$password@db:5432/poker
-# socket_timeout above Channels' 5 s blocking read: redis-py 8 defaults to 5 s, which drops
-# every WebSocket that is quiet for 5 s.
-REDIS_URL=redis://redis:6379/0?socket_timeout=15
 # Empty: emails (verification, password reset) only go to the server log: play-online.sh logs.
 # Gmail: docs/huong-dan-google-smtp.md
 EMAIL_URL=
@@ -167,6 +164,8 @@ cmd_up() {
   check_backend_name
   mkdir -p "$STATE"
   ensure_env
+  # Files made before Redis was dropped still point at a "redis" service that no longer exists.
+  set_env REDIS_URL ""
   trap abort_up EXIT
   trap 'exit 130' INT TERM
 

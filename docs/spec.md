@@ -38,7 +38,8 @@ không tiền thật, không rake. Quy mô 10–20 người, 1 server.
 
 ## Kiến trúc (tối giản cho 20 người)
 
-Stack: Django + DRF (REST), Django Channels (WebSocket), PostgreSQL 17, Redis 7 (channel layer).
+Stack: Django + DRF (REST), Django Channels (WebSocket), PostgreSQL 17. Channel layer trong bộ nhớ của
+process Daphne duy nhất, không dùng Redis (quyết định 28/10/2026, xem ADR-001).
 Không Celery, không Prometheus, không Redis HA — quy mô 10–20 người không cần.
 
 Backend chia 3 lớp, lớp dưới không biết lớp trên:
@@ -105,7 +106,7 @@ Quyết định kiến trúc (thống nhất với Codex ở `docs/collab/`, đ�
   chính là "writer duy nhất" cho bàn đó, tránh phải dùng khoá (lock) khi nhiều người bấm cùng lúc.
 - Thứ tự xử lý một lệnh bắt buộc là:
   **kiểm tra hợp lệ → ghi `HandCommand` vào DB → áp vào `HandEngine` → phát sự kiện qua
-  Channels/Redis.**
+  Channels.**
   Ghi trước-rồi-áp đảm bảo: nếu process chết giữa lúc áp dụng, khởi động lại chỉ cần
   `HandEngine.replay()` từ các `HandCommand` đã ghi — không mất, không lặp lại hiệu ứng.
 - Lệnh bị từ chối (sai lượt, sai luật, `command_id` trùng nhưng nội dung khác) **chỉ ghi log**,
@@ -158,7 +159,7 @@ Quyết định kiến trúc (thống nhất với Codex ở `docs/collab/`, đ�
 
 ### 6. Hạ tầng
 
-Repo GitHub private; 1 VPS + Docker Compose (Django/Daphne, Postgres 17, Redis 7, Caddy làm
+Repo GitHub private; 1 VPS + Docker Compose (Django/Daphne, Postgres 17, Caddy làm
 HTTPS reverse proxy ở staging/production). Quy mô 10–20 người/server nên cố tình **không** thêm
 Celery, Prometheus hay Redis HA — thêm sớm là over-engineering cho bài toán này.
 
