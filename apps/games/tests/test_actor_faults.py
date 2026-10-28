@@ -415,6 +415,8 @@ class TestWholeHandThroughTheConsumer:
                 if to_act is None:
                     continue
                 legal = [m for m in seen[to_act] if m["payload"].get("hand")][-1]["payload"]["hand"]
+                if legal["legal_actions"] is None:
+                    continue  # that player's copy of the turn has not arrived yet: drain again
                 kind = "check" if legal["legal_actions"]["can_check"] else "call"
                 step = len([m for m in messages if m["type"] == "action.applied"])
                 await send_act(conns[to_act], room, hand_id, f"step-{step:03d}-{to_act}", kind)
