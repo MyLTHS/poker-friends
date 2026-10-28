@@ -35,8 +35,7 @@ Sửa giờ, link và tên phòng rồi dán vào nhóm chat:
 > Tối nay 21h chơi poker chip ảo nhé, không tiền thật 🃏
 > 1. Mở link: https://xxx.trycloudflare.com (link chỉ dùng tối nay)
 > 2. Điện thoại thì **xoay ngang** máy.
-> 3. Bấm "Chơi ngay bằng khách" là vào được. Muốn giữ chip cho lần sau thì "Đăng ký" bằng email,
->    rồi nhắn mình để mình xác minh cho.
+> 3. Lần đầu bấm "Đăng ký" (email, tên, mật khẩu) là vào chơi luôn. Các buổi sau chỉ cần "Đăng nhập".
 > 4. Vào phòng bằng link mời mình gửi riêng.
 > Gặp gì lạ thì bấm **Gửi phản hồi** hoặc nhắn mình kèm giờ nhé!
 
