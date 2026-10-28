@@ -7,7 +7,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { PHONES, a11yProblems, layoutProblems, smallTargets } from "./checks";
 import { linkFromEmail } from "./mailbox";
 
-const WEB = "http://localhost:3100";
+const WEB = process.env.E2E_WEB ?? "http://localhost:3100";
 const PASSWORD = "ban-ni-xanh-2026";
 const unique = () => `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
 
