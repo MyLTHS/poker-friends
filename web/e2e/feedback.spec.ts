@@ -48,7 +48,10 @@ async function noSeriousAxe(page: Page) {
   expect(bad.map((v) => ({ rule: v.id, nodes: v.nodes.map((n) => n.target.join(" ")) }))).toEqual([]);
 }
 
-test("a guest sends feedback from a room page: thanked, stored with the room and the page", async ({ browser }) => {
+// One guest for the room page, the table and the phone: the suite shares the server's limit of
+// 20 new guests an hour from one address (apps/accounts/ratelimit.py).
+test("a guest sends feedback from a room page and from the table, desktop and phone", async ({ browser }) => {
+  test.setTimeout(180_000);
   const lan = await newGuest(browser, `Gop${RUN}`, { viewport: { width: 1440, height: 900 } });
   const page = lan.page;
   const detail = await api(page, "POST", "/api/rooms/", { name: "Bàn góp ý", small_blind: 1, big_blind: 2 });
@@ -74,33 +77,47 @@ test("a guest sends feedback from a room page: thanked, stored with the room and
   await expect(box).toHaveAccessibleDescription(/Viết vài chữ rồi hãy gửi/);
   await expect(box).toBeFocused();
 
-  const message = `Thêm nút xem lại ván vừa chơi ${RUN}`;
-  await dialog.getByLabel("Nội dung").fill(message);
-  await expect(dialog.getByText(`${message.length}/2000`)).toBeVisible();
-  await dialog.getByLabel("Nội dung").fill("");
-  await write(page, "Ý tưởng", message);
+  const idea = `Thêm nút xem lại ván vừa chơi ${RUN}`;
+  await box.fill(idea);
+  await expect(dialog.getByText(`${idea.length}/2000`)).toBeVisible();
+  await box.fill("");
+  await write(page, "Ý tưởng", idea);
   await expect(page.getByText("Cảm ơn bạn!")).toBeVisible();
   await expect(dialog).toBeHidden();
+  expect(stored(idea)).toEqual({ kind: "idea", page: `/rooms/${id}`, room_id: id, user__username: `Gop${RUN}` });
 
-  expect(stored(message)).toEqual({ kind: "idea", page: `/rooms/${id}`, room_id: id, user__username: `Gop${RUN}` });
-});
-
-test("from the table: the settings open it; the table's room goes with it", async ({ browser }) => {
-  const binh = await newGuest(browser, `Ban${RUN}`, { viewport: { width: 1440, height: 900 } });
-  const page = binh.page;
-  const detail = await api(page, "POST", "/api/rooms/", { name: "Bàn có lỗi", small_blind: 1, big_blind: 2 });
-  const id = detail.room.room_id;
+  // The table has no app bar: its settings open the dialog, and the table's room goes with it.
   await page.goto(`/rooms/${id}/table`);
-
   await page.getByRole("button", { name: "Cài đặt bàn" }).click();
   await page.getByRole("dialog", { name: "Cài đặt bàn" }).getByRole("button", { name: "Gửi phản hồi" }).click();
   await expect(page.getByRole("dialog", { name: "Cài đặt bàn" })).toBeHidden();
-  await expect(dialogOf(page).getByLabel("Nội dung")).toBeFocused();
-
-  const message = `Bấm Theo hai lần mới ăn ${RUN}`;
-  await write(page, "Lỗi", message);
+  await expect(dialog.getByLabel("Nội dung")).toBeFocused();
+  const bug = `Bấm Theo hai lần mới ăn ${RUN}`;
+  await write(page, "Lỗi", bug);
   await expect(page.getByText("Cảm ơn bạn!")).toBeVisible();
-  expect(stored(message)).toMatchObject({ kind: "bug", page: `/rooms/${id}/table`, room_id: id });
+  expect(stored(bug)).toMatchObject({ kind: "bug", page: `/rooms/${id}/table`, room_id: id });
+
+  // The same guest on a landscape phone (844×390): the rail's button and the dialog fit and are
+  // finger-sized; the table keeps it in its menu, nothing over the felt or the bet bar.
+  const mobile = await browser.newContext({ ...phone({ width: 844, height: 390 }), storageState: await lan.context.storageState() });
+  const m = await mobile.newPage();
+  await m.goto("/rooms");
+  await m.getByRole("button", { name: "Gửi phản hồi" }).click();
+  const mDialog = dialogOf(m);
+  await expect(mDialog.getByLabel("Nội dung")).toBeFocused();
+  await expect(mDialog.getByRole("button", { name: "Gửi", exact: true })).toBeInViewport();
+  expect(await outOfView(m, "dialog[open] *", true)).toEqual([]);
+  expect(await smallTargets(m)).toEqual([]);
+  await m.keyboard.press("Escape");
+
+  await m.goto(`/rooms/${id}/table`);
+  await expect(m.getByRole("button", { name: "Thêm tuỳ chọn" })).toBeVisible();
+  await expect(m.getByRole("button", { name: "Gửi phản hồi" })).toHaveCount(0);
+  await m.getByRole("button", { name: "Thêm tuỳ chọn" }).click();
+  await m.getByRole("dialog", { name: "Cài đặt bàn" }).getByRole("button", { name: "Gửi phản hồi" }).click();
+  await expect(mDialog.getByLabel("Nội dung")).toBeFocused();
+  await expect(mDialog.getByRole("button", { name: "Gửi", exact: true })).toBeInViewport();
+  await mobile.close();
 });
 
 test("not logged in: play as a guest and send in one go", async ({ page }) => {
@@ -121,9 +138,7 @@ test("not logged in: play as a guest and send in one go", async ({ page }) => {
   expect(row?.user__username).toBeTruthy(); // the new guest
 });
 
-test("too many: says how long to wait, keeps what was written", async ({ browser }) => {
-  const chi = await newGuest(browser, `Chi${RUN}`, { viewport: { width: 1440, height: 900 } });
-  const page = chi.page;
+test("too many: says how long to wait, keeps what was written", async ({ page }) => {
   await page.route("**/api/feedback/", (route) =>
     route.fulfill({ status: 429, headers: { "Retry-After": "600" }, json: { code: "rate_limited", message: "Too many." } }),
   );
@@ -132,29 +147,4 @@ test("too many: says how long to wait, keeps what was written", async ({ browser
   await write(page, "Lỗi", "Lần thứ mười một");
   await expect(dialogOf(page).getByText("Đợi khoảng 10 phút rồi gửi tiếp")).toBeVisible();
   await expect(dialogOf(page).getByLabel("Nội dung")).toHaveValue("Lần thứ mười một");
-});
-
-test.describe("landscape phone", () => {
-  test("the rail's button and the dialog fit 844×390, fingers' size; the table keeps it in its menu", async ({ browser }) => {
-    const dung = await newGuest(browser, `Dung${RUN}`, phone({ width: 844, height: 390 }));
-    const page = dung.page;
-    await page.goto("/rooms");
-    await page.getByRole("button", { name: "Gửi phản hồi" }).click();
-    const dialog = dialogOf(page);
-    await expect(dialog.getByLabel("Nội dung")).toBeFocused();
-    await expect(dialog.getByRole("button", { name: "Gửi", exact: true })).toBeInViewport();
-    expect(await outOfView(page, "dialog[open] *", true)).toEqual([]);
-    expect(await smallTargets(page)).toEqual([]);
-    await page.keyboard.press("Escape");
-
-    // The table: nothing over the felt or the bet bar; "Thêm tuỳ chọn" → settings → feedback.
-    const detail = await api(page, "POST", "/api/rooms/", { name: "Bàn điện thoại", small_blind: 1, big_blind: 2 });
-    await page.goto(`/rooms/${detail.room.room_id}/table`);
-    await expect(page.getByRole("button", { name: "Thêm tuỳ chọn" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Gửi phản hồi" })).toHaveCount(0);
-    await page.getByRole("button", { name: "Thêm tuỳ chọn" }).click();
-    await page.getByRole("dialog", { name: "Cài đặt bàn" }).getByRole("button", { name: "Gửi phản hồi" }).click();
-    await expect(dialog.getByLabel("Nội dung")).toBeFocused();
-    await expect(dialog.getByRole("button", { name: "Gửi", exact: true })).toBeInViewport();
-  });
 });
