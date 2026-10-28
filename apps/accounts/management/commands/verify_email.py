@@ -21,7 +21,12 @@ class Command(BaseCommand):
         parser.add_argument("email")
 
     def handle(self, *args, email, **options):
-        users = list(User.objects.filter(email__iexact=email.strip(), is_active=True)[:2])
+        email = email.strip()
+        if not email:
+            raise CommandError("Cần một email.")
+        # Guests have no email (""): only real, active accounts can be vouched for.
+        accounts = User.objects.filter(email__iexact=email, is_active=True, is_guest=False)
+        users = list(accounts[:2])
         if not users:
             raise CommandError(f"Không có tài khoản nào dùng email {email}.")
         if len(users) > 1:

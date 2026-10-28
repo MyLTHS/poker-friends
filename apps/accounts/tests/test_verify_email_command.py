@@ -44,3 +44,10 @@ def test_unknown_or_locked_accounts_are_refused():
     for email in ("nobody@example.com", "locked@example.com"):
         with pytest.raises(CommandError):
             run(email)
+
+
+def test_a_blank_email_never_matches_a_guest():
+    User.objects.create_user(username="khach-1", email="", is_guest=True)
+    for email in ("", "   "):
+        with pytest.raises(CommandError):
+            run(email)

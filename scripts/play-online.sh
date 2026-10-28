@@ -271,10 +271,10 @@ cmd_links() {
   # "To: <address>", then the body with the link. The server is recreated on each "up", so these
   # are this session's links only; links from an earlier session point at its old address.
   local found
-  found=$(dc logs --no-color --no-log-prefix backend 2>/dev/null | awk '
+  found=$(dc logs --no-color --no-log-prefix backend | awk '
     /^To: / { to = substr($0, 5) }
     /\/account\/verify\?token=/ { print "Xác minh email  " to "\n  " $0 }
-    /\/account\/reset\?/ { print "Đặt lại mật khẩu " to "\n  " $0 }')
+    /\/account\/reset\?/ { print "Đặt lại mật khẩu " to "\n  " $0 }') || die "không đọc được log server (Docker có đang chạy không?)."
   if [ -z "$found" ]; then
     say "Chưa có email nào trong buổi này."
   else
@@ -287,7 +287,7 @@ cmd_links() {
 cmd_verify() {
   [ -n "${1:-}" ] || die "cần email, ví dụ: scripts/play-online.sh verify ban@example.com"
   [ -f "$ENV_FILE" ] || die "chưa chạy lần nào."
-  dc exec -T backend python manage.py verify_email "$1"
+  dc exec -T backend python manage.py verify_email -- "$1"
 }
 
 cmd_admin() {
