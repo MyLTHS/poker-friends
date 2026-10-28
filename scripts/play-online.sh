@@ -5,6 +5,9 @@
 #   scripts/play-online.sh up       # back up, start everything, print the link for friends
 #   scripts/play-online.sh status   # running? which link?
 #   scripts/play-online.sh logs     # last server log lines (email links when EMAIL_URL is empty)
+#   scripts/play-online.sh links    # verification / password reset links emailed this session
+#   scripts/play-online.sh verify <email>   # vouch for a friend: mark their email verified
+#   scripts/play-online.sh admin    # create the owner's admin login (feedback, errors, users)
 #   scripts/play-online.sh down     # back up, stop the tunnel and the stack (data is kept)
 #
 # Secrets live in .env.home (created on the first `up`, never committed). Messages are in
@@ -262,13 +265,47 @@ cmd_logs() {
   dc logs --no-color --tail "${1:-100}" backend
 }
 
+cmd_links() {
+  [ -f "$ENV_FILE" ] || die "chưa chạy lần nào."
+  # Without EMAIL_URL every email is printed to the server log (apps/accounts/console_email.py):
+  # "To: <address>", then the body with the link. The server is recreated on each "up", so these
+  # are this session's links only; links from an earlier session point at its old address.
+  local found
+  found=$(dc logs --no-color --no-log-prefix backend 2>/dev/null | awk '
+    /^To: / { to = substr($0, 5) }
+    /\/account\/verify\?token=/ { print "Xác minh email  " to "\n  " $0 }
+    /\/account\/reset\?/ { print "Đặt lại mật khẩu " to "\n  " $0 }')
+  if [ -z "$found" ]; then
+    say "Chưa có email nào trong buổi này."
+  else
+    say "$found"
+    say ""
+    say "Gửi riêng từng link cho đúng người (link chứa mã bí mật, đừng gửi vào nhóm chung)."
+  fi
+}
+
+cmd_verify() {
+  [ -n "${1:-}" ] || die "cần email, ví dụ: scripts/play-online.sh verify ban@example.com"
+  [ -f "$ENV_FILE" ] || die "chưa chạy lần nào."
+  dc exec -T backend python manage.py verify_email "$1"
+}
+
+cmd_admin() {
+  [ -f "$ENV_FILE" ] || die "chưa chạy lần nào."
+  say "Tạo tài khoản quản trị (trang <link>/admin/). Bạn tự gõ tên, email và mật khẩu."
+  dc exec backend python manage.py createsuperuser
+}
+
 case "${1:-}" in
   up) cmd_up ;;
   down) cmd_down ;;
   status) cmd_status ;;
   logs) cmd_logs "${2:-}" ;;
+  links) cmd_links ;;
+  verify) cmd_verify "${2:-}" ;;
+  admin) cmd_admin ;;
   *)
-    say "Cách dùng: scripts/play-online.sh up | down | status | logs [số dòng]"
+    say "Cách dùng: scripts/play-online.sh up | down | status | logs [số dòng] | links | verify <email> | admin"
     exit 2
     ;;
 esac

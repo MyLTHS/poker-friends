@@ -28,6 +28,20 @@ Một buổi chơi **2 giờ** mà:
 5. Gửi cho nhóm **ba điều**: link, cách xoay ngang điện thoại, và câu "gặp gì lạ thì bấm Gửi phản
    hồi hoặc nhắn mình ngay, kèm giờ".
 
+### Tin nhắn mẫu gửi nhóm
+
+Sửa giờ, link và tên phòng rồi dán vào nhóm chat:
+
+> Tối nay 21h chơi poker chip ảo nhé, không tiền thật 🃏
+> 1. Mở link: https://xxx.trycloudflare.com (link chỉ dùng tối nay)
+> 2. Điện thoại thì **xoay ngang** máy.
+> 3. Bấm "Chơi ngay bằng khách" là vào được. Muốn giữ chip cho lần sau thì "Đăng ký" bằng email,
+>    rồi nhắn mình để mình xác minh cho.
+> 4. Vào phòng bằng link mời mình gửi riêng.
+> Gặp gì lạ thì bấm **Gửi phản hồi** hoặc nhắn mình kèm giờ nhé!
+
+Link mời phòng (có mã bí mật) thì gửi trong nhóm kín, đừng đăng công khai.
+
 ## Trong buổi chơi
 
 - **Ghi chép nhanh.** Mỗi khi ai đó kêu, ghi một dòng: giờ, ai, đang làm gì, thấy gì. Ví dụ:
@@ -50,8 +64,8 @@ Một buổi chơi **2 giờ** mà:
    ```
 
 2. `scripts/play-online.sh down` (tự sao lưu).
-3. Đọc **phản hồi và lỗi trình duyệt** trong trang admin (mục Feedback và Client errors, khi các mục
-   đó đã có), cộng với ghi chép của bạn.
+3. Đọc **phản hồi và lỗi trình duyệt** trong trang admin (mục Feedback và Client errors), cộng với
+   ghi chép của bạn. Cách xem: [runbook.md](runbook.md).
 4. Hỏi cả nhóm hai câu, ngay hôm đó khi còn nhớ:
    - Điều gì làm bạn khó chịu nhất?
    - Điều gì bạn muốn có mà chưa có?
