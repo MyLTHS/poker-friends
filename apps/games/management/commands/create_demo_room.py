@@ -63,9 +63,7 @@ def seat_guest_players(room: Room, players: int, chips: int) -> list[tuple[User,
         if settings.GUESTS_ALLOWED:
             user = User.objects.create_user(username=name, is_guest=True)
         else:
-            user = User.objects.create_user(
-                username=name, email=f"{name}@bots.invalid", approved=True
-            )
+            user = User.objects.create_user(username=name, email=f"{name}@bots.invalid")
             mark_email_verified(user)
         RoomSeat.objects.create(room=room, user=user, seat=seat)
         LedgerEntry.objects.create(room=room, user=user, kind=LedgerKind.GRANT, amount=chips)

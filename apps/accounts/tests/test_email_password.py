@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from allauth.account.models import EmailAddress
 from django.core import mail
-from django.test import override_settings
+from django.test import Client, override_settings
 
 from apps.games.models import User
 
@@ -65,9 +65,11 @@ class TestSignup:
         assert mail.outbox[0].to == ["binh@example.com"]
         assert "token" in last_link_params()
 
-    def test_does_not_log_in_before_verification(self, client):
+    def test_signs_in_at_once_without_waiting_for_the_email(self, client):
         signup(client)
-        assert client.get("/api/auth/me/").status_code == 401
+        me = client.get("/api/auth/me/")
+        assert me.status_code == 200
+        assert me.json()["email_verified"] is False
 
     def test_email_is_normalised_to_lower_case(self, client):
         signup(client, email="Binh@Example.COM")
@@ -170,11 +172,10 @@ class TestLogin:
         assert wrong.status_code == unknown.status_code == 400
         assert wrong.json()["code"] == unknown.json()["code"] == "invalid_credentials"
 
-    def test_unverified_email_cannot_log_in(self, client):
-        signup(client)
+    def test_an_unverified_email_can_log_in(self, client):
+        signup(Client())
         response = login(client, email="binh@example.com")
-        assert response.status_code == 403
-        assert response.json()["code"] == "email_not_verified"
+        assert response.status_code == 200
 
     def test_inactive_user_cannot_log_in(self, client):
         user = make_verified_user()

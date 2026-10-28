@@ -99,7 +99,7 @@ class MeSerializer(serializers.ModelSerializer):
         return user.has_usable_password()
 
     def get_member(self, user) -> bool:
-        """May reach the rooms: always where guests may play, else approved by the owner."""
+        """May reach the rooms: always where guests may play, else any real account."""
         from django.conf import settings
 
         from .middleware import is_member
