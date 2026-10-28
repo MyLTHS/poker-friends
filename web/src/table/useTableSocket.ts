@@ -1,15 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { ServerMessage } from "@/api/protocol";
 import { initialModel, reduce, type TableAction } from "./reducer";
 
 const RETRY_MS = [500, 1000, 2000, 4000];
 
+export type Retry = {
+  /** Reconnection attempts since the connection was lost (0 while connected). */
+  attempt: number;
+  /** When the next attempt starts (local ms), null while one is under way. */
+  at: number | null;
+  /** The server refused us for good (kicked, no access, too many guests): no retry. */
+  final: boolean;
+};
+
 /** Keeps one WebSocket to the table open (reconnecting on loss) and runs the pure reducer. */
 export function useTableSocket(url: string) {
   const [model, dispatch] = useReducer(reduce, undefined, initialModel);
   const socket = useRef<WebSocket | null>(null);
+  const [retry, setRetry] = useState<Retry>({ attempt: 0, at: null, final: false });
+  const now = useRef<() => void>(() => {});
 
   useEffect(() => {
     let stopped = false;
@@ -17,10 +28,13 @@ export function useTableSocket(url: string) {
     let retry: ReturnType<typeof setTimeout> | undefined;
 
     const connect = () => {
+      clearTimeout(retry);
+      setRetry((r) => ({ ...r, at: null }));
       const ws = new WebSocket(url);
       socket.current = ws;
       ws.onopen = () => {
         attempt = 0;
+        setRetry({ attempt: 0, at: null, final: false });
         dispatch({ type: "socket.open" });
       };
       ws.onmessage = (event) => {
@@ -38,9 +52,19 @@ export function useTableSocket(url: string) {
         dispatch({ type: "socket.closed" });
         // Kicked (4403), no access (4404), too many guests from here (4429): retrying cannot
         // help (docs/api/ws-protocol.md).
-        if (event.code === 4403 || event.code === 4404 || event.code === 4429) return;
-        retry = setTimeout(connect, RETRY_MS[Math.min(attempt++, RETRY_MS.length - 1)]);
+        if (event.code === 4403 || event.code === 4404 || event.code === 4429) {
+          setRetry((r) => ({ ...r, final: true, at: null }));
+          return;
+        }
+        const wait = RETRY_MS[Math.min(attempt++, RETRY_MS.length - 1)];
+        setRetry({ attempt, at: Date.now() + wait, final: false });
+        retry = setTimeout(connect, wait);
       };
+    };
+    // "Thử lại ngay": skip the wait (only while no socket is open or opening).
+    now.current = () => {
+      if (stopped || socket.current) return;
+      connect();
     };
 
     connect();
@@ -62,5 +86,8 @@ export function useTableSocket(url: string) {
   }, [model.outbox]);
 
   const send = useCallback((action: TableAction) => dispatch(action), []);
-  return { model, dispatch: send };
+  const reconnectNow = useCallback(() => now.current(), []);
+  /** "Tải lại bàn": drop the connection; the next one starts from a fresh snapshot. */
+  const reload = useCallback(() => socket.current?.close(), []);
+  return { model, dispatch: send, retry, reconnectNow, reload };
 }
