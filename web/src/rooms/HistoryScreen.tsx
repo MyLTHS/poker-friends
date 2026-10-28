@@ -10,7 +10,7 @@ import { Avatar, Badge, Button, ButtonLink, EmptyState, ErrorState, Loading, Min
 import { fmt, signed, tone } from "@/ui/format";
 
 import { createRoomsApi, type LobbyRoom, type RoomDetail, type RoomsApi } from "./api";
-import { clock, HANDS_PAGE, ledgerTotals, netBarWidth, withPlayer, type HandSummary, type SummaryRow } from "./history";
+import { clock, HANDS_KEPT, HANDS_PAGE, ledgerTotals, netBarWidth, withPlayer, type HandSummary, type SummaryRow } from "./history";
 import { useMe, usePhone, useReloadWhenOnline } from "./hooks";
 import { RoomsShell } from "./RoomsShell";
 
@@ -91,8 +91,9 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
   const { detail, hands, summary } = state;
   const listed = which === "mine" ? withPlayer(hands, myId) : hands;
   const visible = listed.slice(0, shownCount);
-  const counted = hands.filter((h) => !h.voided).length;
-  const first = hands.at(-1);
+  // the API keeps only the latest hands: never present their count as the room's total
+  const capped = hands.length >= HANDS_KEPT;
+  const handsNote = capped ? `${HANDS_KEPT} ván gần nhất` : `${hands.length} ván`;
   const roomSelect = <RoomSelect current={detail} rooms={lobby} small={phone} />;
 
   const ledger =
@@ -137,11 +138,14 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
         ))}
       </ul>
     );
-  const more = listed.length > shownCount && (
-    <button type="button" className="hands-more link is-muted" onClick={() => setShownCount((n) => n + HANDS_PAGE)}>
-      Xem thêm {Math.min(HANDS_PAGE, listed.length - shownCount)} ván cũ hơn
-    </button>
-  );
+  const more =
+    listed.length > shownCount ? (
+      <button type="button" className="hands-more link is-muted" onClick={() => setShownCount((n) => n + HANDS_PAGE)}>
+        Xem thêm {Math.min(HANDS_PAGE, listed.length - shownCount)} ván cũ hơn
+      </button>
+    ) : (
+      capped && <p className="hands-more">Chỉ xem lại được {HANDS_KEPT} ván gần nhất. Bảng tổng kết vẫn tính mọi ván.</p>
+    );
   const tabs = (
     <Tabs
       id="history-hands"
@@ -169,7 +173,7 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
         </div>
         <section className="m-col">
           <div className="m-sec-row">
-            <h2 className="m-sec">Tổng kết · {counted} ván</h2>
+            <h2 className="m-sec">Tổng kết · mọi ván</h2>
             {balanced && (
               <span className="lg-check">
                 <Scale size={13} aria-hidden /> Sổ khớp
@@ -180,7 +184,7 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
         </section>
         <section className="m-col">
           <div className="m-sec-row">
-            <h2 className="m-sec">Các ván gần đây</h2>
+            <h2 className="m-sec">{capped ? handsNote : "Các ván gần đây"}</h2>
             {tabs}
           </div>
           <div id={`history-hands-panel-${which}`} role="tabpanel" aria-labelledby={`history-hands-tab-${which}`}>
@@ -195,12 +199,13 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
     <RoomsShell active="history" me={me}>
       <PageHead eyebrow="Lịch sử · chip ảo" title="Lời / lỗ" sub="Tính theo chip được cấp ở phòng này. Không phải tiền thật." actions={roomSelect} />
       <div className="history-grid">
-        <Panel title="Bảng tổng kết" aside={`${counted} ván${first ? ` · ván đầu ${clock(first.completed_at)}` : ""}`}>
+        <Panel title="Bảng tổng kết" aside="Tính trên mọi ván">
           {ledger}
         </Panel>
         <section className="panel">
           <header className="panel-head">
             <h3>Các ván</h3>
+            <small className="hands-count">{handsNote}</small>
             {tabs}
           </header>
           <div id={`history-hands-panel-${which}`} role="tabpanel" aria-labelledby={`history-hands-tab-${which}`}>

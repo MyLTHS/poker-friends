@@ -25,5 +25,9 @@ export const withPlayer = (hands: HandSummary[], playerId: string | null) =>
 /** "21:04" in the viewer's clock. */
 export const clock = (iso: string) => new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
 
+/** GET /api/rooms/<id>/hands/ returns at most this many hands, newest first (no paging). The
+ *  ledger (summary/) counts every hand; the list is only the latest ones. */
+export const HANDS_KEPT = 100;
+
 /** The hand list starts with this many and opens up by as many more. */
 export const HANDS_PAGE = 10;
