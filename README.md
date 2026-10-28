@@ -2,6 +2,9 @@
 
 No-Limit Texas Hold'em chip ảo cho nhóm bạn. Backend Django + PokerKit.
 
+**Muốn bật để bạn bè vào chơi?** Làm theo [hướng dẫn từ đầu](docs/huong-dan-tu-dau.md): cài một
+lần, mỗi buổi một lệnh, có sẵn đoạn tin nhắn gửi bạn bè.
+
 - Đặc tả: [docs/spec.md](docs/spec.md)
 - Lộ trình: [docs/roadmap.md](docs/roadmap.md)
 - Quy ước làm việc: [CONTRIBUTING.md](CONTRIBUTING.md)
