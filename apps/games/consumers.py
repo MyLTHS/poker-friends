@@ -69,7 +69,13 @@ class RoomConsumer(AsyncWebsocketConsumer):
             self.actor.disconnect(self.conn)
 
     async def receive(self, text_data=None, bytes_data=None):
-        if not await User.objects.filter(pk=int(self.player_id), is_active=True).aexists():
+        if not settings.GUESTS_ALLOWED:
+            user = await User.objects.filter(pk=int(self.player_id)).afirst()
+            if user is None or not await database_sync_to_async(is_member)(user):
+                # Approval withdrawn (or the account locked) while connected: stop here too.
+                await self.close(code=LOGIN_REQUIRED_CLOSE_CODE)
+                return
+        elif not await User.objects.filter(pk=int(self.player_id), is_active=True).aexists():
             # Locked in the admin while connected. Auth already treats an inactive account as
             # logged out for new requests; this socket was opened before and must stop too.
             # 4403 like a kick, so the client does not keep reconnecting.

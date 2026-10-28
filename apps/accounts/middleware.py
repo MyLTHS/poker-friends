@@ -46,14 +46,15 @@ OPEN_API_PREFIXES = ("/api/auth/", "/api/client-errors/")
 
 
 def is_member(user) -> bool:
-    """A real account whose email the owner (or the email link) has verified, or staff."""
+    """Staff, or a real account the owner approved, with its email verified. Approval is its own
+    flag: with Gmail or Google sign-in on, a stranger can verify their own email."""
     from apps.accounts.services import is_email_verified
 
     if not user.is_authenticated or not user.is_active:
         return False
     if user.is_staff:
         return True
-    return not user.is_guest and is_email_verified(user)
+    return not user.is_guest and user.approved and is_email_verified(user)
 
 
 def _needs_member(request) -> bool:

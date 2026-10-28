@@ -22,6 +22,15 @@ def members_only(settings):
 
 
 def member(name="an"):
+    user = User.objects.create_user(
+        username=name, email=f"{name}@example.com", password="x" * 12, approved=True
+    )
+    mark_email_verified(user)
+    return user
+
+
+def self_verified(name="la"):
+    """What Gmail or Google sign-in produce: a verified email the owner never approved."""
     user = User.objects.create_user(username=name, email=f"{name}@example.com", password="x" * 12)
     mark_email_verified(user)
     return user
@@ -51,6 +60,7 @@ class TestRest:
             (None, 401),
             (guest(), 401),
             (unverified(), 401),
+            (self_verified(), 401),
             (member(), 200),
             (staff, 200),
         ):
@@ -103,11 +113,18 @@ class TestWebSocket:
     def test_strangers_guests_and_unverified_accounts_are_closed_with_4401(self):
         room, a, b = heads_up_room()
         a.email = "alice@example.com"
+        a.approved = True
         a.save()
         mark_email_verified(a)
 
         async def body():
-            for who in (AnonymousUser(), await _async(guest), await _async(unverified)):
+            strangers = (
+                AnonymousUser(),
+                await _async(guest),
+                await _async(unverified),
+                await _async(self_verified),
+            )
+            for who in strangers:
                 conn = self.connect_as(room, who)
                 connected, code = await conn.connect()
                 if connected:  # accepted, then closed with the reason (like a kick)
@@ -137,3 +154,33 @@ def test_with_guests_allowed_nothing_changes():
     client = Client()
     assert client.get("/api/auth/config/").json()["guests_allowed"] is True
     assert client.post("/api/auth/guest/", {}, content_type="application/json").status_code == 201
+
+
+class TestApprovalWithdrawn:
+    def test_an_open_socket_is_closed_once_the_owner_withdraws_approval(self):
+        room, a, b = heads_up_room()
+        a.email = "alice@example.com"
+        a.approved = True
+        a.save()
+        mark_email_verified(a)
+
+        async def body():
+            conn = TestWebSocket().connect_as(room, a)
+            assert (await conn.connect())[0]
+            await conn.receive_json_from(timeout=2)  # the snapshot
+            await User.objects.filter(pk=a.pk).aupdate(approved=False)
+            await conn.send_json_to(
+                {
+                    "protocol_version": 1,
+                    "type": "resync.request",
+                    "room_id": room.pk,
+                    "payload": {"last_version": 0},
+                }
+            )
+            for _ in range(10):  # past audience.updated and the like, to the close
+                out = await conn.receive_output(timeout=2)
+                if out["type"] == "websocket.close":
+                    break
+            assert out == {"type": "websocket.close", "code": LOGIN_REQUIRED_CLOSE_CODE}
+
+        run_async(body)

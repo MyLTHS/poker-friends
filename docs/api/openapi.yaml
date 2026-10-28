@@ -1116,7 +1116,8 @@ components:
         guests_allowed:
           type: boolean
           description: |
-            `false` (chơi từ máy nhà, production): chỉ thành viên đã xác minh email mới vào được.
+            `false` (chơi từ máy nhà, production): chỉ thành viên mới vào được: tài khoản thật đã
+            xác minh email **và được chủ phòng duyệt** (`User.approved`), hoặc staff.
             Ẩn nút khách; mọi API ngoài `/api/auth/` trả 401 `login_required` cho người chưa phải
             thành viên (kể cả phiên khách cũ); WebSocket đóng với mã 4401.
       required: [google_enabled, guests_allowed]

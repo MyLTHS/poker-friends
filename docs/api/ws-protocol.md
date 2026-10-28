@@ -36,8 +36,9 @@ Các file đi kèm:
   đã đăng nhập (khách cũng được) và có quyền xem, không thì đóng với mã 4404 (các mã đóng: xem
   cuối phần `room.updated`).
 - Server chỉ cho thành viên (`guests_allowed: false` trong `/api/auth/config/`, mặc định khi chạy
-  thật): không tạo khách; người chưa đăng nhập, phiên khách, hay tài khoản chưa xác minh email đều
-  bị đóng với mã **4401** ngay sau bắt tay. Client đưa người đó tới màn đăng nhập, không thử lại.
+  thật): không tạo khách; người chưa đăng nhập, phiên khách, tài khoản chưa xác minh email hay chưa
+  được chủ phòng duyệt đều bị đóng với mã **4401** ngay sau bắt tay; bị bỏ duyệt lúc đang kết nối
+  thì đóng 4401 ở tin kế tiếp. Client đưa người đó tới màn đăng nhập, không thử lại.
 - Mock server dùng tạm `ws://localhost:8765/ws/rooms/1/?player=<player_id>` để chọn mình là ai.
 - Mỗi message là **một object JSON trong một frame text**.
 - Vừa kết nối xong, server gửi ngay một `table.snapshot` cho riêng người đó.
