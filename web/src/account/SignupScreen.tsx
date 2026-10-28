@@ -4,18 +4,34 @@
 // shown faded beforehand so the player knows what comes next.
 import Link from "next/link";
 import { useState } from "react";
-import { Check, Circle, Mail, MailCheck, UserRound } from "lucide-react";
+import { Check, Circle, Hourglass, LogIn, Mail, MailCheck, UserRound } from "lucide-react";
 
-import { Button } from "@/ui";
+import { Button, ButtonLink } from "@/ui";
 
 import type { AuthApi } from "./api";
 import { AuthFrame, Field, GoogleButton, NoticeAlert, Or, PasswordField, StepLabel, StrengthBar, USERNAME_PATTERN, USERNAME_RULE } from "./frame";
 import { ResendVerification } from "./LoginScreen";
+import { loginPath } from "./members";
 import { passwordRules } from "./password";
 import { formValues, useSubmit } from "./ui";
 
-/** `ready`: the auth config has loaded, so the csrftoken cookie the POST needs is set. */
-export function SignupScreen({ api, googleEnabled, ready }: { api: AuthApi; googleEnabled: boolean; ready: boolean }) {
+/** `ready`: the auth config has loaded, so the csrftoken cookie the POST needs is set.
+ *  `membersOnly` (server GUESTS_ALLOWED off): step 2 is the owner's approval, not the email. */
+export function SignupScreen({
+  api,
+  googleEnabled,
+  ready,
+  membersOnly = false,
+  next = null,
+}: {
+  api: AuthApi;
+  googleEnabled: boolean;
+  ready: boolean;
+  membersOnly?: boolean;
+  /** where the visitor was going (an invite link): kept for the first login */
+  next?: string | null;
+}) {
+  const login = loginPath(next);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
   return (
@@ -34,11 +50,11 @@ export function SignupScreen({ api, googleEnabled, ready }: { api: AuthApi; goog
         kind: "bar",
         title: "Tạo tài khoản",
         sub: "Vào hội để giữ chip, lịch sử và mở bàn riêng.",
-        back: "/account",
+        back: login,
         right: (
           <span className="appbar-note">
             Đã có tài khoản?{" "}
-            <Link href="/account" className="link">
+            <Link href={login} className="link">
               Đăng nhập
             </Link>
           </span>
@@ -53,7 +69,7 @@ export function SignupScreen({ api, googleEnabled, ready }: { api: AuthApi; goog
         <div className="auth-card is-plain">
           <h2 className="auth-title">Tạo tài khoản</h2>
           <p className="auth-sub">Chỉ mất một phút.</p>
-          <SignupForm key={formKey} api={api} ready={ready} sentTo={sentTo} onSent={setSentTo} />
+          <SignupForm key={formKey} api={api} ready={ready} membersOnly={membersOnly} sentTo={sentTo} onSent={setSentTo} />
           {googleEnabled && (
             <div className="form-stack only-desktop">
               <Or />
@@ -62,7 +78,7 @@ export function SignupScreen({ api, googleEnabled, ready }: { api: AuthApi; goog
           )}
           <p className="form-foot">
             Đã có tài khoản?{" "}
-            <Link href="/account" className="link">
+            <Link href={login} className="link">
               Đăng nhập
             </Link>
           </p>
@@ -75,6 +91,8 @@ export function SignupScreen({ api, googleEnabled, ready }: { api: AuthApi; goog
         <div className="auth-card is-quiet" aria-live="polite">
           <VerifyNotice
             api={api}
+            membersOnly={membersOnly}
+            login={login}
             email={sentTo}
             onEdit={() => {
               setSentTo(null);
@@ -87,7 +105,19 @@ export function SignupScreen({ api, googleEnabled, ready }: { api: AuthApi; goog
   );
 }
 
-function SignupForm({ api, ready, sentTo, onSent }: { api: AuthApi; ready: boolean; sentTo: string | null; onSent: (email: string) => void }) {
+function SignupForm({
+  api,
+  ready,
+  membersOnly,
+  sentTo,
+  onSent,
+}: {
+  api: AuthApi;
+  ready: boolean;
+  membersOnly: boolean;
+  sentTo: string | null;
+  onSent: (email: string) => void;
+}) {
   const submit = useSubmit();
   const [password, setPassword] = useState("");
   // the server compares the password with these two
@@ -103,7 +133,9 @@ function SignupForm({ api, ready, sentTo, onSent }: { api: AuthApi; ready: boole
         if (result.ok) onSent(result.data.email ?? values.email);
       }}
     >
-      <NoticeAlert notice={sentTo ? { kind: "ok", text: "Đã tạo tài khoản. Mở email để xác minh." } : submit.notice} />
+      <NoticeAlert
+        notice={sentTo ? { kind: "ok", text: membersOnly ? "Đã tạo tài khoản. Giờ đợi chủ phòng duyệt." : "Đã tạo tài khoản. Mở email để xác minh." } : submit.notice}
+      />
       <fieldset disabled={sentTo !== null}>
         <div className="form-pair">
           <Field
@@ -160,7 +192,50 @@ function SignupForm({ api, ready, sentTo, onSent }: { api: AuthApi; ready: boole
   );
 }
 
-function VerifyNotice({ api, email, onEdit }: { api: AuthApi; email: string | null; onEdit: () => void }) {
+function VerifyNotice({
+  api,
+  membersOnly,
+  login,
+  email,
+  onEdit,
+}: {
+  api: AuthApi;
+  membersOnly: boolean;
+  login: string;
+  email: string | null;
+  onEdit: () => void;
+}) {
+  if (membersOnly) {
+    // The owner approves (scripts/play-online.sh verify, or the admin), which verifies the email
+    // too: nothing to open, only to wait and then log in.
+    return (
+      <div className={`verify${email ? "" : " is-pending"}`}>
+        <span className="verify-icon">
+          <Hourglass size={30} strokeWidth={1.6} aria-hidden />
+        </span>
+        <h3>{email ? "Đã gửi yêu cầu" : "Rồi chủ phòng duyệt"}</h3>
+        <p>
+          {email ? (
+            <>
+              Tài khoản <b>{email}</b> đã tạo. Nhắn chủ phòng duyệt cho bạn; duyệt xong là đăng nhập được.
+            </>
+          ) : (
+            "Bàn chỉ dành cho thành viên: tài khoản mới cần chủ phòng duyệt. Duyệt xong là đăng nhập được."
+          )}
+        </p>
+        {email && (
+          <div className="verify-actions">
+            <ButtonLink href={login} kind="primary" size="lg" block icon={<LogIn size={17} strokeWidth={2} aria-hidden />}>
+              Thử đăng nhập
+            </ButtonLink>
+            <button type="button" className="link" onClick={onEdit}>
+              Sửa email
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div className={`verify${email ? "" : " is-pending"}`}>
       <span className="verify-icon">

@@ -36,6 +36,8 @@ export function createFeedbackApi(request = makeRequest(), cookies?: () => strin
   return {
     hasCsrf: () => hasCsrfCookie(cookies),
     fetchCsrf: () => request("GET", "/api/auth/config/"),
+    /** Google on or off, guests allowed or members only */
+    config: () => request<Schemas["AuthConfig"]>("GET", "/api/auth/config/"),
     send: (body: FeedbackRequest) => withCsrf(() => request<Schemas["FeedbackCreated"]>("POST", "/api/feedback/", body)),
     /** 204 on success: no body */
     reportError: (body: ClientErrorReport) => request<undefined>("POST", "/api/client-errors/", body),

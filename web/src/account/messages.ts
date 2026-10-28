@@ -29,6 +29,10 @@ const TEXT: Record<string, string> = {
   already_seated: "Bạn đang ngồi một ghế khác rồi.",
   invalid_seat: "Ghế không hợp lệ.",
   network_error: "Không nối được tới server. Kiểm tra Django đang chạy rồi thử lại.",
+  // members only (server GUESTS_ALLOWED off, account/members.ts)
+  login_required: "Bàn này chỉ dành cho thành viên. Đăng nhập để vào.",
+  not_approved: "Chủ phòng chưa duyệt tài khoản này.",
+  guests_disabled: "Chỉ thành viên mới vào được. Đăng ký rồi nhờ chủ phòng duyệt.",
 };
 
 // The Google flow ends on /account?error=<GoogleError>; worded for someone who just used Google.

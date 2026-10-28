@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { LogIn, Send, UserRound } from "lucide-react";
 
+import { herePath, loginPath } from "@/account/members";
 import { errorText } from "@/account/messages";
 import { Alert, Button } from "@/ui/controls";
 import { Modal, useToast } from "@/ui/surfaces";
@@ -18,7 +19,9 @@ import { pageOf } from "./reporter";
 
 import "./feedback.css";
 
-type Problem = { kind: "login" } | { kind: "error"; text: string } | null;
+/** "login": not logged in (or, members only, not a member): `guests` says whether "play as a guest
+ *  and send" is offered or only the login. */
+type Problem = { kind: "login"; guests: boolean } | { kind: "error"; text: string } | null;
 
 export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const api = useMemo(() => createFeedbackApi(), []);
@@ -78,7 +81,10 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
       return;
     }
     const { error, retryAfter } = result;
-    if (error.code === "not_authenticated") setProblem({ kind: "login" });
+    if (error.code === "not_authenticated" || error.code === "login_required") {
+      const config = await api.config();
+      setProblem({ kind: "login", guests: !config.ok || config.data.guests_allowed });
+    }
     else if (error.code === "rate_limited") {
       const minutes = Math.max(1, Math.ceil((retryAfter ?? 60) / 60));
       setProblem({ kind: "error", text: `Bạn đã gửi nhiều phản hồi trong giờ qua. Đợi khoảng ${minutes} phút rồi gửi tiếp nhé.` });
@@ -154,12 +160,14 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
           <div ref={notice} tabIndex={-1} className="fb-problem">
             {problem.kind === "login" ? (
               <>
-                <Alert kind="error" title="Cần đăng nhập để gửi (khách cũng được)" />
+                <Alert kind="error" title={problem.guests ? "Cần đăng nhập để gửi (khách cũng được)" : "Cần đăng nhập bằng tài khoản thành viên để gửi"} />
                 <span className="fb-login">
-                  <Button kind="primary" size="sm" busy={busy} icon={<UserRound size={15} strokeWidth={2} aria-hidden />} onClick={() => void send(true)}>
-                    Chơi bằng khách rồi gửi
-                  </Button>
-                  <Link href="/account" className="link" onClick={close}>
+                  {problem.guests && (
+                    <Button kind="primary" size="sm" busy={busy} icon={<UserRound size={15} strokeWidth={2} aria-hidden />} onClick={() => void send(true)}>
+                      Chơi bằng khách rồi gửi
+                    </Button>
+                  )}
+                  <Link href={loginPath(herePath())} className="link" onClick={close}>
                     <LogIn size={14} strokeWidth={2} aria-hidden /> Đăng nhập
                   </Link>
                 </span>

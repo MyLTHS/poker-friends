@@ -19,24 +19,31 @@ const TITLE: Record<string, string> = {
   kicked: "Bạn đã bị mời ra khỏi phòng này",
   network_error: "Không mở được link mời",
   rate_limited: "Thử vào quá nhiều lần",
+  login_required: "Cần đăng nhập để vào phòng",
+  not_approved: "Đợi chủ phòng duyệt",
 };
 
 const TEXT: Record<string, string> = {
   no_token: "Link bị cắt mất đoạn ?token=…. Xin chủ phòng gửi lại cả link.",
   room_not_found: "Link sai, hoặc chủ phòng đã đổi link mời. Xin chủ phòng link mới nhé.",
   network_error: "Mạng đang chập chờn. Có mạng lại là tự thử lại.",
+  // members only: the page is leaving for the login (keeping this link) or the account page
+  login_required: "Phòng chỉ dành cho thành viên. Đang mở trang đăng nhập; đăng nhập xong bạn vào thẳng phòng.",
+  not_approved: "Tài khoản của bạn chưa được chủ phòng duyệt. Đang mở trang tài khoản…",
 };
 
 /**
  * /rooms/join?token=… — the invite link. Opening it joins the room (not logged in, the server
- * makes the visitor a guest), then *replaces* this address with the room page, which greets the
+ * makes the visitor a guest; members only, the API answers login_required and the visitor logs
+ * in first, coming back to this link: account/members.ts), then *replaces* this address with the
+ * room page, which greets the
  * newcomer with the invitation card: the token leaves the address bar and the history, so Back
  * never sends it again (an owner may have changed the link since).
  */
 export function JoinScreen({ token }: { token: string }) {
   const rooms = useMemo(() => createRoomsApi(), []);
   const router = useRouter();
-  const { me, whenReady } = useMe();
+  const { me, guestsAllowed, whenReady } = useMe();
   const phone = usePhone();
   const [state, setState] = useState<State>(token ? { kind: "joining" } : { kind: "error", code: "no_token", text: "" });
 
@@ -76,7 +83,11 @@ export function JoinScreen({ token }: { token: string }) {
       <div className="invitation is-waiting" role="status">
         <Spinner size={phone ? 48 : 64} />
         <b>Đang mở thiệp mời…</b>
-        <small>Vào phòng bằng link — chưa có tài khoản thì bạn vào bằng khách.</small>
+        <small>
+          {guestsAllowed === false
+            ? "Phòng chỉ dành cho thành viên: chưa đăng nhập thì đăng nhập trước, xong là vào thẳng phòng."
+            : "Vào phòng bằng link — chưa có tài khoản thì bạn vào bằng khách."}
+        </small>
       </div>
     ) : (
       <div className="invitation is-error">

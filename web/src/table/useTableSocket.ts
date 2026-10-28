@@ -13,7 +13,24 @@ export type Retry = {
   at: number | null;
   /** The server refused us for good (kicked, no access, too many guests): no retry. */
   final: boolean;
+  /** Final because of who the player is (4401, members only): log in, or wait for the owner. */
+  auth?: boolean;
 };
+
+/** What a close code means (docs/api/ws-protocol.md): retrying cannot help after a kick (4403),
+ *  no access (4404), too many guests (4429), or members only (4401, the account decides). */
+export function closeKind(code: number): "retry" | "final" | "auth" {
+  if (code === 4401) return "auth";
+  return code === 4403 || code === 4404 || code === 4429 ? "final" : "retry";
+}
+
+/** After the socket closed: when to connect again (and the new attempt count), or stop for good.
+ *  The hook below runs exactly this; it schedules a reconnect only when `retryIn` is given. */
+export function afterClose(code: number, attempt: number): { retryIn: number; attempt: number } | { stop: "final" | "auth" } {
+  const kind = closeKind(code);
+  if (kind !== "retry") return { stop: kind };
+  return { retryIn: RETRY_MS[Math.min(attempt, RETRY_MS.length - 1)], attempt: attempt + 1 };
+}
 
 /** Keeps one WebSocket to the table open (reconnecting on loss) and runs the pure reducer. */
 export function useTableSocket(url: string) {
@@ -50,15 +67,14 @@ export function useTableSocket(url: string) {
         if (socket.current === ws) socket.current = null;
         if (stopped) return;
         dispatch({ type: "socket.closed" });
-        // Kicked (4403), no access (4404), too many guests from here (4429): retrying cannot
-        // help (docs/api/ws-protocol.md).
-        if (event.code === 4403 || event.code === 4404 || event.code === 4429) {
-          setRetry((r) => ({ ...r, final: true, at: null }));
+        const then = afterClose(event.code, attempt);
+        if ("stop" in then) {
+          setRetry((r) => ({ ...r, final: true, at: null, auth: then.stop === "auth" }));
           return;
         }
-        const wait = RETRY_MS[Math.min(attempt++, RETRY_MS.length - 1)];
-        setRetry({ attempt, at: Date.now() + wait, final: false });
-        retry = setTimeout(connect, wait);
+        attempt = then.attempt;
+        setRetry({ attempt, at: Date.now() + then.retryIn, final: false });
+        retry = setTimeout(connect, then.retryIn);
       };
     };
     // "Thử lại ngay": skip the wait (only while no socket is open or opening).

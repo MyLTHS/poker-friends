@@ -2,12 +2,18 @@
 
 // /account: the login for a visitor, the upgrade for a guest, the profile for a member. Google's
 // result arrives as ?google= / ?error= (see app/account/page.tsx) and shows on whichever screen.
+// Members only (server GUESTS_ALLOWED off, account/members.ts): an account the owner has not
+// approved waits on ApprovalScreen; an old guest is told to upgrade; after logging in the player
+// goes back to `next` (the page that sent them here, an invite link with its token).
 import { useEffect, useMemo, useState } from "react";
 
 import { D1Root, LoadingLine } from "@/ui";
 
 import { createAuthApi, type Me } from "./api";
+import { ApprovalScreen, NOT_YET } from "./ApprovalScreen";
 import { LoginScreen } from "./LoginScreen";
+import { LogoutButton } from "./LogoutButton";
+import { loginPath, takeRememberedNext } from "./members";
 import type { Notice } from "./messages";
 import { loadMyRooms, type MyRooms } from "./myRooms";
 import { ProfileScreen } from "./ProfileScreen";
@@ -16,16 +22,35 @@ import { useAuthBoot } from "./useAuthBoot";
 
 const NOTICE_SECONDS = 6;
 
-export function AccountScreen({ initialNotice }: { initialNotice: Notice | null }) {
+const GUEST_NOW_MEMBERS_ONLY: Notice = {
+  kind: "error",
+  text: "Giờ bàn chỉ dành cho thành viên. Nâng cấp tài khoản khách này (giữ nguyên chip) rồi nhờ chủ phòng duyệt.",
+};
+
+/** `next`: already checked by safeNext (app/account/page.tsx). */
+export function AccountScreen({ initialNotice, next = null }: { initialNotice: Notice | null; next?: string | null }) {
   const api = useMemo(() => createAuthApi(), []);
   const [boot, setMe] = useAuthBoot(api);
   const [notice, setNotice] = useState<Notice | null>(initialNotice);
+  const [checking, setChecking] = useState(false);
   const rooms = useMyRooms(boot.me);
+  const membersOnly = boot.config?.guests_allowed === false;
 
   useEffect(() => {
-    // Drop ?google= / ?error= so a reload does not show it again.
-    if (initialNotice) window.history.replaceState(null, "", "/account");
-  }, [initialNotice]);
+    // Drop ?google= / ?error= so a reload does not show it again (keep ?next=).
+    if (initialNotice) window.history.replaceState(null, "", loginPath(next));
+  }, [initialNotice, next]);
+
+  // A member who was sent here (or comes back with a link to follow) goes on at once. Google's
+  // flow comes back without ?next= (/account?google=ok): then the page remembered before leaving
+  // for Google is the one. Taking it clears it, so an old link cannot fire days later.
+  useEffect(() => {
+    if (!boot.loaded || !boot.me?.member) return;
+    const fromGoogle = initialNotice?.kind === "ok";
+    const remembered = next || fromGoogle ? takeRememberedNext() : null;
+    const target = next ?? remembered;
+    if (target) window.location.replace(target);
+  }, [boot.loaded, boot.me, next, initialNotice]);
 
   useEffect(() => {
     // "Đã đăng nhập." and the like fade out; errors stay until the next action.
@@ -35,6 +60,16 @@ export function AccountScreen({ initialNotice }: { initialNotice: Notice | null 
   }, [notice]);
 
   const done = (me: Me | null, text?: string) => {
+    // In at last: back to the page that sent the player here, or the invite they signed up from.
+    // The remembered one is taken (and so cleared) even when ?next= wins, so it cannot go stale.
+    if (me?.member) {
+      const remembered = takeRememberedNext();
+      const target = next ?? remembered;
+      if (target) {
+        window.location.assign(target);
+        return;
+      }
+    }
     setMe(me);
     setNotice(text ? { kind: "ok", text } : null);
   };
@@ -48,9 +83,27 @@ export function AccountScreen({ initialNotice }: { initialNotice: Notice | null 
       </D1Root>
     );
   }
-  if (!boot.me) return <LoginScreen api={api} googleEnabled={googleEnabled} notice={shown} onDone={done} />;
+  if (!boot.me) return <LoginScreen api={api} googleEnabled={googleEnabled} membersOnly={membersOnly} next={next} notice={shown} onDone={done} />;
   if (boot.me.is_guest) {
-    return <UpgradeScreen api={api} me={boot.me} googleEnabled={googleEnabled} rooms={rooms} notice={shown} onDone={done} />;
+    const guestNotice = shown ?? (membersOnly ? GUEST_NOW_MEMBERS_ONLY : null);
+    return <UpgradeScreen api={api} me={boot.me} googleEnabled={googleEnabled} rooms={rooms} notice={guestNotice} onDone={done} />;
+  }
+  if (!boot.me.member) {
+    return (
+      <ApprovalScreen
+        email={boot.me.email}
+        notice={notice}
+        busy={checking}
+        onRetry={async () => {
+          setChecking(true);
+          const me = await api.me();
+          setChecking(false);
+          if (me.ok && me.data.member) done(me.data, "Chủ phòng đã duyệt. Vào bàn thôi!");
+          else setNotice(me.ok ? NOT_YET : { kind: "error", text: "Không hỏi được server. Thử lại nhé." });
+        }}
+        other={<LogoutButton api={api} onDone={done} kind="ghost" size="lg" block />}
+      />
+    );
   }
   return <ProfileScreen api={api} me={boot.me} rooms={rooms} notice={shown} onDone={done} />;
 }
@@ -60,7 +113,8 @@ export function AccountScreen({ initialNotice }: { initialNotice: Notice | null 
  *  upgrade, a notice) changes none of it. A new name only changes "bàn làm chủ". */
 function useMyRooms(me: Me | null): MyRooms | null | undefined {
   const [state, setState] = useState<{ forId: number; rooms: MyRooms | null } | null>(null);
-  const id = me?.id;
+  // Members only: the room API refuses anyone else, so do not ask (shown as "could not load").
+  const id = me?.member ? me.id : undefined;
   const username = me?.username;
   useEffect(() => {
     if (id === undefined || username === undefined) return;
@@ -72,5 +126,6 @@ function useMyRooms(me: Me | null): MyRooms | null | undefined {
       cancelled = true;
     };
   }, [id, username]);
+  if (me && !me.member) return null;
   return me && state?.forId === me.id ? state.rooms : undefined;
 }

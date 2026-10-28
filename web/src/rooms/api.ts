@@ -2,7 +2,8 @@
 
 import type { components } from "@/api/rest";
 
-import { makeRequest } from "@/account/api";
+import { makeRequest, type Result } from "@/account/api";
+import { authBlock, goToAuth, type AuthBlock } from "@/account/members";
 
 type Schemas = components["schemas"];
 export type RoomDetail = Schemas["RoomDetail"];
@@ -30,11 +31,24 @@ export function inviteUrl(origin: string, token: string): string {
   return `${origin}/rooms/join?token=${encodeURIComponent(token)}`;
 }
 
+/**
+ * Every call of the room screens (lobby, room, table, history, replay). Members only: a refusal
+ * for who the player is (401 login_required, 403 not_approved) is handled here once for all of
+ * them, by `onBlocked` (default: leave for the login, or for "Đợi chủ phòng duyệt"). The screen
+ * still gets the error, and shows it for the moment the page takes to change.
+ */
 export function createRoomsApi(
   fetchImpl: typeof fetch = (...args) => fetch(...args),
   cookies: () => string = () => document.cookie,
+  onBlocked: (block: AuthBlock) => void = goToAuth,
 ) {
-  const request = makeRequest(fetchImpl, cookies);
+  const send = makeRequest(fetchImpl, cookies);
+  const request = async <T>(...args: Parameters<typeof send>): Promise<Result<T>> => {
+    const result = await send<T>(...args);
+    const block = result.ok ? null : authBlock(result.error.code);
+    if (block) onBlocked(block);
+    return result;
+  };
   const room = (id: number, rest = "") => `/api/rooms/${id}/${rest}`;
   return {
     lobby: () => request<Schemas["Lobby"]>("GET", "/api/rooms/"),
