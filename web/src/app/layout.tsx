@@ -9,12 +9,11 @@ export const metadata: Metadata = {
   description: "Trang thử bàn chơi nối với mock server.",
 };
 
-// viewport-fit=cover: the landscape phone layout draws under the notch and keeps its own 44px
-// insets (tokens.css --safe-l / --safe-r).
+// D1 pages opt into viewport-fit=cover themselves (ui/viewport.ts); the direction A screens
+// have no safe-area padding, so the default stays inside the safe area.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  viewportFit: "cover",
   themeColor: "#0d0a07",
 };
 

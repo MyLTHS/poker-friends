@@ -4,7 +4,7 @@
 // made real (buttons, inputs, keyboard, ARIA). Sizes follow the design: 42/34/50px on desktop, at
 // least 44px on the landscape phone (d1.css).
 import Link from "next/link";
-import { useId, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useRef, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { Check } from "lucide-react";
 
 export type ButtonKind = "primary" | "ghost" | "quiet" | "danger" | "felt" | "light" | "paper";
@@ -13,7 +13,8 @@ type ButtonLook = { kind?: ButtonKind; size?: "sm" | "md" | "lg"; block?: boolea
 const btnClass = ({ kind = "ghost", size = "md", block = false }: ButtonLook, extra = "") =>
   `btn btn-${kind} btn-${size}${block ? " btn-block" : ""} ${extra}`;
 
-/** `busy` keeps the width, hides the label behind a spinner and blocks clicks (aria-busy). */
+/** `busy` keeps the width, hides the label behind a spinner and blocks clicks (aria-busy).
+ *  Every <button> prop passes through, `ref` included (React 19). */
 export function Button({
   kind,
   size,
@@ -26,7 +27,7 @@ export function Button({
   type = "button",
   disabled,
   ...rest
-}: ButtonLook & { busy?: boolean } & ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonLook & { busy?: boolean } & ComponentProps<"button">) {
   return (
     <button
       type={type}
@@ -43,10 +44,11 @@ export function Button({
   );
 }
 
-/** A link that looks like a button (navigation, not an action). */
-export function ButtonLink({ href, kind, size, block, icon, iconRight, className = "", children }: ButtonLook & { href: string; className?: string; children?: ReactNode }) {
+/** A link that looks like a button (navigation, not an action). Every next/link prop passes
+ *  through (target, prefetch, onClick, aria-*, ref …). */
+export function ButtonLink({ kind, size, block, icon, iconRight, className = "", children, ...link }: ButtonLook & ComponentProps<typeof Link>) {
   return (
-    <Link href={href} className={btnClass({ kind, size, block }, className)}>
+    <Link className={btnClass({ kind, size, block }, className)} {...link}>
       {icon}
       {children !== undefined && <span>{children}</span>}
       {iconRight}
@@ -54,17 +56,20 @@ export function ButtonLink({ href, kind, size, block, icon, iconRight, className
   );
 }
 
-/** Square icon button; `label` is required: it is the accessible name and the tooltip. */
+/** Square icon button; `label` is required: it is the accessible name and the tooltip.
+ *  `pressed` makes it a toggle (aria-pressed true/false, brass when on); `active` only lights it
+ *  (e.g. the panel it opens is showing) without announcing a toggle. */
 export function IconButton({
   label,
   badge,
-  active = false,
+  pressed,
+  active = pressed ?? false,
   className = "",
   children,
   ...rest
-}: { label: string; badge?: string | number; active?: boolean } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-label">) {
+}: { label: string; badge?: string | number; pressed?: boolean; active?: boolean } & Omit<ComponentProps<"button">, "aria-label" | "aria-pressed">) {
   return (
-    <button type="button" className={`iconbtn${active ? " is-active" : ""} ${className}`} title={label} aria-label={badge !== undefined ? `${label} (${badge})` : label} aria-pressed={active || undefined} {...rest}>
+    <button type="button" className={`iconbtn${active ? " is-active" : ""} ${className}`} title={label} aria-label={badge !== undefined ? `${label} (${badge})` : label} aria-pressed={pressed} {...rest}>
       {children}
       {badge !== undefined && <i className="iconbtn-badge" aria-hidden>{badge}</i>}
     </button>
@@ -72,7 +77,8 @@ export function IconButton({
 }
 
 /** Label, input box (with optional icon / trailing slot), and a hint or error under it. `error`
- *  replaces the hint, marks the box red and is announced (aria-invalid + aria-describedby). */
+ *  replaces the hint, marks the box red and is announced (aria-invalid + aria-describedby, added
+ *  to any aria-describedby of the caller). Every <input> prop passes through, `ref` included. */
 export function TextField({
   label,
   labelNote,
@@ -84,6 +90,7 @@ export function TextField({
   mono = false,
   className = "",
   id,
+  "aria-describedby": describedBy,
   ...input
 }: {
   label?: ReactNode;
@@ -94,7 +101,7 @@ export function TextField({
   icon?: ReactNode;
   trailing?: ReactNode;
   mono?: boolean;
-} & InputHTMLAttributes<HTMLInputElement>) {
+} & ComponentProps<"input">) {
   const auto = useId();
   const inputId = id ?? auto;
   const hintId = `${inputId}-hint`;
@@ -110,7 +117,7 @@ export function TextField({
       )}
       <span className={`input${state}${mono ? " is-mono" : ""}`}>
         {icon && <span className="input-icon">{icon}</span>}
-        <input id={inputId} aria-invalid={error ? true : undefined} aria-describedby={message ? hintId : undefined} {...input} />
+        <input id={inputId} aria-invalid={error ? true : undefined} aria-describedby={[describedBy, message ? hintId : ""].filter(Boolean).join(" ") || undefined} {...input} />
         {trailing && <span className="input-trailing">{trailing}</span>}
       </span>
       {message && (
@@ -139,10 +146,10 @@ export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChang
   );
 }
 
-export function Checkbox({ checked, onChange, children, name }: { checked: boolean; onChange: (checked: boolean) => void; children: ReactNode; name?: string }) {
+export function Checkbox({ checked, onChange, children, name, disabled }: { checked: boolean; onChange: (checked: boolean) => void; children: ReactNode; name?: string; disabled?: boolean }) {
   return (
-    <label className={`check${checked ? " is-on" : ""}`}>
-      <input type="checkbox" name={name} checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    <label className={`check${checked ? " is-on" : ""}${disabled ? " is-disabled" : ""}`}>
+      <input type="checkbox" name={name} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <i aria-hidden>
         <Check size={13} strokeWidth={3} />
       </i>

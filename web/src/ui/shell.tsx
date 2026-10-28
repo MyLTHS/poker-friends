@@ -21,9 +21,27 @@ export function D1Root({ bg = "app", className = "", children }: { bg?: "app" | 
   return <div className={`d1 bg-${bg} ${className}`}>{children}</div>;
 }
 
-export type Me = { name: string; notifications?: number };
+/** The signed-in player as the bars show them. The avatar links to `href` (profile); the bell
+ *  shows only with `notificationsHref`. Screens that need buttons instead (a menu, a drawer)
+ *  pass their own controls through AppShell's navActions / railActions. */
+export type Me = { name: string; href?: string; notifications?: number; notificationsHref?: string };
 
-function DesktopNav({ active, me }: { active?: NavKey; me?: Me }) {
+function BellLink({ me, size }: { me: Me; size: number }) {
+  if (!me.notificationsHref) return null;
+  const count = me.notifications ?? 0;
+  return (
+    <Link href={me.notificationsHref} className="iconbtn" aria-label={count ? `Thông báo (${count} mới)` : "Thông báo"}>
+      <Bell size={size} strokeWidth={1.8} aria-hidden />
+      {count > 0 && (
+        <i className="iconbtn-badge" aria-hidden>
+          {count}
+        </i>
+      )}
+    </Link>
+  );
+}
+
+function DesktopNav({ active, me, actions }: { active?: NavKey; me?: Me; actions?: ReactNode }) {
   return (
     <header className="nav">
       <Link href="/" aria-label="Poker Friends: trang đầu">
@@ -36,34 +54,22 @@ function DesktopNav({ active, me }: { active?: NavKey; me?: Me }) {
           </Link>
         ))}
       </nav>
-      {me && (
-        <span className="nav-right">
-          <Bell_ count={me.notifications} />
-          <span className="nav-me">
+      <span className="nav-right">
+        {actions}
+        {me && <BellLink me={me} size={18} />}
+        {me && (
+          <Link href={me.href ?? "/account"} className="nav-me" aria-label={`Hồ sơ của ${me.name}`}>
             <Avatar name={me.name} size={32} />
             <span>{me.name}</span>
             <ChevronDown size={14} aria-hidden />
-          </span>
-        </span>
-      )}
+          </Link>
+        )}
+      </span>
     </header>
   );
 }
 
-function Bell_({ count, size = 18 }: { count?: number; size?: number }) {
-  return (
-    <span className="iconbtn" role="img" aria-label={count ? `Thông báo (${count} mới)` : "Thông báo"}>
-      <Bell size={size} strokeWidth={1.8} aria-hidden />
-      {!!count && (
-        <i className="iconbtn-badge" aria-hidden>
-          {count}
-        </i>
-      )}
-    </span>
-  );
-}
-
-function PhoneRail({ active, me }: { active?: NavKey; me?: Me }) {
+function PhoneRail({ active, me, actions }: { active?: NavKey; me?: Me; actions?: ReactNode }) {
   return (
     <nav className="navrail" aria-label="Chính">
       <Link href="/" aria-label="Poker Friends: trang đầu">
@@ -77,11 +83,12 @@ function PhoneRail({ active, me }: { active?: NavKey; me?: Me }) {
           </Link>
         ))}
       </span>
+      {actions}
+      {me && <BellLink me={me} size={19} />}
       {me && (
-        <>
-          <Bell_ count={me.notifications} size={19} />
+        <Link href={me.href ?? "/account"} className="navrail-me" aria-label={`Hồ sơ của ${me.name}`}>
           <Avatar name={me.name} size={34} />
-        </>
+        </Link>
       )}
     </nav>
   );
@@ -111,19 +118,25 @@ export function AppShell({
   active,
   me,
   sub,
+  navActions,
+  railActions,
   bg = "app",
   children,
 }: {
   active?: NavKey;
   me?: Me;
+  /** extra controls at the right of the desktop bar, before the bell */
+  navActions?: ReactNode;
+  /** extra controls low on the phone rail, above the bell */
+  railActions?: ReactNode;
   sub?: { title: ReactNode; sub?: ReactNode; back?: string; right?: ReactNode };
   bg?: "app" | "auth" | "table";
   children: ReactNode;
 }) {
   return (
     <D1Root bg={bg} className={sub ? "shell-sub" : "shell-tab"}>
-      <DesktopNav active={active} me={me} />
-      {sub ? <PhoneAppBar {...sub} /> : <PhoneRail active={active} me={me} />}
+      <DesktopNav active={active} me={me} actions={navActions} />
+      {sub ? <PhoneAppBar {...sub} /> : <PhoneRail active={active} me={me} actions={railActions} />}
       <main className="page">{children}</main>
     </D1Root>
   );

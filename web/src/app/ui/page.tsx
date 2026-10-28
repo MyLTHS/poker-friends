@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { d1Viewport } from "@/ui/viewport";
+
 import { Gallery } from "./Gallery";
+
+export const viewport = d1Viewport;
 
 export const metadata: Metadata = {
   title: "Bộ giao diện D1 — Poker Friends",
