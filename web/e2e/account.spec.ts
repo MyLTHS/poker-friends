@@ -85,6 +85,13 @@ test.describe("account flows (the email links where there still are some)", () =
     await expect(page.getByRole("heading", { name: "Chọn một bàn" })).toBeVisible();
     expect((await api(page, "GET", "/api/auth/me/")).email).toBe(email);
 
+    // Verifying the email is optional now, and the link in the email still works.
+    await page.goto((await linkFromEmail(email, "/account/verify")).href);
+    await expect(page.getByRole("heading", { name: "Email đã xác minh" })).toBeVisible();
+    await expect(page).toHaveURL(/\/account\/verify$/); // the token left the address bar
+    await page.goto("/account");
+    await expect(page.getByText("Đã xác minh")).toBeVisible();
+
     // Someone else with the same email: the answer sits under the email box, which takes the focus.
     const other = await (await browser.newContext()).newPage();
     await other.goto("/account/signup");
