@@ -8,29 +8,25 @@ No-Limit Texas Hold'em chip ảo cho nhóm bạn. Backend Django + PokerKit.
 
 ## Tiến độ
 
-Cập nhật: 27/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đoán, bài tập) ở [docs/roadmap.md](docs/roadmap.md).
+Cập nhật: 28/10/2026. Chi tiết từng đợt (việc, câu hỏi dự đoán, bài tập) ở [docs/roadmap.md](docs/roadmap.md);
+những gì đổi so với kế hoạch ban đầu ở [roadmap, mục "Đổi so với kế hoạch"](docs/roadmap.md#đổi-so-với-kế-hoạch-ban-đầu).
 
-**Đang ở:** A và B1 đã được chủ dự án duyệt. B2 tới B8 (kể cả B4b nối trang React với backend
-thật, E2E Playwright) đã gộp vào `main`, chờ duyệt; staging của B5 chờ VPS. Đã sửa các điểm phải
-sửa trước C của đợt kiểm tra chỉ-đọc toàn bộ B; phần để lại ghi ở [Việc còn lại](#việc-còn-lại-cho-d-và-e).
-**C1: bốn hướng thiết kế đã vẽ xong, chờ chủ dự án chọn** ([cách xem và đưa vào Figma](docs/c1-thiet-ke.md)).
+**Đang ở:** A tới E đã xong và đã gộp vào `main`. **F (beta với bạn bè) đang chuẩn bị**: server chạy
+trên máy Mac của chủ dự án qua Cloudflare Tunnel ([choi-online.md](docs/choi-online.md)), sổ tay
+buổi chơi ở [beta-f.md](docs/beta-f.md), nút "Gửi phản hồi" và tự báo lỗi trình duyệt (#31).
+Chủ dự án đã duyệt A và B1; cổng duyệt và bài tập từ B2 trở đi còn để dành, làm theo
+[sổ bài học](docs/learning/README.md).
 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
 | A | Nền móng codebase | ✅ Đã duyệt |
 | B1 | Engine luật chơi | ✅ Đã duyệt |
-| B2 | Dữ liệu | ✅ Xong code, chờ duyệt |
-| B3 | Hợp đồng API | ✅ Xong code, chờ duyệt |
-| B4 | Bàn chơi realtime | ✅ B4a (backend) và B4b (nối React, E2E Playwright) xong code, chờ duyệt |
-| B5 | Độ bền + staging | 🟡 Phần code xong, chờ duyệt; staging chờ VPS |
-| B6 | Tài khoản | ✅ Xong code, chờ duyệt |
-| B7 | Phòng và quyền | ✅ Xong code, chờ duyệt |
-| B8 | Xã hội và quản trị | ✅ Xong code, chờ duyệt |
-| C1 | Thiết kế | 🟡 Bốn hướng đã vẽ xong, **chờ chủ dự án chọn** ([cách xem](docs/c1-thiet-ke.md)) |
-| C2–C5 | Frontend | ⬜ Chưa bắt đầu (làm theo hướng được chọn ở C1) |
-| D | Kiểm thử tổng thể | ⬜ |
-| E | Production và vận hành | ⬜ |
-| F | Beta với bạn bè | ⬜ |
+| B2–B8 | Dữ liệu, hợp đồng API, bàn chơi realtime, độ bền, tài khoản, phòng và quyền, xã hội | ✅ Xong (#5–#14, sửa sau kiểm tra toàn bộ ở #16) |
+| C1 | Thiết kế | ✅ Chọn **D1 Nỉ & Đồng thau** trong bốn hướng; điện thoại chỉ xoay ngang (#15, #18, #21) |
+| C2–C5 | Frontend theo D1 | ✅ Xong: nền D1, bàn chơi, các màn phòng và tài khoản, điện thoại ngang, trợ năng (#23–#25, #27, #28) |
+| D | Kiểm thử tổng thể | ✅ Xong: 19 cách tấn công thử, bot chơi thử hàng trăm ván (#19, #22) |
+| E | Vận hành | ✅ Xong theo kế hoạch đã đổi: chơi online từ máy Mac, sao lưu/khôi phục có diễn tập, bỏ Redis (#17, #20, #26) |
+| F | Beta với bạn bè | 🟡 Đang chuẩn bị: phản hồi + lỗi trình duyệt (#29, #31), xác minh email hộ và lệnh `links`/`verify`/`admin` cho buổi chơi (#30) |
 | G | Nhìn lại | ⬜ |
 
 ### A. Nền móng codebase
@@ -108,8 +104,9 @@ sửa trước C của đợt kiểm tra chỉ-đọc toàn bộ B; phần để
 - [x] Heartbeat (ping WebSocket của Daphne), disconnect, reconnect bằng snapshot, khôi phục ván dở
   khi restart (B4a); ván không dựng lại được thì phòng mở ở trạng thái tạm dừng, huỷ bằng
   `manage.py void_hand` ([ADR-001](docs/adr/ADR-001-table-actor.md), [deploy](docs/deploy.md))
-- [ ] Staging trên VPS (Caddy HTTPS), diễn tập backup → khôi phục
-- [ ] CD staging: gộp vào `main` + CI xanh thì tự build, migrate, deploy lên staging
+- [x] Diễn tập backup → khôi phục: job `restore-drill` trong CI chạy mỗi PR và mỗi Chủ nhật (#17)
+- Không làm (đổi kế hoạch, không thuê VPS): staging trên VPS, CD staging. Thay bằng chơi online từ
+  máy Mac ([choi-online.md](docs/choi-online.md)) và job `prod-smoke` dựng đúng bộ Docker production trong CI
 
 **B6. Tài khoản** — app `apps/accounts/`, API `/api/auth/` trong [openapi.yaml](docs/api/openapi.yaml)
 
@@ -156,30 +153,42 @@ sửa trước C của đợt kiểm tra chỉ-đọc toàn bộ B; phần để
 - [x] C1. Bốn hướng thiết kế đầy đủ 17 màn × desktop 1440 + điện thoại ngang 844 (`design/c1/`): D1 Nỉ &
   Đồng thau, D2 Kính & Ánh Kim, D3 Kẹo Đêm, D4 Sơn Mài Vàng Son; xem bằng `npm run dev` hoặc đưa
   vào Figma bằng html.to.design ([hướng dẫn](docs/c1-thiet-ke.md))
-- [ ] C1. Chủ dự án chọn hướng (có thể lấy phần của hướng khác); hướng được chọn thành design system
-- [ ] C2. Nền frontend: Next.js + TypeScript + Tailwind, state snapshot + reducer, CI cho `web/`
-- [ ] C3. Màn bàn chơi: 9 ghế, thanh hành động, đồng hồ, reconnect, animation
-- [ ] C4. Các màn còn lại: đăng nhập, lobby, tạo phòng, chủ phòng, chat, lịch sử, hồ sơ
-- [ ] C5. Mobile và hoàn thiện: điện thoại thật, accessibility, rà E2E
+- [x] C1. Chủ dự án chọn **D1 Nỉ & Đồng thau**; điện thoại chỉ xoay ngang, cầm dọc thì hiện lời nhắc
+  xoay máy (spec #28)
+- [x] C2. Nền giao diện D1: token, component, chuyển động, trang mẫu `/ui` (`web/src/ui/`,
+  [c2-chuyen-dong.md](docs/c2-chuyen-dong.md)) (#23)
+- [x] C3. Bàn chơi D1: 2–9 ghế, thanh hành động, đồng hồ, mất kết nối, chuyển động, thưởng 7-2 (#25)
+- [x] C4. Các màn còn lại: sảnh, tạo phòng, link mời + QR, bảng chủ phòng, lịch sử, xem lại ván (#24);
+  đăng nhập, đăng ký, mật khẩu, khách, hồ sơ (#28)
+- [x] C5. Điện thoại ngang (844×390, 932×430, 667×375), phím tắt, âm thanh, trợ năng (axe), E2E trọn
+  luồng (#27, #28)
 
 ### D–G. Ra mắt
 
-- [ ] D. Kiểm thử tổng thể: thử gian lận, bấm đúp, mạng chập, kill server
-- [ ] E. Production: Sentry, backup hằng ngày, runbook
-- [ ] E. CD production: gắn tag `vX.Y.Z` thì deploy image đã chạy trên staging; rollback về tag trước
+- [x] D. 19 cách tấn công thử, mỗi cách một test (`apps/games/tests/test_attacks.py`,
+  [biên bản](docs/collab/d-tan-cong-thu.md)); bấm đúp, nhiều tab, rút mạng giữa lệnh (#22)
+- [x] D. Bot chơi thử với server thật (hàng trăm ván, cả qua tunnel thật): `manage.py soak` ([choi-thu-bang-bot.md](docs/choi-thu-bang-bot.md)) (#19)
+- [x] E. `check_ledger`, sao lưu/khôi phục (`scripts/backup.sh`, `restore.sh`), diễn tập khôi phục trong
+  CI, compose production, [runbook](docs/runbook.md) (#17)
+- [x] E. Chơi online từ máy Mac qua Cloudflare Tunnel: `scripts/play-online.sh` (#20)
+- [x] E. Bỏ Redis: một process Daphne, kênh phát tin trong bộ nhớ ([ADR-001](docs/adr/ADR-001-table-actor.md)) (#26)
+- Không làm (đổi kế hoạch): Sentry (thay bằng tự báo lỗi trình duyệt vào admin, F), CD production
+  theo tag (chưa có VPS; [runbook](docs/runbook.md) có cách đổi bản và quay về bản trước bằng tay)
 - [ ] F. Beta: 2–3 buổi chơi thật; một buổi 2 giờ không sai chip, không lộ bài, không crash
+  ([sổ tay](docs/beta-f.md)). Đã có: phản hồi và lỗi trình duyệt (#29, #31); xác minh email hộ, lọc link email, tạo admin (#30)
 - [ ] G. Nhìn lại: retrospective, sổ bài học, chọn hướng tiếp
 
 ### Việc còn lại cho D và E
 
-Từ đợt kiểm tra chỉ-đọc toàn bộ B (trước C). Không chặn C; làm ở D hoặc E:
+Từ đợt kiểm tra chỉ-đọc toàn bộ B (trước C), đã làm ở D (#22) và dọn nốt ở #32:
 
-- [ ] `DJANGO_DEBUG` mặc định là bật khi `.env` không ghi gì: production phải đặt rõ
-  `DJANGO_DEBUG=False` (E); cân nhắc đổi mặc định thành tắt.
-- [ ] Vào/rời ghế qua REST chưa có rate limit riêng (lệnh WebSocket và tạo phòng đã có).
-- [ ] `Hand` chưa lưu ai đã trả thưởng 7-2 bao nhiêu: hiện chỉ suy ra từ các dòng `LedgerEntry`
-  loại `seven_deuce` của ván đó.
-- [ ] Staging (chờ VPS), CD production, backup hằng ngày (đã có trong E ở trên).
+- [x] `DJANGO_DEBUG` mặc định tắt; production đặt `DJANGO_DEBUG=false` rõ ràng. `manage.py` tự bật
+  debug khi thiếu `DJANGO_SECRET_KEY` (cho dev) và in cảnh báo ra stderr.
+- [x] Vào/rời ghế qua REST có rate limit riêng (10 lần/phút mỗi người).
+- [x] `Hand.seven_deuce` lưu người thắng 7-2 và ai trả bao nhiêu; ván cũ được điền lại từ sổ chip
+  (migration 0012). Migration 0013 điền nốt ván thắng 7-2 mà không ai trả, cho cùng dạng với ván
+  mới (lưới an toàn: chơi thật không sinh ra trường hợp này, vì người bỏ bài luôn còn chip).
+- Không làm (đổi kế hoạch): staging, CD production (chưa có VPS).
 - Chấp nhận, không làm: kick trong phòng public chỉ chặn tài khoản, không chặn người đó mở tài khoản
   khách mới (không chặn theo IP, [spec](docs/spec.md)); tài khoản bị khóa lúc đang kết nối vẫn nhận
   tin của bàn tới khi gửi tin kế tiếp thì bị đóng (4403).
@@ -207,6 +216,13 @@ uv run python -m mockserver          # terminal 1
 cd web && npm ci && npm run dev      # terminal 2, rồi mở http://localhost:3000
 ```
 
+Chơi thật với bạn bè, server là máy Mac ([docs/choi-online.md](docs/choi-online.md)):
+
+```bash
+scripts/play-online.sh up     # in ra link https://….trycloudflare.com để gửi cho nhóm
+scripts/play-online.sh down   # hết buổi: sao lưu rồi tắt
+```
+
 ## Cấu trúc
 
 ```
@@ -215,10 +231,18 @@ apps/games/engine/   # lõi thuần Python, không phụ thuộc Django
   hand.py            # HandEngine: một ván, bọc PokerKit
   table.py           # TableSession: ghế, chip theo phòng (ledger), nhiều ván
   simulate.py        # bot ngẫu nhiên + kiểm tra bất biến
-apps/games/contract.py  # nạp JSON Schema trong docs/api/, kiểm message WebSocket
-apps/games/tests/    # golden tests, property tests, test hợp đồng API
+apps/games/actor.py  # table actor: mỗi phòng một hàng đợi lệnh (ADR-001)
+apps/games/consumers.py  # WebSocket (Channels); rooms.py, history.py: REST phòng, lịch sử
+apps/games/contract.py   # nạp JSON Schema trong docs/api/, kiểm message WebSocket
+apps/games/management/   # check_ledger, void_hand, soak (bot), simulate_hands
+apps/accounts/       # tài khoản: email/mật khẩu, Google, khách, rate limit
+apps/feedback/       # phản hồi người chơi và lỗi trình duyệt (chỉ xem trong admin)
 mockserver/          # mock server WebSocket theo docs/api/
 config/              # Django settings (đọc biến môi trường)
-web/                 # frontend Next.js (trang thử bàn chơi); src/api/ là type sinh từ docs/api/
-docs/                # đặc tả, lộ trình, hợp đồng API, trao đổi, bài học
+web/src/ui/          # design system D1 Nỉ & Đồng thau (trang mẫu: /ui)
+web/src/table/       # màn bàn chơi; rooms/, account/: các màn còn lại; api/: type sinh từ docs/api/
+web/e2e/             # Playwright: chơi thật trên Django, điện thoại ngang, trợ năng (axe)
+scripts/             # play-online.sh (chơi từ máy Mac), backup.sh / restore.sh
+deploy/              # Caddyfile, mẫu .env production
+docs/                # đặc tả, lộ trình, hợp đồng API, runbook, bài học (learning/)
 ```

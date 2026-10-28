@@ -4,15 +4,23 @@
 import os
 import sys
 
+# Said on every command that turns DEBUG on by itself: someone running manage.py on the real
+# server with .env not loaded would otherwise not notice.
+DEV_DEBUG_WARNING = (
+    "CẢNH BÁO: chưa đặt DJANGO_SECRET_KEY nên manage.py tự bật DEBUG (chế độ phát triển).\n"
+    "Trên máy chủ thật như vậy là sai: đặt DJANGO_SECRET_KEY (file .env) rồi chạy lại lệnh.\n"
+)
+
 
 def main():
     """Run administrative tasks."""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     # Local commands (runserver, migrate, the e2e server) with no DJANGO_SECRET_KEY configured
     # are development: DEBUG on for them. A server with its secret, and Daphne (config/asgi.py)
-    # always, keep the safe default from config/settings.py: off.
-    if "DJANGO_SECRET_KEY" not in os.environ:
-        os.environ.setdefault("DJANGO_DEBUG", "true")
+    # always, keep the safe default from config/settings.py: off. An explicit DJANGO_DEBUG wins.
+    if "DJANGO_SECRET_KEY" not in os.environ and "DJANGO_DEBUG" not in os.environ:
+        os.environ["DJANGO_DEBUG"] = "true"
+        sys.stderr.write(DEV_DEBUG_WARNING)
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
