@@ -1,0 +1,84 @@
+# Chơi online từ máy Mac của Lym
+
+Chưa thuê VPS, nên trong các buổi chơi thử (giai đoạn E/F) **máy Mac của Lym là server**. Bạn bè
+vào qua một link `https://<chữ-ngẫu-nhiên>.trycloudflare.com`: Cloudflare nhận kết nối của họ
+rồi chuyển qua một "đường hầm" (chương trình `cloudflared` chạy trên máy Lym) về server.
+Không cần mở cổng modem, không cần tên miền, có sẵn HTTPS.
+
+Đổi lại: **link đổi mỗi lần bật**, và máy tắt/ngủ là bàn dừng.
+
+Mọi việc làm bằng một lệnh, chạy trong thư mục dự án:
+
+| Lệnh | Làm gì |
+|---|---|
+| `scripts/play-online.sh up` | Sao lưu, bật server và đường hầm, in link cho bạn bè |
+| `scripts/play-online.sh status` | Đang chạy không, link nào |
+| `scripts/play-online.sh logs` | Xem log server (cả link xác minh email, xem dưới) |
+| `scripts/play-online.sh down` | Sao lưu cuối buổi, tắt đường hầm và server (dữ liệu vẫn giữ) |
+
+## Trước buổi chơi (khoảng 15 phút trước)
+
+1. **Cắm sạc.** Mở Docker Desktop, đợi biểu tượng cá voi báo đang chạy.
+2. Chạy `scripts/play-online.sh up`. Lần đầu phải build nên mất vài phút, các lần sau nhanh hơn.
+   Đợi dòng **XONG** và cái link bên dưới.
+3. Tự mở link đó trên điện thoại, **tắt wifi dùng 4G** cho giống bạn bè ở xa. Vào được trang và
+   vào được một bàn là ổn.
+4. Gửi link vào nhóm chat.
+
+## Trong buổi chơi
+
+- **Không gập máy.** Gập máy là Mac ngủ dù script đã giữ máy thức (lệnh `caffeinate`). Màn hình
+  tự tắt thì không sao.
+- Không tắt Docker Desktop, không ngắt wifi, không cho máy tự cập nhật hay khởi động lại.
+- Máy chậm thì tắt bớt ứng dụng nặng (game, nhiều tab video).
+
+## Hết buổi
+
+Chạy `scripts/play-online.sh down`. Script tự sao lưu vào thư mục `backups/` rồi tắt hết. Thỉnh
+thoảng (mỗi tuần) chép thư mục `backups/` ra chỗ khác (Google Drive, ổ ngoài): hỏng máy là mất
+cả database lẫn backup nằm cùng máy.
+
+## Tài khoản khi link đổi liên tục
+
+Trình duyệt coi mỗi link mới là một trang web khác, nên đăng nhập của buổi trước không theo sang
+buổi sau.
+
+- **Chơi khách** (bấm vào là chơi): dễ nhất trong một buổi. Nhưng buổi sau là một người khách
+  **mới**: chip và lịch sử của người khách cũ vẫn còn trong database, chỉ là không ai đăng nhập
+  lại vào đó được.
+- **Tài khoản email + mật khẩu**: muốn giữ chip qua nhiều buổi thì dùng cái này. Mỗi buổi mở link
+  mới rồi đăng nhập lại là xong. Người khách cũng nâng cấp lên tài khoản được mà không mất chip.
+  Đăng ký phải **xác minh email**:
+  - Có cấu hình Gmail (`EMAIL_URL` trong file `.env.home`, cách làm ở
+    [huong-dan-google-smtp.md](huong-dan-google-smtp.md)): email tự gửi đi.
+  - Chưa có: email không gửi đi mà chỉ in vào log server. Chạy `scripts/play-online.sh logs`, tìm
+    link xác minh của người đó, gửi riêng cho họ.
+  - Link trong email chỉ dùng được **trong buổi đó** (nó chứa link của buổi). Hết buổi chưa bấm
+    thì lần sau bấm "gửi lại email".
+- **Đăng nhập Google: không dùng được** với link đổi liên tục (Google chỉ chấp nhận địa chỉ đã
+  khai trước). Script để trống phần Google, nên trang web không hiện nút này.
+
+## Sự cố thường gặp
+
+| Chuyện gì | Làm gì |
+|---|---|
+| `up` báo "Docker Desktop chưa chạy" | Mở Docker Desktop, đợi nó chạy xong, chạy lại `up` |
+| `up` báo "không lấy được link" | Mạng nhà có vấn đề hoặc Cloudflare đang lỗi. Kiểm wifi, đợi một lúc, chạy lại `up` |
+| `up` xong nhưng báo link chưa trả lời | Link mới cần vài chục giây mới mở được. Đợi một phút rồi thử lại trên điện thoại |
+| Bạn bè mở link cũ không được | Link đổi mỗi lần `up`. Chạy `status` lấy link hiện tại, gửi lại |
+| Lỡ gập máy, máy ngủ, mất điện | Mở máy lên. Nếu `status` vẫn thấy link mà link không vào được: `down` rồi `up`, gửi **link mới** |
+| Mạng nhà rớt một lúc | `cloudflared` tự nối lại khi có mạng; người chơi tự kết nối lại. Lâu quá thì `down` rồi `up` |
+| Bàn báo "tạm dừng" | Xem [runbook.md](runbook.md#bàn-tạm-dừng); các lệnh `dc ...` ở đó thay bằng `docker compose -p poker-home -f docker-compose.prod.yml -f docker-compose.home.yml --env-file .env.home ...` |
+| Nghi chip sai | Như trên, mục [Lệch chip](runbook.md#lệch-chip) |
+
+## Biết thêm
+
+- Dữ liệu nằm trong Docker (volume `poker-home_pgdata`), không mất khi `down` hay khởi động lại
+  máy. Đừng xoá volume này và đừng chạy `docker compose down -v`.
+- File `.env.home` chứa mật khẩu database và khoá bí mật, do script tự tạo lần đầu. **Không gửi
+  cho ai, không commit** (git đã bỏ qua nó). Mất file này thì server không mở được database cũ.
+- Server chỉ nghe trên chính máy Mac (`127.0.0.1:8080`): máy khác trong nhà không vào thẳng được,
+  mọi người đi qua link Cloudflare.
+- Link `trycloudflare.com` là dịch vụ thử miễn phí, không có cam kết luôn chạy. Muốn link cố định
+  (không đổi mỗi buổi, dùng được Google) thì cần tài khoản Cloudflare + tên miền ("named
+  tunnel"), hoặc thuê VPS như [deploy.md](deploy.md).

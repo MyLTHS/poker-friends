@@ -1,0 +1,33 @@
+# "Playing from home": the production stack on this Mac, reached through a Cloudflare quick
+# tunnel instead of a server with a domain (docs/choi-online.md). Used on top of the production
+# file, normally through scripts/play-online.sh:
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.home.yml --env-file .env.home ...
+#
+# Everything else (one Daphne, migrations, healthchecks) is the production file unchanged.
+name: poker-home
+
+services:
+  db:
+    env_file: !override .env.home
+
+  backend:
+    env_file: !override .env.home
+    image: poker-friends-backend:home
+
+  web:
+    image: poker-friends-web:home
+
+  caddy:
+    # Plain HTTP on this Mac only: cloudflared does HTTPS, so no certificate and no port open to
+    # the local network.
+    ports: !override
+      - "127.0.0.1:${HOME_PORT:-8080}:80"
+    volumes: !override
+      - ./deploy/Caddyfile.home:/etc/caddy/Caddyfile:ro
+      - static:/srv/static:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  tools:
+    env_file: !override .env.home

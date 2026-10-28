@@ -13,3 +13,4 @@ node_modules/
 staticfiles/
 e2e.sqlite3
 backups/
+.play-online/

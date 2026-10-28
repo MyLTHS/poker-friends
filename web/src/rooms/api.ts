@@ -11,8 +11,19 @@ export type TableSnapshot = Schemas["TableSnapshot"];
 export type SeatOccupant = TableSnapshot["table"]["seats"][number];
 export type HandReplay = Schemas["HandReplay"];
 
-export function roomSocketUrl(base: string, roomId: number): string {
-  return `${base}/ws/rooms/${roomId}/`;
+/**
+ * Django's WebSocket for a room. An empty base (NEXT_PUBLIC_DJANGO_WS="") means the page's own
+ * address: behind Caddy the page and the socket share one origin, whatever that address is
+ * (a Cloudflare quick tunnel gets a new one every run, docs/choi-online.md).
+ */
+export function roomSocketUrl(
+  base: string,
+  roomId: number,
+  page: Pick<Location, "protocol" | "host"> | undefined = globalThis.location,
+): string {
+  // No page outside a browser (server render, tests): sockets only open in the browser anyway.
+  const origin = base || (page ? `${page.protocol === "https:" ? "wss:" : "ws:"}//${page.host}` : "");
+  return `${origin}/ws/rooms/${roomId}/`;
 }
 
 export function inviteUrl(origin: string, token: string): string {
