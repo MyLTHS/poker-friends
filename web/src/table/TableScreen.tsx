@@ -147,6 +147,12 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const occupant = table.seats.find((s) => s.player_id === you.player_id);
   const sittingOut = !!occupant?.sitting_out;
   const pending = !!model.pending;
+  // Read by the E2E tests (web/e2e/table.spec.ts): which state the page shows.
+  const probe = {
+    "data-version": model.lastVersion ?? undefined,
+    "data-pending": pending || undefined,
+    "data-hand": hand ? (hand.complete ? "complete" : "live") : "none",
+  };
 
   // The turn clock runs on the server: deadline − measured offset. Suspended: frozen.
   const clock: TurnClock | undefined = turn
@@ -297,8 +303,10 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
     }
     return (
       <D1Root bg="table" className="tbl tbl-mobile">
-        <div className={`table-area-m${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`}>
-          <FitStage device="mobile">{stage}</FitStage>
+        <div className={`table-area-m${!online && myTurn ? " is-spot-me" : ""}`} {...probe}>
+          <FitStage device="mobile" className={!online || suspended ? "is-dimmed" : ""}>
+            {stage}
+          </FitStage>
           <MobileTableBar
             backHref={backHref}
             title={room.name}
@@ -405,7 +413,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
           />
         }
       />
-      <div className={`table-area${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`}>
+      <div className={`table-area${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`} {...probe}>
         <FitStage device="desktop">{stage}</FitStage>
       </div>
       <div className={`abar-slot${!online || suspended ? " is-dimmed" : ""}`}>{bar}</div>

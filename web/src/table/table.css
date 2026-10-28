@@ -3193,6 +3193,19 @@
     overflow-y: auto;
     scrollbar-width: none;
   }
+  .d1.tbl-mobile .rp-panel {
+    overflow: hidden;
+  }
+  .d1 .rp-panel-head b,
+  .d1 .rp-panel-head small {
+    white-space: nowrap;
+  }
+  .d1.tbl-mobile .rp-panel .tl-mobile {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
   .d1.tbl-mobile .scrim-m {
     width: auto;
     right: var(--pw);
@@ -3225,6 +3238,10 @@
     transition: filter var(--dur-base) var(--ease-d1-standard);
   }
   .d1 .abar-slot.is-dimmed {
+    pointer-events: none;
+  }
+  .d1.tbl-mobile:has(.rc-card) .ppanel {
+    filter: brightness(0.62) saturate(0.75);
     pointer-events: none;
   }
 

@@ -383,7 +383,7 @@ export function ChatDrawer({
           <WatchersBlock spectators={spectators} device="mobile" />
         ) : (
           <>
-            <WatchersBlock spectators={spectators} device="mobile" />
+            {spectators.length > 0 && <WatchersBlock spectators={spectators} device="mobile" />}
             <ChatList compact messages={messages} me={me} spectators={spectators} />
             <ChatComposer onSend={onSend} />
           </>

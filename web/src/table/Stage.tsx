@@ -92,7 +92,7 @@ function SeatTag({ s, device, left }: { s: SeatView; device: Device; left?: numb
       return (
         <span className="tag tag-turn">
           <Timer size={ic} strokeWidth={2.4} />
-          {left ?? ""}s
+          {left !== undefined ? `${left}s` : "Tới lượt"}
         </span>
       );
     case "folded":

@@ -36,7 +36,7 @@ function viewer(hand: HandView): string | null {
 }
 
 /** A TableState around one replay step, so the live table's view and stage draw it. */
-function tableAt(replay: HandReplay, hand: HandView, me: string | null, roomName: string): TableState {
+function tableAt(replay: HandReplay, hand: HandView, me: string | null, roomName: string, maxSeats = 9): TableState {
   const names = Object.fromEntries(replay.results.map((r) => [r.player_id, r.display_name]));
   const mySeat = hand.players.find((p) => p.player_id === me)?.seat ?? null;
   return {
@@ -44,7 +44,7 @@ function tableAt(replay: HandReplay, hand: HandView, me: string | null, roomName
       room_id: replay.room_id,
       name: roomName,
       status: "open",
-      max_seats: Math.max(6, ...hand.players.map((p) => p.seat)) > 6 ? 9 : 6,
+      max_seats: Math.max(maxSeats, ...hand.players.map((p) => p.seat)),
       small_blind: hand.small_blind,
       big_blind: hand.big_blind,
       think_time_seconds: 0,
@@ -91,6 +91,7 @@ export function ReplayScreen({ handId }: { handId: number }) {
   const rooms = useMemo(() => createRoomsApi(), []);
   const [replay, setReplay] = useState<HandReplay | null>(null);
   const [roomName, setRoomName] = useState("");
+  const [maxSeats, setMaxSeats] = useState(9);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -105,7 +106,11 @@ export function ReplayScreen({ handId }: { handId: number }) {
       if (cancelled) return;
       if (!result.ok) return setError(errorText(result.error));
       setReplay(result.data);
-      rooms.get(result.data.room_id).then((room) => !cancelled && room.ok && setRoomName(room.data.room.name));
+      rooms.get(result.data.room_id).then((room) => {
+        if (cancelled || !room.ok) return;
+        setRoomName(room.data.room.name);
+        setMaxSeats(room.data.room.max_seats);
+      });
     });
     return () => {
       cancelled = true;
@@ -120,22 +125,23 @@ export function ReplayScreen({ handId }: { handId: number }) {
     (target: number) => {
       if (!replay) return;
       const next = Math.max(0, Math.min(last, target));
-      setStep((current) => {
-        if (next === current) return current;
+      if (next === step) return;
+      if (next !== step + 1) {
+        setFx((f) => ({ cues: f.cues, epoch: f.epoch + 1 }));
+      } else {
+        const { action, hand } = stepsOf(replay)[next];
+        const prev = tableAt(replay, stepsOf(replay)[step].hand, me, roomName, maxSeats);
+        const bodies = action
+          ? cuesFor(prev, { protocol_version: 1, type: "action.applied", room_id: replay.room_id, hand_id: hand.hand_id, version: next, server_time: "", payload: { action, hand } })
+          : [];
         setFx((f) => {
-          if (next !== current + 1) return { cues: f.cues, epoch: f.epoch + 1 };
-          const { action, hand } = stepsOf(replay)[next];
-          const prev = tableAt(replay, stepsOf(replay)[current].hand, me, roomName);
-          const bodies = action
-            ? cuesFor(prev, { protocol_version: 1, type: "action.applied", room_id: replay.room_id, hand_id: hand.hand_id, version: next, server_time: "", payload: { action, hand } })
-            : [];
           let id = f.cues.at(-1)?.id ?? 0;
           return { cues: [...f.cues, ...bodies.map((b) => ({ ...b, id: ++id }) as Cue)].slice(-12), epoch: f.epoch };
         });
-        return next;
-      });
+      }
+      setStep(next);
     },
-    [replay, last, me, roomName],
+    [replay, last, step, me, roomName, maxSeats],
   );
 
   // Autoplay: one step every STEP_MS / speed, stopping at the result.
@@ -168,7 +174,7 @@ export function ReplayScreen({ handId }: { handId: number }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const table = replay ? tableAt(replay, stepsOf(replay)[step].hand, me, roomName) : null;
+  const table = replay ? tableAt(replay, stepsOf(replay)[step].hand, me, roomName, maxSeats) : null;
   const view = useMemo(() => (table && replay ? tableView(table, { lastActions: actionsAt(stepsOf(replay), step) }) : null), [table, replay, step]);
   const spotOf = useCallback((seat: number) => view?.seats.find((s) => s.seat === seat)?.spot, [view]);
   const { layer, fx: stageFx } = useTableFx({ cues: fx.cues, epoch: fx.epoch, device, spotOf });
@@ -226,12 +232,16 @@ export function ReplayScreen({ handId }: { handId: number }) {
       }
     >
       {layer}
-      <div className={`rp-caption rp-caption-${device}`} role="status" aria-live="polite">
-        <small>
-          Bước {step + 1}/{replay.steps.length}
-        </small>
-        <b>{caption}</b>
-      </div>
+      {/* The caption sits where the top seats are (top centre; on the phone also 5 and 6): with
+          someone there the timeline's "đang xem" line says it instead. */}
+      {!view.seats.some((s) => s.state !== "empty" && (device === "desktop" ? [10] : [5, 6, 10]).includes(s.spot)) && (
+        <div className={`rp-caption rp-caption-${device}`} role="status" aria-live="polite">
+          <small>
+            Bước {step + 1}/{replay.steps.length}
+          </small>
+          <b>{caption}</b>
+        </div>
+      )}
     </Stage>
   );
 
@@ -359,7 +369,7 @@ function Timeline({ device, items, step, onPick }: { device: Device; items: stri
   const now = useRef<HTMLLIElement>(null);
   useEffect(() => {
     const el = now.current;
-    const box = el?.closest(".side-body, .timeline");
+    const box = el?.closest(".side-body, .tl-mobile");
     if (el && box) box.scrollTop = el.offsetTop - box.clientHeight / 2;
   }, [step]);
   return (
