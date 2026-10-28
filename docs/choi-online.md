@@ -38,6 +38,12 @@ Chạy `scripts/play-online.sh down`. Script tự sao lưu vào thư mục `back
 thoảng (mỗi tuần) chép thư mục `backups/` ra chỗ khác (Google Drive, ổ ngoài): hỏng máy là mất
 cả database lẫn backup nằm cùng máy.
 
+## Trang quản trị (xem phản hồi, lỗi, tài khoản)
+
+Lần đầu, khi server đang chạy: `scripts/play-online.sh admin`, rồi tự gõ tên, email và mật khẩu
+quản trị. Sau đó mở `<link của buổi>/admin/` và đăng nhập bằng tài khoản đó. Mục **Phản hồi và
+lỗi** có góp ý của bạn bè và lỗi trình duyệt (xem [runbook.md](runbook.md)).
+
 ## Tài khoản khi link đổi liên tục
 
 Trình duyệt coi mỗi link mới là một trang web khác, nên đăng nhập của buổi trước không theo sang
@@ -51,8 +57,11 @@ buổi sau.
   Đăng ký phải **xác minh email**:
   - Có cấu hình Gmail (`EMAIL_URL` trong file `.env.home`, cách làm ở
     [huong-dan-google-smtp.md](huong-dan-google-smtp.md)): email tự gửi đi.
-  - Chưa có: email không gửi đi mà chỉ in vào log server. Chạy `scripts/play-online.sh logs`, tìm
-    link xác minh của người đó, gửi riêng cho họ.
+  - Chưa có: email không gửi đi mà chỉ in vào log server. Hai cách:
+    - `scripts/play-online.sh links`: in ra các link xác minh (và đặt lại mật khẩu) của buổi này,
+      mỗi link kèm email người nhận. Gửi **riêng** từng link cho đúng người.
+    - `scripts/play-online.sh verify ban@example.com`: bạn xác minh hộ luôn cho người bạn tin,
+      không cần link. Người đó đăng nhập được ngay.
   - Link trong email chỉ dùng được **trong buổi đó** (nó chứa link của buổi). Hết buổi chưa bấm
     thì lần sau bấm "gửi lại email".
 - **Đăng nhập Google: không dùng được** với link đổi liên tục (Google chỉ chấp nhận địa chỉ đã
