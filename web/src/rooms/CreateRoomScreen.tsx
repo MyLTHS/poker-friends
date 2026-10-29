@@ -2,32 +2,23 @@
 
 import { useRouter } from "next/navigation";
 import { useId, useMemo, useRef, useState, type FormEvent } from "react";
-import { Check, ChevronLeft, Globe, LogIn, Lock } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Globe, LogIn, Lock } from "lucide-react";
 
 import { loginPath } from "@/account/members";
 import { errorText } from "@/account/messages";
-import { Alert, Button, ButtonLink, Chip, Crest, EmptyState, LoadingLine, MiniTable, Panel, TextField, Toggle } from "@/ui";
+import { Alert, Button, ButtonLink, Chip, EmptyState, LoadingLine, MiniTable, Panel, TextField, Toggle } from "@/ui";
 
 import { createRoomsApi } from "./api";
 import { Choices } from "./Choices";
-import { useMe, useOnline, usePhone } from "./hooks";
+import { needsName, useMe, useOnline, usePhone } from "./hooks";
+import { NameGate } from "./NameGate";
 import { RoomsShell } from "./RoomsShell";
-import {
-  checkRules,
-  DEFAULT_RULES,
-  rulesLine,
-  rulesSummary,
-  SEAT_CHOICES,
-  serverFieldErrors,
-  SEVEN_CHOICES,
-  THINK_CHOICES,
-  type FieldErrors,
-  type Rules,
-} from "./rules";
+import { checkRules, DEFAULT_RULES, SEAT_CHOICES, serverFieldErrors, SEVEN_CHOICES, THINK_CHOICES, type FieldErrors, type Rules } from "./rules";
 
-/** The form keeps what the player typed (an empty box stays empty); `rules()` reads it. */
+/** The form keeps what the player typed (an empty box stays empty); `rules()` reads it. `name`
+ *  null: not touched yet, the box shows "Bàn của <tên>". */
 type Draft = {
-  name: string;
+  name: string | null;
   small_blind: string;
   big_blind: string;
   max_seats: number;
@@ -38,7 +29,7 @@ type Draft = {
 };
 
 const DRAFT: Draft = {
-  name: "",
+  name: null,
   small_blind: String(DEFAULT_RULES.small_blind),
   big_blind: String(DEFAULT_RULES.big_blind),
   max_seats: DEFAULT_RULES.max_seats,
@@ -50,9 +41,9 @@ const DRAFT: Draft = {
 
 const num = (text: string) => (text.trim() === "" ? NaN : Number(text));
 
-function rules(d: Draft): Rules {
+function rules(d: Draft, name: string): Rules {
   return {
-    name: d.name,
+    name,
     small_blind: num(d.small_blind),
     big_blind: num(d.big_blind),
     max_seats: d.max_seats,
@@ -62,79 +53,72 @@ function rules(d: Draft): Rules {
   };
 }
 
-/** Preview of rules being typed: an empty or wrong number shows as "?" rather than NaN. */
-const shown = (r: Rules): Rules => {
-  const n = (v: number) => (Number.isFinite(v) ? v : 0);
-  return { ...r, small_blind: n(r.small_blind), big_blind: n(r.big_blind), seven_deuce_bonus: n(r.seven_deuce_bonus) };
-};
+/** The fields under "Thêm tuỳ chọn": an error there opens it. */
+const MORE: (keyof Rules)[] = ["max_seats", "think_time_seconds", "seven_deuce_bonus", "is_private"];
 
 const digits = (text: string) => text.replace(/[^\d]/g, "").slice(0, 9);
-const FORM_ID = "create-room";
 
-/** /rooms/new — open a table (D1 "create-room"), then go to its invite link. */
+/**
+ * /rooms/new — open a table (D1 "create-room"), as short as Poker Now's: a name (already filled
+ * in), the blinds, "Tạo bàn". Seats, think time, the 7-2 bonus and who sees the room wait under
+ * "Thêm tuỳ chọn" with their defaults. Then straight to the table, its "Mời bạn" sheet open.
+ */
 export function CreateRoomScreen() {
   const api = useMemo(() => createRoomsApi(), []);
   const router = useRouter();
-  const { me, guestsAllowed, whenReady } = useMe();
+  const { me, guestsAllowed, whenReady, signedIn } = useMe();
   const phone = usePhone();
   const online = useOnline();
   const [draft, setDraft] = useState<Draft>(DRAFT);
+  const [more, setMore] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
+  const name = draft.name ?? (me ? `Bàn của ${me.username}` : "");
+
+  const showErrors = (found: FieldErrors) => {
+    setErrors(found);
+    if (MORE.some((key) => found[key])) setMore(true);
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const r = rules(draft);
+    const r = rules(draft, name);
     const found = checkRules(r);
-    setErrors(found);
+    showErrors(found);
     setFailure(null);
     if (Object.keys(found).length) {
-      formRef.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus();
+      // after "Thêm tuỳ chọn" opened for it
+      window.requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus());
       return;
     }
     setBusy(true);
     await whenReady();
     const result = await api.create({ ...r, name: r.name.trim() });
     if (result.ok) {
-      router.push(`/rooms/${result.data.room.room_id}?moi=1`);
+      // ?moi=1: the table opens its "Mời bạn" sheet once (LiveTableScreen)
+      router.push(`/rooms/${result.data.room.room_id}/table?moi=1`);
       return;
     }
     setBusy(false);
-    if (result.error.code === "validation_error") setErrors(serverFieldErrors(result.error.fields as Record<string, string[]>));
+    if (result.error.code === "validation_error") showErrors(serverFieldErrors(result.error.fields as Record<string, string[]>));
     setFailure(errorText(result.error, result.retryAfter));
   };
 
-  const preview = shown(rules(draft));
-  const name = draft.name.trim() || "Bàn mới";
-  const submitButton = (
-    // aria-label: also named for tools that read only the element's own text, not the <span> in it
-    <Button kind="primary" size={phone ? "md" : "lg"} type="submit" form={FORM_ID} busy={busy} disabled={!online || me === null} aria-label="Tạo phòng & lấy link mời">
-      Tạo phòng & lấy link mời
-    </Button>
-  );
+  const sub = phone ? { title: "Tạo bàn", sub: "Bạn là chủ bàn", back: "/rooms" } : undefined;
 
-  const sub = phone
-    ? {
-        title: "Tạo phòng",
-        sub: "Bạn là chủ phòng",
-        back: "/rooms",
-        right: me ? (
-          <>
-            <button type="button" className="link is-muted" onClick={() => (setDraft({ ...DRAFT, name: draft.name }), setErrors({}))}>
-              Mặc định
-            </button>
-            {submitButton}
-          </>
-        ) : undefined,
-      }
-    : undefined;
-
+  if (needsName(me, guestsAllowed)) {
+    return (
+      <RoomsShell active="lobby" sub={sub}>
+        <NameGate onDone={signedIn} />
+      </RoomsShell>
+    );
+  }
   if (me === null) {
     return (
-      <RoomsShell active="lobby" sub={sub ?? undefined}>
+      <RoomsShell active="lobby" sub={sub}>
         {!phone && <CreateHead />}
         <Panel phone={phone} className="state-panel is-center">
           <EmptyState
@@ -159,55 +143,39 @@ export function CreateRoomScreen() {
   return (
     <RoomsShell active="lobby" me={me} sub={sub} className="create-page">
       {!phone && <CreateHead />}
-      <div className="create-grid">
-        <form id={FORM_ID} ref={formRef} className="panel create-form" onSubmit={submit} noValidate aria-label="Cấu hình phòng mới">
-          {failure && (
-            <Alert kind="error" title="Chưa tạo được phòng">
-              {failure}
-            </Alert>
-          )}
-          {!online && (
-            <Alert kind="error" title="Đang mất mạng">
-              Có mạng lại thì bấm tạo phòng.
-            </Alert>
-          )}
-          <CreateFields draft={draft} set={set} errors={errors} phone={phone} />
-          <div className="m-preview" aria-hidden={!phone}>
-            <MiniTable seats={preview.max_seats} seated={1} w={84} h={52} dealer />
-            <span>
-              <small className="eyebrow">Xem trước</small>
-              <b>{name}</b>
-              <small>{rulesLine(preview)}</small>
-            </span>
-          </div>
-          <div className="form-actions">
-            {me === undefined && <LoadingLine>Đang kiểm tra tài khoản…</LoadingLine>}
+      <form ref={formRef} className="panel create-form" onSubmit={submit} noValidate aria-label="Bàn mới">
+        {failure && (
+          <Alert kind="error" title="Chưa tạo được bàn">
+            {failure}
+          </Alert>
+        )}
+        {!online && (
+          <Alert kind="error" title="Đang mất mạng">
+            Có mạng lại thì bấm Tạo bàn.
+          </Alert>
+        )}
+        <MainFields name={name} draft={draft} set={set} errors={errors} phone={phone} />
+        <details className="create-more" open={more} onToggle={(e) => setMore(e.currentTarget.open)}>
+          <summary>
+            <ChevronRight size={16} strokeWidth={2.2} className="create-more-chev" aria-hidden />
+            Thêm tuỳ chọn
+          </summary>
+          {/* only while open: Chrome keeps a closed <details>' boxes laid out, under the buttons */}
+          {more && <MoreFields draft={draft} set={set} errors={errors} phone={phone} />}
+        </details>
+        <div className="form-actions">
+          {me === undefined && <LoadingLine>Đang kiểm tra tài khoản…</LoadingLine>}
+          {!phone && (
             <ButtonLink kind="quiet" href="/rooms" aria-label="Huỷ">
               Huỷ
             </ButtonLink>
-            {submitButton}
-          </div>
-        </form>
-        <aside className="panel create-preview" aria-label="Xem trước">
-          <span className="eyebrow">Xem trước</span>
-          <div className="preview-table">
-            <MiniTable seats={preview.max_seats} seated={1} w={360} h={200} dealer />
-            <span className="preview-name">{name}</span>
-          </div>
-          <dl className="summary">
-            {rulesSummary(preview).map(([k, v]) => (
-              <div key={k}>
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
-          </dl>
-          <div className="preview-note">
-            <Crest size={28} />
-            <span>Bạn là chủ phòng: cấp chip, đổi blind, mời ra và đóng phòng từ Bảng chủ phòng.</span>
-          </div>
-        </aside>
-      </div>
+          )}
+          {/* aria-label: also named for tools that read only the element's own text, not the <span> in it */}
+          <Button kind="primary" size="lg" type="submit" busy={busy} disabled={!online || me === undefined} aria-label="Tạo bàn">
+            Tạo bàn
+          </Button>
+        </div>
+      </form>
     </RoomsShell>
   );
 }
@@ -217,7 +185,7 @@ function CreateHead() {
     <div className="page-head">
       <span>
         <span className="crumbs">
-          Sảnh <ChevronLeft size={12} className="flip" aria-hidden /> Tạo phòng
+          Sảnh <ChevronLeft size={12} className="flip" aria-hidden /> Tạo bàn
         </span>
         <h1 className="page-title">Mở một bàn mới</h1>
       </span>
@@ -225,26 +193,26 @@ function CreateHead() {
   );
 }
 
-function CreateFields({ draft, set, errors, phone }: { draft: Draft; set: (patch: Partial<Draft>) => void; errors: FieldErrors; phone: boolean }) {
+type FieldsProps = { draft: Draft; set: (patch: Partial<Draft>) => void; errors: FieldErrors; phone: boolean };
+
+function MainFields({ name, draft, set, errors, phone }: FieldsProps & { name: string }) {
   const id = useId();
   const blindHint = errors.small_blind ?? (phone ? undefined : "Gợi ý cấp mỗi người 100 blind lớn = 2.000 chip.");
   return (
     <div className="create-fields">
       <TextField
-        className="span-2 f-name"
-        label="Tên phòng"
-        placeholder="Bàn thứ Sáu"
-        value={draft.name}
+        className="f-name"
+        label="Tên bàn"
+        value={name}
         maxLength={100}
         onChange={(e) => set({ name: e.target.value })}
         hint={phone ? undefined : "Bạn bè thấy tên này trong sảnh và trong link mời."}
         error={errors.name}
-        autoFocus={!phone}
         autoComplete="off"
       />
       <div className="field f-blind">
         <span className="field-label" id={`${id}-blind`}>
-          Blind nhỏ / lớn
+          Blind nhỏ / Blind lớn
         </span>
         <span className="blind-pair" role="group" aria-labelledby={`${id}-blind`}>
           <TextField
@@ -275,6 +243,14 @@ function CreateFields({ draft, set, errors, phone }: { draft: Draft; set: (patch
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+function MoreFields({ draft, set, errors, phone }: FieldsProps) {
+  const id = useId();
+  return (
+    <div className="create-fields">
       <div className="field f-seats">
         <span className="field-label" id={`${id}-seats`}>
           <span>Số ghế</span> <em>2 ghế = đấu tay đôi</em>

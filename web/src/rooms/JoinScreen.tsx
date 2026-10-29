@@ -8,7 +8,8 @@ import { errorText } from "@/account/messages";
 import { Button, ButtonLink, ErrorState, PageHead, Spinner } from "@/ui";
 
 import { createRoomsApi } from "./api";
-import { useCountdown, useMe, usePhone, useReloadWhenOnline } from "./hooks";
+import { needsName, useCountdown, useMe, usePhone, useReloadWhenOnline } from "./hooks";
+import { NameGate } from "./NameGate";
 import { RoomsShell } from "./RoomsShell";
 
 type State = { kind: "joining" } | { kind: "error"; code: string; text: string; retryAt?: number };
@@ -31,17 +32,17 @@ const TEXT: Record<string, string> = {
 };
 
 /**
- * /rooms/join?token=… — the invite link. Opening it joins the room (not logged in, the server
- * makes the visitor a guest; members only, the API answers login_required and the visitor logs
- * in first, coming back to this link: account/members.ts), then *replaces* this address with the
- * room page, which greets the
- * newcomer with the invitation card: the token leaves the address bar and the history, so Back
- * never sends it again (an owner may have changed the link since).
+ * /rooms/join?token=… — the invite link. A visitor nobody knows yet first says their name
+ * (NameGate, the server takes guests); then opening it joins the room (members only, the API
+ * answers login_required and the visitor logs in first, coming back to this link:
+ * account/members.ts), then *replaces* this address with the room's table: the token leaves the
+ * address bar and the history, so Back never sends it again (an owner may have changed the link
+ * since).
  */
 export function JoinScreen({ token }: { token: string }) {
   const rooms = useMemo(() => createRoomsApi(), []);
   const router = useRouter();
-  const { me, guestsAllowed, whenReady } = useMe();
+  const { me, guestsAllowed, whenReady, signedIn } = useMe();
   const phone = usePhone();
   const [state, setState] = useState<State>(token ? { kind: "joining" } : { kind: "error", code: "no_token", text: "" });
 
@@ -50,7 +51,7 @@ export function JoinScreen({ token }: { token: string }) {
       whenReady()
         .then(() => rooms.join(token))
         .then((result) => {
-          if (result.ok) router.replace(`/rooms/${result.data.room.room_id}?vao=1`);
+          if (result.ok) router.replace(`/rooms/${result.data.room.room_id}/table`);
           else
             setState({
               kind: "error",
@@ -63,9 +64,11 @@ export function JoinScreen({ token }: { token: string }) {
     [rooms, router, token, whenReady],
   );
 
+  // Who is there first: joining would make a nameless visitor a guest with a random name.
+  const known = me !== undefined && !needsName(me, guestsAllowed);
   useEffect(() => {
-    if (token) void join();
-  }, [join, token]);
+    if (token && known) void join();
+  }, [join, token, known]);
   useReloadWhenOnline(
     useCallback(() => {
       if (state.kind === "error" && state.code === "network_error") {
@@ -77,7 +80,9 @@ export function JoinScreen({ token }: { token: string }) {
   const wait = useCountdown(state.kind === "error" ? state.retryAt : undefined);
 
   const stage =
-    state.kind === "joining" ? (
+    state.kind === "joining" && needsName(me, guestsAllowed) ? (
+      <NameGate onDone={signedIn} heading="h2" />
+    ) : state.kind === "joining" ? (
       <div className="invitation is-waiting" role="status">
         <Spinner size={phone ? 48 : 64} />
         <b>Đang mở thiệp mời…</b>

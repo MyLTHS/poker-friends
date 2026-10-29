@@ -48,7 +48,7 @@ async function noSeriousAxe(page: Page) {
   expect(bad.map((v) => ({ rule: v.id, nodes: v.nodes.map((n) => n.target.join(" ")) }))).toEqual([]);
 }
 
-// One guest for the room page, the table and the phone: the suite shares the server's limit of
+// One guest for a room page (its history), the table and the phone: the suite shares the server's limit of
 // 20 new guests an hour from one address (apps/accounts/ratelimit.py).
 test("a guest sends feedback from a room page and from the table, desktop and phone", async ({ browser }) => {
   test.setTimeout(180_000);
@@ -56,7 +56,8 @@ test("a guest sends feedback from a room page and from the table, desktop and ph
   const page = lan.page;
   const detail = await api(page, "POST", "/api/rooms/", { name: "Bàn góp ý", small_blind: 1, big_blind: 2 });
   const id = detail.room.room_id;
-  await page.goto(`/rooms/${id}`);
+  // the room's own page is its table now (no app bar): its history page has the bar's button
+  await page.goto(`/rooms/${id}/history`);
 
   const open = page.getByRole("button", { name: "Gửi phản hồi" });
   await open.click();
@@ -84,7 +85,7 @@ test("a guest sends feedback from a room page and from the table, desktop and ph
   await write(page, "Ý tưởng", idea);
   await expect(page.getByText("Cảm ơn bạn!")).toBeVisible();
   await expect(dialog).toBeHidden();
-  expect(stored(idea)).toEqual({ kind: "idea", page: `/rooms/${id}`, room_id: id, user__username: `Gop${RUN}` });
+  expect(stored(idea)).toEqual({ kind: "idea", page: `/rooms/${id}/history`, room_id: id, user__username: `Gop${RUN}` });
 
   // The table has no app bar: its settings open the dialog, and the table's room goes with it.
   await page.goto(`/rooms/${id}/table`);

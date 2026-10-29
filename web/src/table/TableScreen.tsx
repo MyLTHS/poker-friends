@@ -72,6 +72,8 @@ export type TableScreenProps = {
   owner?: (slot: OwnerSlot) => ReactNode;
   /** "Mời bạn" in the top bar: renders the invite dialog (rooms/LiveTableScreen) over the table. */
   invite?: (slot: InviteSlot) => ReactNode;
+  /** Open the invite dialog as the table first shows (a room just created). */
+  startWithInvite?: boolean;
   /** Replay of a finished hand. */
   replayHref?: (handId: number) => string;
 };
@@ -82,7 +84,19 @@ export type OwnerSlot = { open: boolean; onClose: () => void; seats: SeatOccupan
 /** What the invite dialog gets from the table. */
 export type InviteSlot = { open: boolean; onClose: () => void };
 
-export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = MOCK_HELP, loadChat, onTakeSeat, onLeaveSeat, owner, invite, replayHref }: TableScreenProps) {
+export function TableScreen({
+  url,
+  backHref = "/",
+  backLabel = "Sảnh",
+  help = MOCK_HELP,
+  loadChat,
+  onTakeSeat,
+  onLeaveSeat,
+  owner,
+  invite,
+  startWithInvite = false,
+  replayHref,
+}: TableScreenProps) {
   const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
   const refusal = useAuthRefusal(retry.final && !!retry.auth);
   const device = useDevice();
@@ -90,7 +104,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const [drawer, setDrawer] = useState(false);
   const [seen, setSeen] = useState(0);
   const [seatError, setSeatError] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<"owner" | "invite" | "settings" | "help" | "feedback" | null>(null);
+  const [dialog, setDialog] = useState<"owner" | "invite" | "settings" | "help" | "feedback" | null>(startWithInvite && invite ? "invite" : null);
   const sound = useTableSound();
   const [keysOn, setKeysOn] = useKeysPref();
   const { table } = model;

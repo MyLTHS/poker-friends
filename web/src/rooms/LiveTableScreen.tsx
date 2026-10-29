@@ -9,24 +9,37 @@ import "@/table/table.css";
 import { ButtonLink, D1Root, ErrorState, Sheet, Spinner, useToast } from "@/ui";
 
 import { createRoomsApi, roomSocketUrl, type RoomDetail, type RoomsApi } from "./api";
+import { needsName, useMe } from "./hooks";
+import { NameGate } from "./NameGate";
 import { OwnerSheet } from "./OwnerPanel";
 import { ShareCard } from "./RoomBits";
 
 const SOCKET_BASE = process.env.NEXT_PUBLIC_DJANGO_WS ?? "ws://localhost:8000";
 
 /**
- * /rooms/<id>/table — the real table. One REST snapshot first: it gives a first-time visitor
- * their guest session cookie (a WebSocket handshake cannot) and checks they may see the room.
- * Then the same TableScreen as the mock, on Django's WebSocket, with the room's REST calls
- * (chat history, take/leave a seat), the "Mời bạn" sheet and, for the owner, the owner's sheet
- * over the table.
+ * /rooms/<id>/table — the real table, and the room's only page (/rooms/<id> comes here). A visitor
+ * nobody knows yet first says their name (NameGate) when the server takes guests. Then one REST
+ * snapshot: it gives a first-time visitor their guest session cookie (a WebSocket handshake
+ * cannot) and checks they may see the room. Then the same TableScreen as the mock, on Django's
+ * WebSocket, with the room's REST calls (chat history, take/leave a seat), the "Mời bạn" sheet
+ * and, for the owner, the owner's sheet over the table. `openInvite` (?moi=1, from /rooms/new):
+ * the room was just created, the "Mời bạn" sheet opens once.
  */
-export function LiveTableScreen({ roomId }: { roomId: number }) {
+export function LiveTableScreen({ roomId, openInvite = false }: { roomId: number; openInvite?: boolean }) {
   const rooms = useMemo(() => createRoomsApi(), []);
+  const { me, guestsAllowed, signedIn } = useMe();
   const [state, setState] = useState<"loading" | "ready" | { error: string }>("loading");
   const [detail, setDetail] = useState<RoomDetail | null>(null);
-
+  // Read once: the ?moi=1 leaves the address bar at once, so a reload does not open it again.
+  const [inviteFirst] = useState(openInvite);
   useEffect(() => {
+    if (openInvite) window.history.replaceState(null, "", `/rooms/${roomId}/table`);
+  }, [openInvite, roomId]);
+
+  // Who is there first: the snapshot would make a nameless visitor a guest with a random name.
+  const known = me !== undefined && !needsName(me, guestsAllowed);
+  useEffect(() => {
+    if (!known) return;
     let cancelled = false;
     rooms.snapshot(roomId).then((result) => {
       if (cancelled) return;
@@ -36,7 +49,7 @@ export function LiveTableScreen({ roomId }: { roomId: number }) {
     return () => {
       cancelled = true;
     };
-  }, [rooms, roomId]);
+  }, [known, rooms, roomId]);
 
   // The owner's sheet reads the room (rules waiting for the next hand, invite link) fresh each time
   // it opens and after every change made in it.
@@ -71,16 +84,24 @@ export function LiveTableScreen({ roomId }: { roomId: number }) {
     return (
       <TableScreen
         url={roomSocketUrl(SOCKET_BASE, roomId)}
-        backHref={`/rooms/${roomId}`}
-        backLabel="Phòng"
+        backHref="/rooms"
+        backLabel="Sảnh"
         help={<>Django chạy chưa? Ở thư mục gốc chạy <code>uv run python manage.py runserver</code>.</>}
         loadChat={loadChat}
         onTakeSeat={onTakeSeat}
         onLeaveSeat={onLeaveSeat}
         owner={detail?.is_owner ? owner : undefined}
         invite={invite}
+        startWithInvite={inviteFirst}
         replayHref={(handId) => `/hands/${handId}`}
       />
+    );
+  }
+  if (needsName(me, guestsAllowed)) {
+    return (
+      <D1Root bg="table" className="tbl-wait">
+        <NameGate onDone={signedIn} />
+      </D1Root>
     );
   }
   return (
@@ -92,7 +113,7 @@ export function LiveTableScreen({ roomId }: { roomId: number }) {
             <b>Đang mở bàn…</b>
           </>
         ) : (
-          <ErrorState title="Không mở được bàn" text={state.error} actions={<ButtonLink kind="primary" href={`/rooms/${roomId}`}>Về trang phòng</ButtonLink>} />
+          <ErrorState title="Không mở được bàn" text={state.error} actions={<ButtonLink kind="primary" href="/rooms">Về sảnh</ButtonLink>} />
         )}
       </div>
     </D1Root>
@@ -126,7 +147,7 @@ function TableInviteSheet({ open, onClose, detail, reload, roomId }: InviteSlot 
       ) : detail.invite_token ? (
         <ShareCard detail={detail} onCopied={onCopied} />
       ) : !detail.is_private ? (
-        <ShareCard detail={detail} onCopied={onCopied} path={`/rooms/${roomId}`} eyebrow="Link phòng công khai" rotateHint={false} />
+        <ShareCard detail={detail} onCopied={onCopied} path={`/rooms/${roomId}/table`} eyebrow="Link phòng công khai" rotateHint={false} />
       ) : (
         <p className="share-note">
           <Lock size={14} aria-hidden /> Phòng riêng: chỉ chủ phòng có link mời. Nhờ chủ phòng bấm Mời bạn rồi gửi link cho bạn của bạn.

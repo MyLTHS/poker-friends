@@ -1,15 +1,17 @@
 "use client";
 
-// Login (design: screens-account.tsx Login): email + password, Google, play as a guest. Members
-// only (server GUESTS_ALLOWED off): no guest, and a line saying that an account is all it takes.
+// Login (design: screens-account.tsx Login). Guests allowed: the name first ("Bạn tên gì?" makes
+// a guest, like Poker Now), then email + password and Google as the second way in. Members only
+// (server GUESTS_ALLOWED off): no name box, and a line saying that an account is all it takes.
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Lock, Mail, UserRound } from "lucide-react";
+import { Lock, Mail } from "lucide-react";
 
 import { Button } from "@/ui";
 
 import type { AuthApi, Me } from "./api";
 import { AuthFrame, Field, GoogleButton, NoticeAlert, Or, PasswordField, mmss, useCooldown } from "./frame";
+import { GuestNameForm } from "./GuestNameForm";
 import { rememberNext, signupPath } from "./members";
 import type { Notice } from "./messages";
 import { formValues, useSubmit } from "./ui";
@@ -49,12 +51,22 @@ export function LoginScreen({
         ),
         sub: "Mở bàn, gửi link, chia bài. Chip ảo cho vui — không tiền thật, không nhà cái.",
       }}
-      phone={{ kind: "hero", title: "Chào mừng trở lại", sub: "Bàn quen đang chờ bạn." }}
+      phone={membersOnly ? { kind: "hero", title: "Chào mừng trở lại", sub: "Bàn quen đang chờ bạn." } : { kind: "hero", title: "Bạn tên gì?", sub: "Gõ tên là vào bàn." }}
     >
       <div className="auth-card">
-        <span className="eyebrow">Thành viên</span>
-        <h2 className="auth-title">Chào mừng trở lại</h2>
-        <p className="auth-sub">Đăng nhập để vào bàn của hội.</p>
+        {membersOnly ? (
+          <>
+            <span className="eyebrow">Thành viên</span>
+            <h2 className="auth-title">Chào mừng trở lại</h2>
+            <p className="auth-sub">Đăng nhập để vào bàn của hội.</p>
+          </>
+        ) : (
+          <>
+            <span className="eyebrow">Chơi ngay</span>
+            <h2 className="auth-title">Bạn tên gì?</h2>
+            <p className="auth-sub">Gõ tên là vào bàn, không cần email hay mật khẩu.</p>
+          </>
+        )}
         <LoginForm api={api} googleEnabled={googleEnabled} membersOnly={membersOnly} next={next} notice={notice} onDone={onDone} />
       </div>
       <p className="auth-legal">
@@ -81,11 +93,11 @@ function LoginForm({
 }) {
   const area = useRef<HTMLDivElement>(null);
   const login = useSubmit({ scope: area });
-  const guest = useSubmit({ scope: area });
-  // Only the last action speaks: a wrong password tried before must not hide why "play as a
-  // guest" failed just now, and the page's notice (Google, logged out) goes once anything is tried.
+  // Only the last action speaks: a wrong password tried before must not stay beside why the name
+  // was refused just now (and the other way round), and the page's notice (Google, logged out)
+  // goes once anything is tried.
   const [last, setLast] = useState<"login" | "guest" | null>(null);
-  const shown = last === "login" ? login.notice : last === "guest" ? guest.notice : notice;
+  const shown = last === "login" ? login.notice : last === null ? notice : null;
   return (
     <div className="form-stack" ref={area}>
       {membersOnly && (
@@ -95,6 +107,12 @@ function LoginForm({
         </p>
       )}
       <NoticeAlert notice={shown} />
+      {!membersOnly && (
+        <>
+          <GuestNameForm api={api} onTry={() => setLast("guest")} quiet={last === "login"} onDone={(me) => onDone(me, "Đã tạo tài khoản khách.")} />
+          <Or label="hoặc đăng nhập bằng email" />
+        </>
+      )}
       <form
         {...login.form}
         className="form-stack"
@@ -125,27 +143,11 @@ function LoginForm({
           Đăng nhập
         </Button>
       </form>
-      {(googleEnabled || !membersOnly) && (
+      {googleEnabled && (
         <>
           <Or />
           <div className="auth-alts">
-            {googleEnabled && <GoogleButton process="login">Tiếp tục với Google</GoogleButton>}
-            {!membersOnly && (
-              <Button
-                kind="ghost"
-                size="lg"
-                block
-                busy={guest.busy}
-                icon={<UserRound size={18} strokeWidth={1.8} />}
-                onClick={async () => {
-                  setLast("guest");
-                  const result = await guest.run(() => api.createGuest());
-                  if (result.ok) onDone(result.data, "Đã tạo tài khoản khách.");
-                }}
-              >
-                Chơi ngay bằng khách
-              </Button>
-            )}
+            <GoogleButton process="login">Tiếp tục với Google</GoogleButton>
           </div>
         </>
       )}

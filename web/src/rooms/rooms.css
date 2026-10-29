@@ -241,13 +241,8 @@
 
   /* ---------- create room ---------- */
 
-  .d1 .create-grid {
-    display: grid;
-    grid-template-columns: 1fr 400px;
-    gap: 24px;
-    align-items: start;
-  }
   .d1 .create-form {
+    max-width: 760px;
     padding: 28px 32px;
   }
   .d1 .create-fields {
@@ -407,60 +402,51 @@
     padding-top: 20px;
     border-top: 1px solid var(--hair);
   }
-  .d1 .create-preview {
+  /* "Thêm tuỳ chọn": seats, think time, 7-2 and who sees the room, closed until asked for */
+  .d1 .create-more > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    cursor: pointer;
+    list-style: none;
+    font-weight: var(--w-label);
+    color: var(--brass-2);
+  }
+  .d1 .create-more > summary::-webkit-details-marker {
+    display: none;
+  }
+  .d1 .create-more-chev {
+    transition: rotate var(--dur-fast) var(--ease-d1-standard);
+  }
+  .d1 .create-more[open] .create-more-chev {
+    rotate: 90deg;
+  }
+  .d1 .create-more[open] > .create-fields {
+    margin-top: 12px;
+  }
+
+  /* ---------- name gate (NameGate.tsx) ---------- */
+  .d1 .name-gate {
+    width: min(420px, 100%);
+    margin: 40px auto;
+    padding: 28px 32px;
+    border-radius: var(--r-xl);
+    background: var(--leather);
+    border: 1px solid var(--line);
+    box-shadow: var(--sh-3);
     display: flex;
     flex-direction: column;
     gap: 16px;
+    text-align: left;
   }
-  .d1 .preview-table {
-    position: relative;
-    display: grid;
-    place-items: center;
-    padding: 14px 0;
+  .d1 .invite-stage .name-gate {
+    margin: 0;
   }
-  .d1 .preview-name {
-    position: absolute;
-    left: 50%;
-    top: 64%;
-    transform: translate(-50%, -50%);
-    font: var(--w-display) var(--fs-base)/1.15 var(--display);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: rgba(243, 234, 215, 0.4);
-    white-space: nowrap;
+  .d1 .name-gate-title {
+    font: var(--w-display) var(--fs-4xl)/1.15 var(--display);
   }
-  .d1 .summary {
-    display: flex;
-    flex-direction: column;
-  }
-  .d1 .summary > div {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    padding: 9px 0;
-    border-bottom: 1px solid var(--hair);
-  }
-  .d1 .summary dt {
-    font-size: var(--fs-md);
-    color: var(--ivory-3);
-  }
-  .d1 .summary dd {
-    font-size: var(--fs-base);
-    font-weight: var(--w-label);
-  }
-  .d1 .preview-note {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: rgba(232, 207, 146, 0.07);
-    font-size: var(--fs-sm);
-    line-height: 1.45;
-    color: var(--ivory-2);
-  }
-  /* phone create room: the fields fill two columns, the preview closes the left one; the create
-     button sits in the top bar */
+
   /* ---------- invite ---------- */
 
   .d1 .invite-grid {
@@ -1441,14 +1427,6 @@
   .d1 .vis.is-active .vis-check {
     display: grid;
   }
-  .d1 .m-preview {
-    display: none;
-  }
-  @media (max-width: 1100px) {
-    .d1 .create-grid {
-      grid-template-columns: 1fr;
-    }
-  }
 
   /* room page and the invite link */
   .d1 .room-sub {
@@ -1784,89 +1762,42 @@
       display: none;
     }
 
-    /* lobby: the room list beside search, filters, invite link and the create button */
+    /* lobby: the title and "Tạo bàn" over the room list */
     .d1 .m-lobby {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 264px;
-      align-items: start;
-      gap: 14px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
     }
     .d1 .m-lobby .m-title {
       flex-direction: row;
       align-items: baseline;
-      justify-content: space-between;
-      padding-right: 4px;
+      gap: 12px;
     }
-    .d1 .m-lobby-side {
-      position: sticky;
-      top: 16px;
-      min-height: calc(100dvh - 16px - var(--safe-b));
-    }
-    .d1 .m-lobby-side .eyebrow {
-      margin: 4px 0 2px;
-    }
-    .d1 .m-lobby-side .m-note {
-      display: flex;
-      gap: 6px;
-      margin-top: auto;
-    }
-    .d1 .m-lobby-side .m-note svg {
-      flex: none;
-      margin-top: 2px;
-      color: var(--brass);
+    /* the name gate: no room for the desktop's margins in 390 px */
+    .d1 .name-gate {
+      margin: 8px auto;
+      padding: 18px 22px;
+      gap: 12px;
     }
     .d1 .room-list.is-loading .sk-card {
       height: 78px;
     }
 
-    /* create room: the fields fill two columns, the preview closes the left one; the create
-       button sits in the top bar */
-    .d1 .create-grid {
-      display: block;
-    }
-    .d1 .create-preview,
-    .d1 .create-form .form-actions {
-      display: none;
-    }
+    /* create room: no panel around the form, the fields in two columns */
     .d1 .panel.create-form {
+      max-width: none;
       padding: 0;
       background: none;
       border: 0;
       box-shadow: none;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-areas:
-        "name  seats"
-        "blind seven"
-        "secs  seven"
-        "prev  vis";
-      align-content: start;
-      gap: 12px 20px;
-    }
-    .d1 .create-form > .alert {
-      grid-column: 1 / -1;
+      gap: 10px;
     }
     .d1 .create-form .create-fields {
-      display: contents;
+      gap: 12px 20px;
     }
-    .d1 .create-form .f-name {
-      grid-area: name;
-    }
-    .d1 .create-form .f-blind {
-      grid-area: blind;
-    }
-    .d1 .create-form .f-seats {
-      grid-area: seats;
-    }
-    .d1 .create-form .f-secs {
-      grid-area: secs;
-    }
-    .d1 .create-form .f-seven {
-      grid-area: seven;
-      align-self: start;
-    }
-    .d1 .create-form .f-vis {
-      grid-area: vis;
+    .d1 .create-form .form-actions {
+      margin-top: 0;
+      padding-top: 12px;
     }
     .d1 .create-form .seven-field {
       padding: 10px 14px;
@@ -1897,36 +1828,6 @@
     }
     .d1 .create-form .vis {
       padding: 8px 10px;
-    }
-    .d1 .m-preview {
-      grid-area: prev;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 10px 14px;
-      border-radius: 16px;
-      background: linear-gradient(180deg, rgba(38, 29, 20, 0.94), rgba(24, 18, 13, 0.94));
-      border: 1px solid var(--line);
-    }
-    .d1 .m-preview > span:last-child {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      min-width: 0;
-    }
-    .d1 .m-preview b {
-      font: var(--w-display) var(--fs-2xl)/1.15 var(--display);
-    }
-    .d1 .m-preview small {
-      font-size: var(--fs-md);
-      color: var(--ivory-2);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .d1 .m-preview small.eyebrow {
-      font-size: var(--fs-sm);
-      color: var(--brass);
     }
 
     /* room page: share card, seats and chat at left, the invitation on the felt at right */
@@ -2251,9 +2152,11 @@
       column-gap: 14px;
     }
     /* create room: two columns leave eight seat buttons 24 px wide; one column, scrolling down */
-    .d1 .panel.create-form {
+    .d1 .create-form .create-fields {
       grid-template-columns: minmax(0, 1fr);
-      grid-template-areas: "name" "blind" "seats" "secs" "seven" "vis" "prev";
+    }
+    .d1 .create-form .create-fields .span-2 {
+      grid-column: auto;
     }
     /* room page: the invitation (312 px) has no room beside the 384 px share column: one
        column, the invitation under it, scrolling down */

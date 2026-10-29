@@ -1,8 +1,8 @@
 // C5: the whole evening in two browsers. Every step a player takes goes through the pages: the
-// owner creates a private room, sends the invite link, a friend with no account opens it; both
-// sit, the owner grants chips from the panel on the table itself, one hand is played to the end
-// with the C key, and the history lists that hand with its replay. REST is only used to make the
-// owner a guest and to read the result for checking.
+// owner creates a private room and lands at its table with the invite link, a friend with no
+// account opens it and types a name; both sit, the owner grants chips from the panel on the table
+// itself, one hand is played to the end with the C key, and the history lists that hand with its
+// replay. REST is only used to make the owner a guest and to read the result for checking.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -23,35 +23,38 @@ test("private room → invite link → friend joins → both sit → chips from 
   const ownerSeen = watchActions(owner);
   await guestPage(owner, `Chu${RUN}`);
 
-  // 1. Create a private room from the lobby.
+  // 1. Create a private room from the lobby: straight to its table, the invite link open.
   await owner.goto("/rooms");
-  await owner.getByRole("link", { name: "Tạo phòng" }).first().click();
+  await owner.getByRole("link", { name: "Tạo bàn" }).first().click();
   await expect(owner).toHaveURL(/\/rooms\/new$/);
-  await owner.getByLabel("Tên phòng").fill("Tối thứ Sáu");
+  await owner.getByLabel("Tên bàn").fill("Tối thứ Sáu");
+  await owner.getByText("Thêm tuỳ chọn").click();
   await owner.getByRole("radio", { name: "2", exact: true }).click();
   await owner.getByRole("radio", { name: /Riêng/ }).click();
-  await owner.getByRole("button", { name: "Tạo phòng & lấy link mời" }).click();
-  await expect(owner).toHaveURL(/\/rooms\/\d+$/);
-  const roomId = Number(new URL(owner.url()).pathname.split("/").pop());
-  await expect(owner.getByText("Riêng").first()).toBeVisible();
-  const invite = new URL((await owner.getByTestId("invite-link").getAttribute("title"))!);
-  await owner.getByRole("button", { name: "Ngồi đây" }).first().click();
-  await expect(owner.getByText("Đã ngồi ghế 1")).toBeVisible();
+  await owner.getByRole("button", { name: "Tạo bàn" }).click();
+  await expect(owner).toHaveURL(/\/rooms\/\d+\/table$/);
+  const roomId = Number(new URL(owner.url()).pathname.split("/")[2]);
+  expect((await api(owner, "GET", `/api/rooms/${roomId}/`)).is_private).toBe(true);
+  const inviteSheet = owner.getByRole("dialog", { name: "Mời bạn vào bàn" });
+  const invite = new URL((await inviteSheet.getByTestId("invite-link").getAttribute("title"))!);
+  await owner.keyboard.press("Escape");
+  await expect(inviteSheet).toBeHidden();
+  await owner.getByRole("button", { name: "Ngồi vào ghế 1" }).click();
+  const seated = async () => (await api(owner, "GET", `/api/rooms/${roomId}/snapshot/`)).table.seats.map((s: { seat: number }) => s.seat);
+  await expect.poll(seated).toEqual([1]);
 
-  // 2. The friend (no account) opens the link and sits.
+  // 2. The friend (no account) opens the link, types a name and sits at the table.
   const friendCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const friend = await friendCtx.newPage();
   const friendSeen = watchActions(friend);
   await friend.goto(invite.pathname + invite.search);
-  await expect(friend).toHaveURL(new RegExp(`/rooms/${roomId}$`));
-  await expect(friend.getByText("Bạn đã vào Tối thứ Sáu")).toBeVisible();
-  await friend.getByRole("button", { name: "Ngồi đây" }).first().click();
-  await expect(friend.getByText("Đã ngồi ghế 2")).toBeVisible();
+  await friend.getByLabel("Tên ở bàn").fill(`Khach${RUN}`);
+  await friend.getByRole("button", { name: "Vào chơi" }).click();
+  await expect(friend).toHaveURL(new RegExp(`/rooms/${roomId}/table$`));
+  await friend.getByRole("button", { name: "Ngồi vào ghế 2" }).click();
+  await expect.poll(seated).toEqual([1, 2]);
 
-  // 3. Both open the table; the owner grants chips from the crown on the table.
-  await owner.getByRole("link", { name: /Về bàn|Vào bàn/ }).first().click();
-  await expect(owner).toHaveURL(new RegExp(`/rooms/${roomId}/table$`));
-  await friend.goto(`/rooms/${roomId}/table`);
+  // 3. The owner grants chips from the crown on the table.
   for (const p of [owner, friend]) await expect(p.locator("[data-hand=none]")).toBeVisible();
   await owner.getByRole("button", { name: "Bảng chủ phòng" }).click();
   const sheet = owner.getByRole("dialog", { name: /Bảng chủ phòng/ });

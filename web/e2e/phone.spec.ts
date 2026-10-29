@@ -129,12 +129,17 @@ test("phone: tables of 2–9 seats, the chat drawer and the owner's sheet fit ev
   const handId = (await api(owner.page, "GET", `/api/rooms/${rooms[0]}/hands/`)).hands[0].hand_id;
 
   // The room screens: scroll down if they must, never sideways; controls 44 px.
-  const screens = ["/rooms", "/rooms/new", `/rooms/${rooms[0]}`, `/rooms/${rooms[0]}/history`, `/hands/${handId}`, "/rooms/join?token=khong-co-ma-nay-123"];
+  // "anon:": the same page for a visitor with no account, who sees the name gate first.
+  const screens = ["/rooms", "/rooms/new", `/rooms/${rooms[0]}/history`, `/hands/${handId}`, "/rooms/join?token=khong-co-ma-nay-123", "anon:/rooms", `anon:/rooms/${rooms[0]}/table`];
   for (const size of PHONES) {
     const context = await browser.newContext({ ...phone(size), storageState: state });
-    const page = await context.newPage();
-    for (const path of screens) {
-      const where = `${size.name}, ${path}`;
+    const anonContext = await browser.newContext(phone(size));
+    const anon = await anonContext.newPage();
+    const known = await context.newPage();
+    for (const screen of screens) {
+      const page = screen.startsWith("anon:") ? anon : known;
+      const path = screen.replace(/^anon:/, "");
+      const where = `${size.name}, ${screen}`;
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       await expect(page.locator(".d1").first()).toBeVisible();
@@ -144,10 +149,21 @@ test("phone: tables of 2–9 seats, the chat drawer and the owner's sheet fit ev
       expect(await outOfView(page, "button, a[href], input, .panel, .m-card, .room-card, .room-row, .sheet-panel", true), `${where}: out of the screen`).toEqual([]);
       const small = await smallTargets(page);
       // SHOTS=<folder>: keep a picture of each screen as measured
-      if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${size.width}-${path.replace(/\W+/g, "_")}.png` });
+      if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${size.width}-${screen.replace(/\W+/g, "_")}.png` });
       expect(small, `${where}: under 44 px`).toEqual([]);
+      if (path === "/rooms/new") {
+        // the extra options open: seats, think time, 7-2 and who sees the room fit as well
+        await page.getByText("Thêm tuỳ chọn").click();
+        await expect(page.getByRole("radio", { name: "2", exact: true })).toBeVisible();
+        await settled(page);
+        expect((await pageWidth(page)).scroll, `${where} + tuỳ chọn: scrolls sideways`).toBeLessThanOrEqual(width.view);
+        expect(await outOfView(page, "button, a[href], input, .panel", true), `${where} + tuỳ chọn: out of the screen`).toEqual([]);
+        expect(await smallTargets(page), `${where} + tuỳ chọn: under 44 px`).toEqual([]);
+      }
+      if (page === anon) await expect(page.getByRole("heading", { name: "Bạn tên gì?" })).toBeVisible();
     }
     await context.close();
+    await anonContext.close();
   }
 
   for (const t of friendTables) await t.page.close();

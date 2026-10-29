@@ -61,6 +61,7 @@ test("a stranger goes to the login, which offers no guest; an invite link surviv
   await expect(page).toHaveURL(/\/account\?next=%2Frooms$/);
   await expect(page.getByText("Chỉ thành viên: đăng ký tài khoản là vào chơi được.").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Chơi ngay bằng khách" })).toHaveCount(0);
+  await expect(page.getByLabel("Tên ở bàn")).toHaveCount(0); // no name box: a guest is not offered
   // and the server makes none, even asked directly (with the CSRF token, so the answer is about guests)
   const csrf = (await page.context().cookies(WEB)).find((c) => c.name === "csrftoken")?.value ?? "";
   const guest = await page.request.post(`${WEB}/api/auth/guest/`, {
@@ -74,7 +75,7 @@ test("a stranger goes to the login, which offers no guest; an invite link surviv
   await page.goto(`/rooms/join?token=${room.invite_token}`);
   await expect(page).toHaveURL(/\/account\?next=%2Frooms%2Fjoin%3Ftoken%3D/);
   await logIn(page, friend);
-  await expect(page).toHaveURL(new RegExp(`/rooms/${room.room.room_id}(\\?|$)`));
+  await expect(page).toHaveURL(new RegExp(`/rooms/${room.room.room_id}/table$`));
   await expect(page.getByText("Bàn thành viên").first()).toBeVisible();
 });
 
@@ -99,8 +100,8 @@ test("signing up from an invite link: logged in at once and straight into the ro
   await page.getByLabel("Mật khẩu", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Tạo tài khoản" }).click();
 
-  // no email to open, no one to wait for: the invite opens the room
-  await expect(page).toHaveURL(new RegExp(`/rooms/${room.room.room_id}(\\?|$)`));
+  // no email to open, no one to wait for: the invite opens the room's table
+  await expect(page).toHaveURL(new RegExp(`/rooms/${room.room.room_id}/table$`));
   await expect(page.getByText("Bàn ai cũng vào").first()).toBeVisible();
   await expect(page.getByText("Đợi chủ phòng duyệt")).toHaveCount(0);
 });

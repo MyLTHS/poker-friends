@@ -103,12 +103,23 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
   await mobile.context().close();
 
   // Room screens (desktop).
-  for (const path of ["/rooms", "/rooms/new", `/rooms/${id}`, `/rooms/${id}/history`, "/rooms/join?token=khong-co-ma-nay-123"]) {
+  for (const path of ["/rooms", "/rooms/new", `/rooms/${id}/history`, "/rooms/join?token=khong-co-ma-nay-123"]) {
     await owner.page.goto(path);
     await owner.page.waitForLoadState("networkidle");
     await settled(owner.page); // entrance animations settle (contrast is read on the final colours)
     await audit(owner.page, path);
   }
+
+  // The name gate a visitor with no account sees first (lobby, invite link, table).
+  const stranger = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+  await stranger.goto("/rooms");
+  await expect(stranger.getByRole("heading", { name: "Bạn tên gì?" })).toBeVisible();
+  await settled(stranger);
+  await audit(stranger, "cổng tên");
+  await stranger.getByRole("button", { name: "Vào chơi" }).click(); // empty: the error under the box
+  await expect(stranger.getByLabel("Tên ở bàn")).toHaveAttribute("aria-invalid", "true");
+  await audit(stranger, "cổng tên báo lỗi");
+  await stranger.context().close();
 
   await owner.context.close();
   await friend.context.close();

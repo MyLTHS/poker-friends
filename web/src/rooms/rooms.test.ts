@@ -2,7 +2,10 @@ import jsQR from "jsqr";
 import { describe, expect, it } from "vitest";
 
 import type { LobbyRoom } from "./api";
+import type { Me } from "@/account/api";
+
 import { clock, ledgerTotals, netBarWidth, withPlayer, type HandSummary, type SummaryRow } from "./history";
+import { needsName } from "./hooks";
 import { filterCount, filterRooms, fold, inviteToken, roomCta } from "./lobby";
 import { qrModules } from "./qr";
 import { changedRules, checkRules, DEFAULT_RULES, fieldText, pendingText, rulesLine, serverFieldErrors, type RoomInfo } from "./rules";
@@ -63,6 +66,17 @@ describe("lobby", () => {
     expect(inviteToken("bàn thứ sáu")).toBeNull();
     expect(inviteToken("/rooms/join?token=%E0%A4%A")).toBeNull();
     expect(inviteToken("")).toBeNull();
+  });
+});
+
+describe("name gate", () => {
+  const guest = { id: 7, username: "Lan", is_guest: true } as Me;
+  it("asks a visitor nobody knows for a name only when the server takes guests", () => {
+    expect(needsName(null, true)).toBe(true);
+    expect(needsName(null, false)).toBe(false); // members only: the login, as before
+    expect(needsName(null, undefined)).toBe(false); // config not known: the room call decides
+    expect(needsName(undefined, true)).toBe(false); // still asking who it is
+    expect(needsName(guest, true)).toBe(false);
   });
 });
 

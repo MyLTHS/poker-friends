@@ -44,7 +44,7 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
   useReloadWhenOnline(useCallback(() => void load(), [load]));
 
   const myId = me ? String(me.id) : null;
-  const sub = { title: "Lời / lỗ", sub: "Chip ảo · không phải tiền thật", back: `/rooms/${roomId}` };
+  const sub = { title: "Lời / lỗ", sub: "Chip ảo · không phải tiền thật", back: `/rooms/${roomId}/table` };
 
   if (state === null || "error" in state) {
     return (
@@ -215,7 +215,7 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
         </section>
       </div>
       <p className="page-foot">
-        <Link href={`/rooms/${roomId}`} className="link">
+        <Link href={`/rooms/${roomId}/table`} className="link">
           <ArrowLeft size={13} aria-hidden /> Về {detail.room.name}
         </Link>
       </p>
