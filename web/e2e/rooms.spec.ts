@@ -157,9 +157,10 @@ test("the old room address and the lobby: the room address opens its table; a vi
   await page.getByLabel("Tên ở bàn").fill("Vy");
   await page.getByRole("button", { name: "Vào chơi" }).click();
   await expect(page.getByRole("heading", { name: "Chọn một bàn" })).toBeVisible();
-  // the room cards open the table
-  const card = page.getByRole("link", { name: /Bàn E2E địa chỉ cũ/ });
+  // the room cards open the table: to sit, or just to watch ("Xem")
+  const card = page.getByRole("link", { name: /^Ngồi đầu tiên: Bàn E2E địa chỉ cũ/ });
   await expect(card).toHaveAttribute("href", `/rooms/${roomId}/table`);
+  await expect(page.getByRole("link", { name: "Vào xem: Bàn E2E địa chỉ cũ" })).toHaveAttribute("href", `/rooms/${roomId}/table`);
 });
 
 test("a wrong invite link says so and leads back to the lobby", async ({ browser }) => {
@@ -278,7 +279,8 @@ test("house rules: the create form sends an ante and a bomb pot every hand; the 
     await expect(owner.locator("[data-hand=complete]")).toBeVisible();
   };
   await playOut();
-  await expect(owner.getByText("Ván sau là bomb pot…")).toBeVisible();
+  // the pause before the next hand counts down: "Bomb pot sau 3s"
+  await expect(owner.getByText(/Bomb pot sau \d+s|Ván sau là bomb pot/).first()).toBeVisible();
 
   // Hand #2 (a bomb pot again): the owner switches bomb pots off; the panel says it waits for the
   // next hand.

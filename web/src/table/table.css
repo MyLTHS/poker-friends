@@ -3758,15 +3758,19 @@
   }
   @media (orientation: landscape) and (max-height: 500px) {
     /* the phone's sheet starts 120px from the left; the menu stays a narrow column at the right */
+    /* two columns: the owner's full menu (up to ten rows) fits the 375px-high phone */
     .d1 .sheet.tmenu {
       left: auto;
-      width: min(320px, 100vw);
+      width: min(540px, calc(100vw - 16px));
     }
     .d1 .tmenu-list {
-      gap: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0 6px;
     }
     .d1 .tmenu-item {
       min-height: 44px;
+      font-size: var(--fs-md);
     }
   }
   .d1 .log-sub {

@@ -499,8 +499,20 @@ function RulesForm({
             disabled={disabled}
           />
           <span className="owner-hint is-desktop-only">Mỗi lượt, không có thời gian cộng</span>
+          {/* the phone: the pause between hands rides on this row (a row of its own would push the
+              last switches under a 375 px screen) */}
+          <label className="os-pause-pick is-phone-only">
+            <span>Nghỉ giữa ván</span>
+            <select value={draft.hand_pause_seconds} disabled={disabled} onChange={(e) => set({ hand_pause_seconds: Number(e.target.value) })}>
+              {pauses.map((n) => (
+                <option key={n} value={n}>
+                  {n} giây
+                </option>
+              ))}
+            </select>
+          </label>
         </section>
-        <section className="owner-sec os-pause">
+        <section className="owner-sec os-pause is-desktop-only">
           <h4 id="owner-pause">Nghỉ giữa ván</h4>
           <Choices
             labelledBy="owner-pause"

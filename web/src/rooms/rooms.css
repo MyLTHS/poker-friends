@@ -2074,13 +2074,14 @@
       grid-column: 1;
       grid-row: 2;
     }
-    /* five think times are too many beside the label for 44 px taps: they take their own row */
-    .d1 .owner .owner-two .os-think .seg {
+    /* five think times (or pauses) are too many beside the label for 44 px taps: they take their
+       own row */
+    .d1 .owner .owner-two :is(.os-think, .os-pause) .seg {
       grid-column: 1 / -1;
       grid-row: 2;
       display: flex;
     }
-    .d1 .owner .owner-two .os-think .seg-item {
+    .d1 .owner .owner-two :is(.os-think, .os-pause) .seg-item {
       flex: 1;
     }
     /* the whole box, border and padding, takes the tap */
@@ -2171,6 +2172,29 @@
     .d1 .owner .is-desktop-only {
       display: none;
     }
+    /* the section rule (display: grid) outranks .is-desktop-only: hide the desktop's own row */
+    .d1 .owner .owner-two > .os-pause.is-desktop-only {
+      display: none;
+    }
+    .d1 .owner .os-pause-pick.is-phone-only {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font: var(--w-label) var(--fs-xs) / 1.2 var(--text);
+      color: var(--ivory-3);
+    }
+    .d1 .owner .os-pause-pick select {
+      min-height: 44px;
+      padding: 0 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line-2);
+      background: rgba(8, 6, 4, 0.5);
+      color: var(--ivory);
+      font: var(--w-label) var(--fs-md) / 1 var(--text);
+    }
     .d1 .sheet-head .owner-crown {
       width: 38px;
       height: 38px;
@@ -2257,6 +2281,10 @@
 }
 
 @layer components {
+  /* shown on the landscape phone only (its media query turns it on) */
+  .d1 .owner .is-phone-only {
+    display: none;
+  }
   /* "Xem" sits beside the card's main button */
   .d1 .rc-foot .rc-watch {
     margin-left: auto;

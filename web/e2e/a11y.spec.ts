@@ -54,9 +54,12 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
   expect(fold, `Tab order: ${order.join(" | ")}`).toBeGreaterThanOrEqual(0);
   expect(chat === -1 || fold < chat, `Tab order: ${order.join(" | ")}`).toBeTruthy();
 
-  // The top bar keeps only the lobby, the room, "Mời bạn" and ☰; the column is the chat alone.
+  // The top bar keeps the lobby, the room, the sound, "Rời phòng", "Mời bạn" and ☰; the column is
+  // the chat alone.
   const bar = owner.page.locator(".tbar");
-  await expect(bar.getByRole("button")).toHaveCount(2);
+  await expect(bar.getByRole("button")).toHaveCount(4);
+  await expect(bar.getByRole("button", { name: "Âm thanh" })).toHaveAttribute("aria-pressed", "false");
+  await expect(bar.getByRole("button", { name: "Rời phòng" })).toBeVisible();
   await expect(bar.getByRole("button", { name: "Mời bạn" })).toBeVisible();
   await expect(owner.page.getByRole("tab")).toHaveCount(0);
   await expect(owner.page.getByRole("complementary", { name: "Chat" }).getByRole("textbox", { name: "Tin nhắn" })).toBeVisible();

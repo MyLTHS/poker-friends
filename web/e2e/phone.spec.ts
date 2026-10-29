@@ -105,8 +105,8 @@ test("phone: tables of 2–9 seats, the chat drawer, the menu and the owner's sh
     await settled(page); // the drawer slides in
     await expectFits(page, `${size.name}, chat`);
     await page.keyboard.press("Escape");
-    // The bar over the stage: chat, "Mời bạn" and ☰; the rest is in the menu, which fits too.
-    await expect(page.locator(".tbar-m-right > *")).toHaveCount(3);
+    // The bar over the stage: sound, chat, "Mời bạn" and ☰; the rest is in the menu, which fits too.
+    await expect(page.locator(".tbar-m-right > *")).toHaveCount(4);
     const menu = page.getByRole("dialog", { name: "Menu" });
     await page.getByRole("button", { name: "Menu", exact: true }).click();
     await expect(menu).toBeVisible();
