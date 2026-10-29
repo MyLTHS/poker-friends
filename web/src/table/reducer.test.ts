@@ -209,7 +209,7 @@ describe("hand.completed", () => {
   });
 
   it("keeps the showdown's hand names until the next hand starts", () => {
-    const shown: ShowdownHand = { player_id: "2", seat: 3, category: "one_pair", cards: ["Ac", "Ad", "Qh", "Jh", "7d"] };
+    const shown: ShowdownHand = { player_id: "2", seat: 3, board: 1, category: "one_pair", cards: ["Ac", "Ad", "Qh", "Jh", "7d"] };
     const completed = withVersion({ ...sevenDeuce, payload: { ...sevenDeuce.payload, seven_deuce: null, showdown: [shown] } }, 14);
     const model = run([server(started), server(deadline), server(completed)], connected());
     expect(model.showdown).toEqual([shown]);

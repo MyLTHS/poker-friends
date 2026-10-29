@@ -21,6 +21,8 @@ const room = (room_id: number, name: string, owner_name: string | null = null): 
     ante: 0,
     bomb_pot_every: 0,
     bomb_pot_amount: 0,
+    run_it_twice: false,
+    rabbit_hunt: true,
   },
   is_private: false,
   owner_name,

@@ -440,6 +440,7 @@ class TestShowdownHands:
             {
                 "player_id": "B",
                 "seat": 5,
+                "board": 1,
                 "category": "one_pair",
                 "cards": ["Ac", "Ad", "Kh", "Qs", "9c"],
             }

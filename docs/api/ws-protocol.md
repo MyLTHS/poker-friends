@@ -68,7 +68,7 @@ Message **client gửi** có `protocol_version`, `type`, `room_id`, `payload`; l
 |---|---|---|---|
 | **Sự kiện trạng thái** | `hand.started`, `action.applied`, `turn.deadline`, `hand.completed`, `seat.updated`, `room.suspended`, `room.updated` | Cả bàn (mỗi người một bản đã che bài theo góc nhìn của họ) | Tăng đúng **1** mỗi sự kiện |
 | **Trả lời riêng** | `table.snapshot`, `command.ack`, `command.rejected`, `protocol.error` | Chỉ người gửi lệnh / người kết nối | Không tăng; mang `version` hiện tại của phòng |
-| **Thông báo** (B8) | `chat.message`, `audience.updated` | Cả phòng | Không tăng; mang `version` hiện tại. Không phải trạng thái bàn: hụt một thông báo không cần resync |
+| **Thông báo** (B8) | `chat.message`, `audience.updated`, `cards.shown` | Cả phòng | Không tăng; mang `version` hiện tại. Không phải trạng thái bàn: hụt một thông báo không cần resync |
 
 Cùng một sự kiện trạng thái thì mọi người nhận cùng `version`, chỉ khác phần bài được che.
 
@@ -132,6 +132,9 @@ bỏ mã là đổi phá vỡ. Trường `message` đi kèm chỉ để đọc l
 | `invalid_amount` | `amount` ngoài khoảng `min_raise_to`..`max_raise_to` |
 | `already_sitting_out` | `command.sit_out` khi đã sit-out |
 | `not_sitting_out` | `command.sit_in` khi đang chơi |
+| `hand_in_progress` | `command.show_cards` cho ván đang chạy: đợi ván xong |
+| `not_in_hand` | `command.show_cards` của người không được chia bài ở ván đó |
+| `already_shown` | `command.show_cards` khi cả bàn đã thấy bài đó (đã ngửa, lật ở showdown, 7-2 được lật) |
 | `rate_limited` | Gửi lệnh quá nhanh (B7); với `protocol.error`: chat quá nhanh (B8) |
 | `room_suspended` | Phòng đang tạm dừng chờ khôi phục (xem mục 8, `room.suspended`) |
 | `internal_error` | Lỗi phía server xảy ra **trước khi** lệnh được ghi (`HandCommand`): lệnh chưa áp dụng, gửi lại cùng `command_id` là an toàn. Lỗi **sau khi** đã ghi không bao giờ trả mã này (xem `room.suspended`) |
@@ -178,6 +181,12 @@ Luật bàn của ván nằm ngay trong `HandView` (cấu hình phòng có thể
   người được chia bài bỏ `bomb_pot` (thiếu thì all-in, không lấy ante), không có blind, không có
   vòng cược trước flop: `hand.started` đã có 3 lá flop, người đầu tiên quyết định là người bên trái
   nút. Không có `action.applied` nào trước flop.
+- Khi ante hoặc bomb pot làm mọi người (trừ nhiều nhất một người) all-in, không ai còn cược được:
+  `hand.started` đã là ván xong (`complete: true`, đủ 5 lá), `hand.completed` theo ngay sau.
+- `second_board`: ván chạy 2 lần (`room.run_it_twice`): cược đã khép, còn từ 2 người chưa bỏ, có
+  người all-in và bài chung chưa đủ 5 lá thì phần còn lại được chia 2 lần. `board` là board 1,
+  `second_board` là board 2 (đủ 5 lá; những lá đã có trước khi all-in nằm ở cả hai). `null` ở mọi
+  ván khác. Board 2 chỉ xuất hiện khi ván đã xong (`complete: true`).
 
 | Bài | Ai thấy |
 |---|---|
@@ -187,7 +196,9 @@ Luật bàn của ván nằm ngay trong `HandView` (cấu hình phòng có thể
 | Bài lật ở showdown | Mọi người, kể cả người xem. Người thua có thể úp bài (PokerKit tự quyết người phải lật), khi đó `cards` là `[]` |
 | 2 lá 7-2 của người ăn pot vì mọi người fold, khi phòng bật thưởng 7-2 (#27) | Mọi người, sau khi ván xong (trong `hand.completed`) |
 | Tên bộ bài (`hand.completed.payload.showdown`) | Mọi người, nhưng **chỉ** cho bài còn ngửa sau showdown. Người fold, người úp bài khi thua, người thắng vì mọi người bỏ bài (kể cả 7-2 được lật) không có tên bộ bài |
-| Bộ bài, lá burn, lá chưa chia | Không ai, không bao giờ rời server |
+| Lá chung lẽ ra sẽ ra của ván kết thúc trước river (rabbit hunt, `room.rabbit_hunt`) | Mọi người, **chỉ** trong `hand.completed.payload.rabbit_cards` (và replay), không bao giờ khi ván đang chạy |
+| Bài người chơi tự ngửa sau ván (`command.show_cards`) | Mọi người, qua `cards.shown`; lưu vào lịch sử ván |
+| Bộ bài, lá burn, lá chưa chia | Không ai, không bao giờ rời server (trừ lá rabbit ở trên) |
 | Người xem (spectator) | `view_for(None)`: chỉ bài chung và bài đã lật |
 
 `legal_actions` chỉ có trong `HandView` gửi cho đúng người đang tới lượt; mọi người khác nhận
@@ -244,7 +255,8 @@ Ví dụ đầy đủ: [giữa hai ván](fixtures/server/valid/table.snapshot.be
   "payload": {"table": {
     "room": {"room_id": 1, "name": "Bàn bạn bè", "status": "playing", "max_seats": 9,
              "small_blind": 5, "big_blind": 10, "think_time_seconds": 20, "seven_deuce_bonus": 50,
-             "starting_stack": 1000, "ante": 0, "bomb_pot_every": 0, "bomb_pot_amount": 0},
+             "starting_stack": 1000, "ante": 0, "bomb_pot_every": 0, "bomb_pot_amount": 0,
+             "run_it_twice": false, "rabbit_hunt": true},
     "you": {"player_id": "1", "seat": 1},
     "seats": [
       {"seat": 1, "player_id": "1", "display_name": "Lym", "stack": 1000, "sitting_out": false, "connected": true},
@@ -277,7 +289,7 @@ nếu vừa sang vòng. Client chỉ việc thay `hand` cũ bằng `hand` mới.
     "hand": {
       "hand_id": 41, "hand_no": 1, "button_seat": 1, "small_blind": 5, "big_blind": 10,
       "ante": 0, "bomb_pot": 0,
-      "board": [], "pots": [],
+      "board": [], "second_board": null, "pots": [],
       "players": [
         {"player_id": "1", "seat": 1, "stack": 970, "bet": 30, "in_hand": true, "cards": ["7h", "2c"]},
         {"player_id": "2", "seat": 3, "stack": 995, "bet": 5, "in_hand": true, "cards": ["??", "??"]},
@@ -313,8 +325,18 @@ rồi phát `action.applied` với `timeout: true`. Client vẽ đồng hồ the
 Ván đã xong và đã chia chip. Gồm `hand` (trạng thái cuối, bài đã lật), `results` (mọi người trong
 ván, cộng người ngồi bàn mà không trong ván, như sit-out, nếu họ trả thưởng 7-2; mỗi dòng:
 `hand_net` lời/lỗ trong pot, `seven_deuce_net` thưởng 7-2 nhận/trả, `stack` số dư phòng sau
-cùng), `seven_deuce` (`null` nếu không có thưởng) và `showdown` (tên bộ bài, xem dưới). Sau sự
-kiện này `hand_id` của các message tiếp theo là `null` cho tới `hand.started` kế tiếp.
+cùng), `seven_deuce` (`null` nếu không có thưởng), `showdown` (tên bộ bài, xem dưới), `runouts`
+và `rabbit_cards`. Sau sự kiện này `hand_id` của các message tiếp theo là `null` cho tới
+`hand.started` kế tiếp (trừ `cards.shown`, luôn mang id của ván được ngửa bài).
+
+- `runouts`: ván chạy 2 lần thì là 2 phần tử, mỗi phần tử là một board (`board`, 5 lá) và
+  `winners` (ai nhận bao nhiêu từ board đó, theo số ghế). Mỗi pot (main và side) chia đôi, chip lẻ
+  về board 1; mỗi nửa trao cho bộ bài tốt nhất trên board đó trong số người có quyền ở pot đó.
+  `results[].hand_net` đã gồm cả hai nửa. Ván thường: `null`.
+- `rabbit_cards`: ván kết thúc trước river ở phòng bật `rabbit_hunt`: các lá chung lẽ ra sẽ ra
+  (theo thứ tự, bỏ lá burn), chỉ để xem, không đổi chip. Ván khác: `[]`.
+- `showdown[].board`: bộ bài làm với board nào (1, hoặc 2 cho board 2 của ván chạy 2 lần). Ván
+  chạy 2 lần có tên bộ bài của mỗi người cho từng board.
 
 `showdown` có một dòng cho **mỗi người còn bài ngửa sau showdown**, theo số ghế; `[]` khi ván kết
 thúc vì mọi người bỏ bài (kể cả khi 7-2 được lật). Người thua thường úp bài (PokerKit tự quyết, kể
@@ -342,7 +364,7 @@ vẫn thấy `7h 2c` của Lym:
     "hand": {
       "hand_id": 41, "hand_no": 1, "button_seat": 1, "small_blind": 5, "big_blind": 10,
       "ante": 0, "bomb_pot": 0,
-      "board": ["Ah", "8d", "Jc"], "pots": [{"amount": 0, "eligible": ["1"]}],
+      "board": ["Ah", "8d", "Jc"], "second_board": null, "pots": [{"amount": 0, "eligible": ["1"]}],
       "players": [
         {"player_id": "1", "seat": 1, "stack": 1035, "bet": 0, "in_hand": true, "cards": ["7h", "2c"]},
         {"player_id": "2", "seat": 3, "stack": 995, "bet": 0, "in_hand": false, "cards": []},
@@ -361,7 +383,9 @@ vẫn thấy `7h 2c` của Lym:
                    {"player_id": "3", "seat": 5, "amount": 50}],
       "total": 100
     },
-    "showdown": []
+    "showdown": [],
+    "runouts": null,
+    "rabbit_cards": ["Td", "6c"]
   }
 }
 ```
@@ -370,6 +394,13 @@ Lưu ý: `hand.players[].stack` của Lym là 1035 (chip trong ván, **trước*
 thưởng là `results[].stack` = 1135. Người còn ít chip hơn mức thưởng chỉ trả số chip còn lại
 (`payments[].amount` có thể nhỏ hơn `bonus`); người còn 0 chip không có trong `payments`.
 Ván thắng ở showdown: [ví dụ](fixtures/server/valid/hand.completed.showdown.json).
+
+### `cards.shown` (thông báo)
+
+Một người của ván vừa xong ngửa 2 lá của mình cho cả bàn (`command.show_cards`). `hand_id` là ván
+đó. `payload`: `player_id`, `seat` (ghế ở ván đó), `cards` (2 lá). Mỗi người ngửa một lần mỗi ván.
+Là **thông báo**: không tăng `version`, không có trong `table.snapshot` (ván đã xong, trạng thái bàn
+không đổi); ai kết nối lại sau đó xem trong lịch sử ván (`shown_cards` của replay).
 
 ### `seat.updated` (sự kiện)
 
@@ -400,6 +431,8 @@ thì bị check/fold như thường). Người sit-out vẫn phải trả thư�
 ```
 
 `result_version` là `version` của sự kiện đầu tiên lệnh gây ra, để client ghép ack với sự kiện.
+`command.show_cards` không gây sự kiện trạng thái: `result_version` là `version` mà thông báo
+`cards.shown` của nó mang (version hiện tại của phòng).
 Ack và sự kiện có thể tới theo bất kỳ thứ tự nào; client không được dựa vào thứ tự giữa chúng.
 Lệnh vừa áp (`duplicate: false`) luôn có `result_version`; ack trùng sau khi server khởi động lại
 mang `result_version: null` ([ví dụ](fixtures/server/valid/command.ack.duplicate-after-restart.json)).
@@ -458,7 +491,8 @@ trong DB nên không mất khi server khởi động lại. Đóng phòng giữa
   "payload": {"room": {"room_id": 1, "name": "Bàn bạn bè", "status": "open", "max_seats": 9,
               "small_blind": 10, "big_blind": 20, "think_time_seconds": 30,
               "seven_deuce_bonus": 50, "starting_stack": 1000, "ante": 0,
-              "bomb_pot_every": 0, "bomb_pot_amount": 0}}
+              "bomb_pot_every": 0, "bomb_pot_amount": 0, "run_it_twice": false,
+              "rabbit_hunt": true}}
 }
 ```
 
@@ -527,6 +561,14 @@ số chip **raise tới**, kể cả khi là cược mở đầu vòng). Không 
 
 `payload` rỗng `{}`. Người gửi là người sit-out / quay lại.
 [sit_out](fixtures/client/valid/command.sit_out.json), [sit_in](fixtures/client/valid/command.sit_in.json).
+
+### `command.show_cards`
+
+Ngửa 2 lá của mình cho cả bàn sau khi ván `hand_id` đã xong (kể cả khi thắng vì mọi người bỏ, và
+người đã fold), cho tới khi ván sau bắt đầu. `payload` rỗng `{}`. Thành công: mọi người nhận
+`cards.shown`, người gửi nhận `command.ack`. Từ chối: `hand_in_progress` (ván còn chạy),
+`stale_hand` (không phải ván vừa xong, hoặc ván sau đã bắt đầu, hoặc server vừa khởi động lại),
+`not_in_hand`, `already_shown`.
 
 ### `chat.send` (B8)
 

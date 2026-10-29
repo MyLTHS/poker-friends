@@ -13,12 +13,16 @@ from django.core.management import call_command
 from apps.games.engine.hand import ActionKind, HandEngine
 from apps.games.engine.simulate import run_simulation
 from apps.games.engine.table import LedgerKind, TableSession
+from apps.games.models import Hand, LedgerEntry, Room, User
+from apps.games.services import save_completed_hand
 
 from .helpers import build_hand, call, check, check_down, fold, make_deck, raise_to
 from .test_actor import (  # noqa: F401
+    CHIPS,
     _slow_next_hand,
     by_type,
     connect,
+    drain,
     heads_up_room,
     make_room,
     make_user,
@@ -146,6 +150,31 @@ class TestBombPot:
         assert sorted(e.amount for e in bonus) == [-5, -5, 10]
 
 
+@pytest.mark.django_db
+class TestHandsFromBeforeTheUpgrade:
+    def test_a_hand_dealt_before_antes_existed_is_still_saved(self):
+        """Its stored config has no ante or bomb_pot key; the engine's record has them at 0."""
+        room = Room.objects.create(name="T", small_blind=1, big_blind=2)
+        users = [User.objects.create_user(username=name) for name in ("ann", "ben")]
+        table = TableSession(1, 2)
+        for seat, user in enumerate(users, 1):
+            table.take_seat(str(user.pk), seat)
+            table.grant_chips(str(user.pk), 100)
+        engine = table.start_hand()
+        old_config = {
+            k: v for k, v in engine.record()["config"].items() if k not in ("ante", "bomb_pot")
+        }
+        Hand.objects.create(
+            room=room, hand_no=1, button_seat=engine.config.button_seat, config=old_config
+        )
+        play_out(engine)
+        before = len(table.ledger)
+        table.finish_hand()
+        hand = save_completed_hand(room, 1, engine, table.ledger[before:])
+        assert hand.completed_at is not None
+        assert hand.config == old_config  # kept as it was stored
+
+
 class TestWhichHand:
     def table(self, **rules) -> TableSession:
         table = TableSession(1, 2, **rules)
@@ -237,6 +266,25 @@ class TestRoomSettings:
         run_async(body)
         room.refresh_from_db()
         assert room.engine_rules()["bomb_pot_every"] == 2
+
+    def test_a_hand_over_at_the_deal_is_settled_at_once(self):
+        # Heads-up bomb pot of 50 against a 30-chip stack: nobody can bet, the board runs out.
+        room, a, b = heads_up_room(bomb_pot_every=1, bomb_pot_amount=50)
+        LedgerEntry.objects.create(room=room, user=b, kind="grant", amount=30 - CHIPS)
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            messages = await drain(ca)
+            [started] = by_type(messages, "hand.started")
+            assert started["payload"]["hand"]["complete"] is True
+            assert len(started["payload"]["hand"]["board"]) == 5
+            assert by_type(messages, "hand.completed")
+            await drain(cb)
+
+        run_async(body)
+        hand = Hand.objects.get(room=room, hand_no=1)
+        assert hand.completed_at is not None
+        assert sum(e.amount for e in LedgerEntry.objects.filter(hand=hand)) == 0
 
     def test_a_bomb_pot_deals_to_the_flop_at_the_table(self):
         room, a, b = heads_up_room(bomb_pot_every=1, bomb_pot_amount=10, ante=3)

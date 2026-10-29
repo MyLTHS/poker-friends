@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Any
 
-from pokerkit import Automation, Card, Mode, NoLimitTexasHoldem
+from pokerkit import Automation, Card, ChipsPushing, Mode, NoLimitTexasHoldem
 
 from .cards import FULL_DECK
 
@@ -23,8 +23,18 @@ AUTOMATIONS = (
     Automation.CHIPS_PULLING,
     Automation.RUNOUT_COUNT_SELECTION,
 )
+# Running it twice, the engine picks the number of runouts itself (see _advance).
+RUN_IT_TWICE_AUTOMATIONS = tuple(a for a in AUTOMATIONS if a != Automation.RUNOUT_COUNT_SELECTION)
 
 HIDDEN_CARD = "??"
+# Config keys added after hands were first stored, with what a record without them means.
+RECORD_DEFAULTS: dict[str, Any] = {
+    "seven_deuce_bonus": 0,
+    "ante": 0,
+    "bomb_pot": 0,
+    "run_it_twice": False,
+    "rabbit_hunt": False,
+}
 SEVEN_DEUCE_RANKS = frozenset({"7", "2"})
 RANK_ORDER = "23456789TJQKA"
 
@@ -76,6 +86,13 @@ class HandConfig:
     # blinds and no betting before the flop; the first bet is made on the flop, from the left of
     # the button. ``ante`` is not taken on top of it.
     bomb_pot: int = 0
+    # When the betting is over with two or more players left, one of them all in and the board
+    # not complete, the rest of the board is dealt twice: every pot is split in two halves (an
+    # odd chip goes to the first), the first half by the first board, the second by the second.
+    run_it_twice: bool = False
+    # Once the hand is over before the river, show the board cards that would have come next
+    # (``rabbit_cards``); only to look at, no chips move.
+    rabbit_hunt: bool = False
 
 
 @dataclass(frozen=True)
@@ -104,6 +121,13 @@ class IllegalAction(Exception):
     def __init__(self, code: str, message: str = ""):
         super().__init__(message or code)
         self.code = code
+
+
+def same_config(stored: dict[str, Any], recorded: dict[str, Any]) -> bool:
+    """Whether a stored hand config and a fresh ``HandEngine.record()`` describe the same hand.
+    A key the stored one lacks (written before that rule existed) counts as its default, so a
+    hand dealt before an upgrade and finished after it is still the same hand."""
+    return {**RECORD_DEFAULTS, **stored} == {**RECORD_DEFAULTS, **recorded}
 
 
 def deal_order(seats: tuple[Seat, ...], button_seat: int) -> list[str]:
@@ -151,11 +175,12 @@ class HandEngine:
         stack_of = {s.player_id: s.stack for s in config.seats}
         self._starting_stacks = tuple(stack_of[p] for p in self.player_order)
         self._deck = iter(config.deck)
+        self._drawn = 0  # cards taken from the deck so far (holes, burns and boards)
         self._actions: list[Action] = []
         self._chip_total = sum(self._starting_stacks)
         bomb = config.bomb_pot > 0
         self._state = NoLimitTexasHoldem.create_state(
-            AUTOMATIONS,
+            RUN_IT_TWICE_AUTOMATIONS if config.run_it_twice else AUTOMATIONS,
             True,  # antes are trimmed like bets: a short ante only plays for what it matches
             config.bomb_pot if bomb else config.ante,
             (0, 0) if bomb else (config.small_blind, config.big_blind),
@@ -182,8 +207,72 @@ class HandEngine:
     def stacks(self) -> dict[str, int]:
         return {p: self._state.stacks[i] for i, p in enumerate(self.player_order)}
 
-    def board(self) -> tuple[str, ...]:
-        return tuple(card_code(c) for c in self._state.get_board_cards(0))
+    def board(self, index: int = 0) -> tuple[str, ...]:
+        """The board, or with ``index=1`` the second board of a hand run twice."""
+        return tuple(card_code(c) for c in self._state.get_board_cards(index))
+
+    @property
+    def ran_twice(self) -> bool:
+        return self._state.board_count > 1
+
+    def runouts(self) -> list[dict[str, Any]] | None:
+        """For a hand run twice, each board and what it paid to whom; ``None`` otherwise."""
+        if not self.is_complete or not self.ran_twice:
+            return None
+        won: list[dict[str, int]] = [{} for _ in range(self._state.board_count)]
+        for operation in self._state.operations:
+            if isinstance(operation, ChipsPushing) and operation.board_index is not None:
+                paid = won[operation.board_index]
+                for i, amount in enumerate(operation.amounts):
+                    if amount:
+                        player = self.player_order[i]
+                        paid[player] = paid.get(player, 0) + amount
+        return [
+            {
+                "board": list(self.board(index)),
+                "winners": [
+                    {"player_id": p, "seat": self._seat_of[p], "amount": amount}
+                    for p, amount in sorted(paid.items(), key=lambda kv: self._seat_of[kv[0]])
+                ],
+            }
+            for index, paid in enumerate(won)
+        ]
+
+    def seat_of(self, player_id: str) -> int:
+        return self._seat_of[player_id]
+
+    def hole_cards(self, player_id: str) -> list[str]:
+        """The two cards dealt to ``player_id``, also after a fold (PokerKit drops those): hole
+        cards come first in the deck, one per player in dealing order, then a second round."""
+        i, n = self._index[player_id], len(self.player_order)
+        return [self.config.deck[i], self.config.deck[n + i]]
+
+    def cards_to_show(self, player_id: str) -> list[str]:
+        """The cards ``player_id`` may show the table once the hand is over (they were dealt in
+        and the table does not see them yet), or ``IllegalAction``."""
+        if not self.is_complete:
+            raise IllegalAction("hand_in_progress")
+        if player_id not in self._index:
+            raise IllegalAction("not_in_hand")
+        public = next(p for p in self.view_for(None)["players"] if p["player_id"] == player_id)
+        if public["cards"] and HIDDEN_CARD not in public["cards"]:
+            raise IllegalAction("already_shown")
+        return self.hole_cards(player_id)
+
+    def rabbit_cards(self) -> list[str]:
+        """The board cards a hand over before the river would have dealt next, burns skipped,
+        when the room shows them (``rabbit_hunt``). Only once the hand is complete."""
+        board = len(self.board())
+        if not self.config.rabbit_hunt or not self.is_complete or self.ran_twice or board == 5:
+            return []
+        rest = self.config.deck[self._drawn :]
+        cards: list[str] = []
+        position = 0
+        for street in (3, 1, 1)[{0: 0, 3: 1, 4: 2}[board] :]:
+            position += 1  # the burn card
+            cards += rest[position : position + street]
+            position += street
+        return cards
 
     def total_chips(self) -> int:
         # PokerKit's total pot already includes bets not yet collected.
@@ -214,7 +303,8 @@ class HandEngine:
         return winner if ranks == SEVEN_DEUCE_RANKS else None
 
     def showdown_hands(self) -> list[dict[str, Any]]:
-        """The made hand of each player whose cards are face up at a showdown, by seat.
+        """The made hand of each player whose cards are face up at a showdown, by board, then
+        by seat (``board`` 1, and 2 as well for a hand run twice).
 
         Empty unless the hand went to a showdown (two or more players never folded), so a win
         by folds, including a revealed 7-2 bluff, names nobody's hand. A player who mucked has
@@ -227,23 +317,25 @@ class HandEngine:
             return []
         state = self._state
         hands = []
-        for i, player in enumerate(self.player_order):
-            face_up = state.hole_card_statuses[i]
-            if not state.statuses[i] or not face_up or not all(face_up):
-                continue
-            made = state.get_hand(i, 0, 0)
-            if made is None:
-                continue
-            category = HandCategory(made.entry.label.name.lower())
-            hands.append(
-                {
-                    "player_id": player,
-                    "seat": self._seat_of[player],
-                    "category": str(category),
-                    "cards": ordered_hand(category, [card_code(c) for c in made.cards]),
-                }
-            )
-        return sorted(hands, key=lambda h: h["seat"])
+        for board in range(state.board_count):
+            for i, player in enumerate(self.player_order):
+                face_up = state.hole_card_statuses[i]
+                if not state.statuses[i] or not face_up or not all(face_up):
+                    continue
+                made = state.get_hand(i, board, 0)
+                if made is None:
+                    continue
+                category = HandCategory(made.entry.label.name.lower())
+                hands.append(
+                    {
+                        "player_id": player,
+                        "seat": self._seat_of[player],
+                        "board": board + 1,
+                        "category": str(category),
+                        "cards": ordered_hand(category, [card_code(c) for c in made.cards]),
+                    }
+                )
+        return sorted(hands, key=lambda h: (h["board"], h["seat"]))
 
     # ---- actions -----------------------------------------------------------------------
 
@@ -322,6 +414,7 @@ class HandEngine:
             raise IllegalAction("not_your_turn")
 
     def _draw(self, count: int) -> str:
+        self._drawn += count
         return "".join(next(self._deck) for _ in range(count))
 
     def _advance(self) -> None:
@@ -336,6 +429,10 @@ class HandEngine:
                 if not (self.config.bomb_pot > 0 and state.street_index == 0):
                     return
                 state.check_or_call()
+            elif state.can_select_runout_count():
+                # Everyone left picks the same count, so it is 2 exactly when the room runs
+                # it twice (PokerKit asks only when the board still has cards to come).
+                state.select_runout_count(2 if self.config.run_it_twice else None)
             elif state.can_deal_hole():
                 state.deal_hole(self._draw(1))
             elif state.can_burn_card():
@@ -373,6 +470,7 @@ class HandEngine:
             "ante": self.config.ante,
             "bomb_pot": self.config.bomb_pot,
             "board": list(self.board()),
+            "second_board": list(self.board(1)) if self.ran_twice else None,
             "pots": [
                 {
                     "amount": pot.amount,
@@ -412,6 +510,8 @@ class HandEngine:
                 "seven_deuce_bonus": self.config.seven_deuce_bonus,
                 "ante": self.config.ante,
                 "bomb_pot": self.config.bomb_pot,
+                "run_it_twice": self.config.run_it_twice,
+                "rabbit_hunt": self.config.rabbit_hunt,
             },
             "actions": [
                 {"player_id": a.player_id, "kind": str(a.kind), "amount": a.amount}
@@ -429,11 +529,7 @@ class HandEngine:
                 small_blind=raw["small_blind"],
                 big_blind=raw["big_blind"],
                 deck=tuple(raw["deck"]),
-                # Records written before rule #27 changed have no bonus.
-                seven_deuce_bonus=raw.get("seven_deuce_bonus", 0),
-                # Records written before antes and bomb pots have neither.
-                ante=raw.get("ante", 0),
-                bomb_pot=raw.get("bomb_pot", 0),
+                **{key: raw.get(key, default) for key, default in RECORD_DEFAULTS.items()},
             )
         )
         for a in record["actions"]:

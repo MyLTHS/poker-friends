@@ -1037,6 +1037,17 @@ components:
           maximum: 10000000
           default: 0
           description: Bắt buộc lớn hơn 0 khi `bomb_pot_every` lớn hơn 0 (không thì `validation_error` ở trường này).
+        run_it_twice:
+          type: boolean
+          default: false
+          description: |
+            Cược đã khép mà còn từ 2 người chưa bỏ, có người all-in và bài chung chưa đủ 5 lá: chia
+            phần còn lại 2 lần. Mỗi pot chia đôi (chip lẻ về board 1), nửa đầu theo board 1, nửa sau
+            theo board 2.
+        rabbit_hunt:
+          type: boolean
+          default: true
+          description: Ván kết thúc trước river thì cho xem các lá chung lẽ ra sẽ ra (chỉ để xem, không đổi chip).
         is_private:
           type: boolean
           default: false
@@ -1134,6 +1145,10 @@ components:
           minimum: 0
           maximum: 10000000
           description: Tính cả giá trị đang có (và đang chờ), phải lớn hơn 0 khi `bomb_pot_every` lớn hơn 0.
+        run_it_twice:
+          type: boolean
+        rabbit_hunt:
+          type: boolean
       additionalProperties: false
     JoinRoomRequest:
       type: object
@@ -1466,9 +1481,32 @@ components:
           type: array
           description: |
             Bộ bài của từng người còn ngửa bài sau showdown (như `hand.completed.payload.showdown`),
-            theo số ghế; `[]` nếu ván kết thúc vì mọi người bỏ bài (kể cả khi lật 7-2).
+            theo số ghế, mỗi board một lần khi ván chạy 2 lần (nên tối đa 18); `[]` nếu ván kết thúc vì
+            mọi người bỏ bài (kể cả khi lật 7-2).
+          maxItems: 18
           items:
             $ref: "./schema/common.schema.json#/$defs/ShowdownHand"
+        runouts:
+          description: Ván chạy 2 lần (`room.run_it_twice`) có hai board, mỗi board trả cho ai bao nhiêu (như `hand.completed.payload.runouts`); `null` nếu không.
+          anyOf:
+            - type: array
+              items:
+                $ref: "./schema/common.schema.json#/$defs/Runout"
+              minItems: 2
+              maxItems: 2
+            - type: "null"
+        rabbit_cards:
+          type: array
+          description: Ván kết thúc trước river ở phòng bật `rabbit_hunt` kèm các lá chung lẽ ra sẽ ra (như `hand.completed.payload.rabbit_cards`); `[]` nếu không.
+          items:
+            $ref: "./schema/common.schema.json#/$defs/Card"
+          maxItems: 5
+        shown_cards:
+          type: array
+          description: Bài người chơi tự ngửa cho cả bàn sau ván (`command.show_cards`), theo thứ tự ngửa.
+          items:
+            $ref: "./schema/common.schema.json#/$defs/ShownCards"
+          maxItems: 9
         prev_hand:
           description: Ván xong (không bị huỷ) ngay trước ván này trong phòng, theo số ván; `null` nếu không có. Không giới hạn trong 100 ván của danh sách.
           anyOf:
@@ -1479,7 +1517,7 @@ components:
           anyOf:
             - $ref: "#/components/schemas/HandLink"
             - type: "null"
-      required: [hand_id, hand_no, room_id, completed_at, steps, results, seven_deuce_winner, showdown, prev_hand, next_hand]
+      required: [hand_id, hand_no, room_id, completed_at, steps, results, seven_deuce_winner, showdown, runouts, rabbit_cards, shown_cards, prev_hand, next_hand]
       additionalProperties: false
     HandLink:
       type: object

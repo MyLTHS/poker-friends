@@ -19,6 +19,7 @@
         "8d",
         "Jc"
       ],
+      "second_board": null,
       "pots": [
         {
           "amount": 0,
@@ -109,6 +110,7 @@
       {
         "player_id": "1",
         "seat": 1,
+        "board": 1,
         "category": "high_card",
         "cards": [
           "Ah",
@@ -118,6 +120,8 @@
           "2c"
         ]
       }
-    ]
+    ],
+    "runouts": null,
+    "rabbit_cards": []
   }
 }

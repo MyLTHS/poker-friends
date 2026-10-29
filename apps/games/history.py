@@ -125,10 +125,10 @@ def adjacent_hands(hand: Hand) -> tuple[dict[str, int] | None, dict[str, int] | 
 
 def replay_steps(
     hand: Hand, viewer: str | None
-) -> tuple[list[dict[str, Any]], str | None, list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], str | None, HandEngine]:
     """Every state of ``hand`` as ``viewer`` saw it, from the deal to the end, the 7-2 bluff
-    winner by rule #27 (even when nobody had chips left to pay the bonus) and the hands named
-    at the showdown (the same for everyone: only cards shown to the whole table)."""
+    winner by rule #27 (even when nobody had chips left to pay the bonus) and the finished
+    engine (showdown, runouts, rabbit cards: the same for everyone, only public cards)."""
     engine = HandEngine.replay({"config": hand.config, "actions": []})
     seated = viewer if viewer in engine.player_order else None
     seats = _seats(hand)
@@ -156,7 +156,7 @@ def replay_steps(
         }
         steps.append({"action": applied, "hand": view()})
     winner = engine.seven_deuce_bluff_winner() if hand.config.get("seven_deuce_bonus") else None
-    return steps, winner, engine.showdown_hands()
+    return steps, winner, engine
 
 
 async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
@@ -170,7 +170,7 @@ async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
         return error("hand_voided", "This hand was voided by an admin.")
     viewer = str(user.pk) if user.is_authenticated else None
     # Replaying touches the ORM (hand.commands) and PokerKit: run it off the event loop.
-    steps, winner, showdown = await sync_to_async(replay_steps)(hand, viewer)
+    steps, winner, engine = await sync_to_async(replay_steps)(hand, viewer)
     prev_hand, next_hand = await sync_to_async(adjacent_hands)(hand)
 
     hand_net: dict[str, int] = defaultdict(int)
@@ -198,7 +198,10 @@ async def hand_replay(request: HttpRequest, hand_id: int) -> JsonResponse:
             "steps": steps,
             "results": results,
             "seven_deuce_winner": winner,
-            "showdown": showdown,
+            "showdown": engine.showdown_hands(),
+            "runouts": engine.runouts(),
+            "rabbit_cards": engine.rabbit_cards(),
+            "shown_cards": hand.shown_cards,
             "prev_hand": prev_hand,
             "next_hand": next_hand,
         }

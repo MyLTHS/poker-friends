@@ -747,6 +747,18 @@ export interface components {
              */
             bomb_pot_amount?: number;
             /**
+             * @description Cược đã khép mà còn từ 2 người chưa bỏ, có người all-in và bài chung chưa đủ 5 lá: chia
+             *     phần còn lại 2 lần. Mỗi pot chia đôi (chip lẻ về board 1), nửa đầu theo board 1, nửa sau
+             *     theo board 2.
+             * @default false
+             */
+            run_it_twice?: boolean;
+            /**
+             * @description Ván kết thúc trước river thì cho xem các lá chung lẽ ra sẽ ra (chỉ để xem, không đổi chip).
+             * @default true
+             */
+            rabbit_hunt?: boolean;
+            /**
              * @description Phòng private không hiện ở lobby; chỉ chủ phòng và người có link mời thấy.
              * @default false
              */
@@ -788,6 +800,8 @@ export interface components {
             bomb_pot_every?: number;
             /** @description Tính cả giá trị đang có (và đang chờ), phải lớn hơn 0 khi `bomb_pot_every` lớn hơn 0. */
             bomb_pot_amount?: number;
+            run_it_twice?: boolean;
+            rabbit_hunt?: boolean;
         };
         JoinRoomRequest: {
             invite_token: string;
@@ -954,9 +968,16 @@ export interface components {
             seven_deuce_winner: components["schemas"]["PlayerId"] | null;
             /**
              * @description Bộ bài của từng người còn ngửa bài sau showdown (như `hand.completed.payload.showdown`),
-             *     theo số ghế; `[]` nếu ván kết thúc vì mọi người bỏ bài (kể cả khi lật 7-2).
+             *     theo số ghế, mỗi board một lần khi ván chạy 2 lần (nên tối đa 18); `[]` nếu ván kết thúc vì
+             *     mọi người bỏ bài (kể cả khi lật 7-2).
              */
             showdown: components["schemas"]["ShowdownHand"][];
+            /** @description Ván chạy 2 lần (`room.run_it_twice`) có hai board, mỗi board trả cho ai bao nhiêu (như `hand.completed.payload.runouts`); `null` nếu không. */
+            runouts: components["schemas"]["Runout"][] | null;
+            /** @description Ván kết thúc trước river ở phòng bật `rabbit_hunt` kèm các lá chung lẽ ra sẽ ra (như `hand.completed.payload.rabbit_cards`); `[]` nếu không. */
+            rabbit_cards: components["schemas"]["Card"][];
+            /** @description Bài người chơi tự ngửa cho cả bàn sau ván (`command.show_cards`), theo thứ tự ngửa. */
+            shown_cards: components["schemas"]["ShownCards"][];
             /** @description Ván xong (không bị huỷ) ngay trước ván này trong phòng, theo số ván; `null` nếu không có. Không giới hạn trong 100 ván của danh sách. */
             prev_hand: components["schemas"]["HandLink"] | null;
             /** @description Ván xong (không bị huỷ) ngay sau ván này; `null` nếu không có. */
@@ -1017,6 +1038,10 @@ export interface components {
             bomb_pot_every: number;
             /** @description What everyone dealt in puts in for a bomb pot; above 0 whenever bomb_pot_every is. */
             bomb_pot_amount: components["schemas"]["Chips"];
+            /** @description All in before the river with the betting over (two or more players left): the rest of the board is dealt twice and each board decides half of every pot. */
+            run_it_twice: boolean;
+            /** @description A hand over before the river shows the board cards that would have come (hand.completed rabbit_cards). */
+            rabbit_hunt: boolean;
         };
         /**
          * PlayerId
@@ -1057,16 +1082,16 @@ export interface components {
          * @description A face-up card; never ??.
          */
         VisibleCard: string;
-        /** Pot */
-        Pot: {
-            amount: components["schemas"]["Chips"];
-            eligible: components["schemas"]["PlayerId"][];
-        };
         /**
          * Card
          * @description Rank (2-9, T, J, Q, K, A) then suit (c, d, h, s), e.g. As, 7h. A hidden card is ??.
          */
         Card: string;
+        /** Pot */
+        Pot: {
+            amount: components["schemas"]["Chips"];
+            eligible: components["schemas"]["PlayerId"][];
+        };
         /**
          * HandPlayer
          * @description One player in the hand as the receiver may see them. cards hold ?? for every card the receiver may not see; they are empty once the player folded.
@@ -1105,6 +1130,8 @@ export interface components {
             /** @description Above 0 for a bomb pot: what everyone dealt in put in. Such a hand has no blinds and no betting before the flop: the first decision is on the flop, from the left of the button. 0 for a normal hand. */
             bomb_pot: components["schemas"]["Chips"];
             board: components["schemas"]["VisibleCard"][];
+            /** @description The second board of a hand run twice (complete, 5 cards; the cards dealt before the all-in are on both boards), null otherwise. */
+            second_board: components["schemas"]["Card"][] | null;
             pots: components["schemas"]["Pot"][];
             players: components["schemas"]["HandPlayer"][];
             /** @description The player to act, or null when nobody is (hand complete). */
@@ -1182,13 +1209,37 @@ export interface components {
         HandCategory: "high_card" | "one_pair" | "two_pair" | "three_of_a_kind" | "straight" | "flush" | "full_house" | "four_of_a_kind" | "straight_flush";
         /**
          * ShowdownHand
-         * @description The made hand of one player whose cards are face up at the end of a showdown. Never for a player who folded or mucked, nor for a win by folds (a revealed 7-2 bluff included). cards are the best five, from the player's two cards and the board, most significant first (bigger groups, then higher ranks; the ace of a five-high straight last).
+         * @description The made hand of one player whose cards are face up at the end of a showdown. Never for a player who folded or mucked, nor for a win by folds (a revealed 7-2 bluff included). cards are the best five, from the player's two cards and the board, most significant first (bigger groups, then higher ranks; the ace of a five-high straight last). A hand run twice names each player once per board.
          */
         ShowdownHand: {
             player_id: components["schemas"]["PlayerId"];
             seat: components["schemas"]["SeatNumber"];
+            /** @description Which board the hand is made with: 1, or 2 for the second board of a hand run twice. */
+            board: number;
             category: components["schemas"]["HandCategory"];
             cards: components["schemas"]["VisibleCard"][];
+        };
+        /**
+         * Runout
+         * @description One board of a hand run twice and what it paid: half of every pot (an odd chip to the first board), to the best hand on this board among the players in that pot.
+         */
+        Runout: {
+            board: components["schemas"]["Card"][];
+            /** @description By seat; several players when they split. */
+            winners: {
+                player_id: components["schemas"]["PlayerId"];
+                seat: components["schemas"]["SeatNumber"];
+                amount: number;
+            }[];
+        };
+        /**
+         * ShownCards
+         * @description Two cards a player of the last finished hand chose to show the whole table (command.show_cards).
+         */
+        ShownCards: {
+            player_id: components["schemas"]["PlayerId"];
+            seat: components["schemas"]["SeatNumber"];
+            cards: components["schemas"]["Card"][];
         };
     };
     responses: {

@@ -96,6 +96,13 @@ def test_scripted_first_hand_reproduces_the_documented_fixtures(table, clock):
     [completed] = to(out, "spec", "hand.completed")
     assert completed["payload"] == fixture_payload("hand.completed.seven-deuce")
 
+    # An (a bot until now) opens the table and shows the cards they folded.
+    table.connect("an", "2")
+    show = json.loads((FIXTURES.parent.parent / "client/valid/command.show_cards.json").read_text())
+    out = table.receive("an", json.dumps(show))
+    [shown] = to(out, "spec", "cards.shown")
+    assert shown["payload"] == fixture_payload("cards.shown")
+
 
 def test_every_player_only_sees_their_own_hole_cards(table):
     out = start(table, ("lym", "1"), ("spec", None))

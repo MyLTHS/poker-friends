@@ -12,7 +12,7 @@ from dataclasses import asdict
 from django.db import transaction
 from django.utils import timezone
 
-from .engine.hand import HandEngine
+from .engine.hand import HandEngine, same_config
 from .engine.table import LedgerEntry as EngineLedgerEntry
 from .engine.table import LedgerKind as EngineLedgerKind
 from .models import Hand, LedgerEntry, LedgerKind, Room, User
@@ -48,7 +48,7 @@ def save_completed_hand(
             hand_no=hand_no,
             defaults={"button_seat": engine.config.button_seat, "config": config},
         )
-        if hand.config != config:
+        if not same_config(hand.config, config):
             raise HandPersistenceError("conflicting_hand")
         if hand.completed_at is not None:
             if hand.result != result:

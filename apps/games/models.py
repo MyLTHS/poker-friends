@@ -45,6 +45,11 @@ class Room(models.Model):
     # bomb_pot_amount, no blinds, no betting before the flop. 0 = no bomb pots.
     bomb_pot_every = models.PositiveIntegerField(default=0)
     bomb_pot_amount = models.PositiveIntegerField(default=0)
+    # All in before the river with the betting over: deal the rest of the board twice, each
+    # board deciding half of every pot.
+    run_it_twice = models.BooleanField(default=False)
+    # A hand won before the river shows the board cards that would have come (no chips move).
+    rabbit_hunt = models.BooleanField(default=True)
     # Chips a player gets on sitting down with nothing in this room, and again on a rebuy once
     # busted; each time a grant in the ledger. Left out: STARTING_STACK_BIG_BLINDS big blinds
     # (at most MAX_STARTING_STACK).
@@ -81,13 +86,15 @@ class Room(models.Model):
     def __str__(self) -> str:
         return self.name
 
-    def engine_rules(self) -> dict[str, int]:
+    def engine_rules(self) -> dict[str, int | bool]:
         """The room's house rules as ``TableSession`` keyword arguments."""
         return {
             "seven_deuce_bonus": self.seven_deuce_bonus,
             "ante": self.ante,
             "bomb_pot_every": self.bomb_pot_every,
             "bomb_pot_amount": self.bomb_pot_amount,
+            "run_it_twice": self.run_it_twice,
+            "rabbit_hunt": self.rabbit_hunt,
         }
 
     def save(self, *args, **kwargs):
@@ -240,6 +247,9 @@ class Hand(models.Model):
     # {"player_id": bluffer, "bonus": room's bonus then, "payments": [{"player_id", "amount"}],
     #  "total": sum of payments}. Written with the result (services.save_completed_hand).
     seven_deuce = models.JSONField(null=True, blank=True)
+    # Cards players chose to show the table after the hand (command.show_cards), in that order:
+    # [{"player_id", "seat", "cards"}].
+    shown_cards = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 

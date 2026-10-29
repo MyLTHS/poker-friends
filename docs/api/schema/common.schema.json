@@ -220,6 +220,22 @@
           },
           "maxItems": 5
         },
+        "second_board": {
+          "description": "The second board of a hand run twice (complete, 5 cards; the cards dealt before the all-in are on both boards), null otherwise.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Card"
+              },
+              "minItems": 5,
+              "maxItems": 5
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "pots": {
           "type": "array",
           "items": {
@@ -269,6 +285,7 @@
         "ante",
         "bomb_pot",
         "board",
+        "second_board",
         "pots",
         "players",
         "actor",
@@ -371,6 +388,14 @@
         "bomb_pot_amount": {
           "description": "What everyone dealt in puts in for a bomb pot; above 0 whenever bomb_pot_every is.",
           "$ref": "#/$defs/Chips"
+        },
+        "run_it_twice": {
+          "description": "All in before the river with the betting over (two or more players left): the rest of the board is dealt twice and each board decides half of every pot.",
+          "type": "boolean"
+        },
+        "rabbit_hunt": {
+          "description": "A hand over before the river shows the board cards that would have come (hand.completed rabbit_cards).",
+          "type": "boolean"
         }
       },
       "required": [
@@ -385,7 +410,9 @@
         "starting_stack",
         "ante",
         "bomb_pot_every",
-        "bomb_pot_amount"
+        "bomb_pot_amount",
+        "run_it_twice",
+        "rabbit_hunt"
       ],
       "additionalProperties": false
     },
@@ -672,7 +699,7 @@
     },
     "ShowdownHand": {
       "title": "ShowdownHand",
-      "description": "The made hand of one player whose cards are face up at the end of a showdown. Never for a player who folded or mucked, nor for a win by folds (a revealed 7-2 bluff included). cards are the best five, from the player's two cards and the board, most significant first (bigger groups, then higher ranks; the ace of a five-high straight last).",
+      "description": "The made hand of one player whose cards are face up at the end of a showdown. Never for a player who folded or mucked, nor for a win by folds (a revealed 7-2 bluff included). cards are the best five, from the player's two cards and the board, most significant first (bigger groups, then higher ranks; the ace of a five-high straight last). A hand run twice names each player once per board.",
       "type": "object",
       "properties": {
         "player_id": {
@@ -680,6 +707,12 @@
         },
         "seat": {
           "$ref": "#/$defs/SeatNumber"
+        },
+        "board": {
+          "description": "Which board the hand is made with: 1, or 2 for the second board of a hand run twice.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
         },
         "category": {
           "$ref": "#/$defs/HandCategory"
@@ -697,7 +730,82 @@
       "required": [
         "player_id",
         "seat",
+        "board",
         "category",
+        "cards"
+      ],
+      "additionalProperties": false
+    },
+    "Runout": {
+      "title": "Runout",
+      "description": "One board of a hand run twice and what it paid: half of every pot (an odd chip to the first board), to the best hand on this board among the players in that pot.",
+      "type": "object",
+      "properties": {
+        "board": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Card"
+          },
+          "minItems": 5,
+          "maxItems": 5
+        },
+        "winners": {
+          "description": "By seat; several players when they split.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "player_id": {
+                "$ref": "#/$defs/PlayerId"
+              },
+              "seat": {
+                "$ref": "#/$defs/SeatNumber"
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "player_id",
+              "seat",
+              "amount"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 9
+        }
+      },
+      "required": [
+        "board",
+        "winners"
+      ],
+      "additionalProperties": false
+    },
+    "ShownCards": {
+      "title": "ShownCards",
+      "description": "Two cards a player of the last finished hand chose to show the whole table (command.show_cards).",
+      "type": "object",
+      "properties": {
+        "player_id": {
+          "$ref": "#/$defs/PlayerId"
+        },
+        "seat": {
+          "$ref": "#/$defs/SeatNumber"
+        },
+        "cards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Card"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "player_id",
+        "seat",
         "cards"
       ],
       "additionalProperties": false
@@ -720,6 +828,9 @@
         "invalid_amount",
         "already_sitting_out",
         "not_sitting_out",
+        "hand_in_progress",
+        "not_in_hand",
+        "already_shown",
         "rate_limited",
         "room_suspended",
         "internal_error"

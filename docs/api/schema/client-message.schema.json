@@ -13,6 +13,9 @@
       "$ref": "messages/command.sit_in.schema.json"
     },
     {
+      "$ref": "messages/command.show_cards.schema.json"
+    },
+    {
       "$ref": "messages/resync.request.schema.json"
     },
     {

@@ -10,6 +10,7 @@ export type ServerMessage =
   | ActionAppliedMessage
   | TurnDeadlineMessage
   | HandCompletedMessage
+  | CardsShownMessage
   | SeatUpdatedMessage
   | RoomSuspendedMessage
   | RoomUpdatedMessage
@@ -121,6 +122,9 @@ export type RejectCode =
   | "invalid_amount"
   | "already_sitting_out"
   | "not_sitting_out"
+  | "hand_in_progress"
+  | "not_in_hand"
+  | "already_shown"
   | "rate_limited"
   | "room_suspended"
   | "internal_error";
@@ -137,7 +141,12 @@ export type ChatText = string;
  * Any message the client sends. The type field tells which one.
  */
 export type ClientMessage =
-  ActCommandMessage | SitOutCommandMessage | SitInCommandMessage | ResyncRequestMessage | ChatSendMessage;
+  | ActCommandMessage
+  | SitOutCommandMessage
+  | SitInCommandMessage
+  | ShowCardsCommandMessage
+  | ResyncRequestMessage
+  | ChatSendMessage;
 
 /**
  * Every WebSocket message, by direction. See docs/api/ws-protocol.md.
@@ -200,6 +209,14 @@ export interface RoomInfo {
    */
   bomb_pot_every: number;
   bomb_pot_amount: Chips2;
+  /**
+   * All in before the river with the betting over (two or more players left): the rest of the board is dealt twice and each board decides half of every pot.
+   */
+  run_it_twice: boolean;
+  /**
+   * A hand over before the river shows the board cards that would have come (hand.completed rabbit_cards).
+   */
+  rabbit_hunt: boolean;
 }
 /**
  * Who sits in a seat. stack is the room balance from the ledger: during a hand it is the balance before that hand; the live stack is in HandView.
@@ -227,6 +244,10 @@ export interface HandView {
    * @maxItems 5
    */
   board: VisibleCard[];
+  /**
+   * The second board of a hand run twice (complete, 5 cards; the cards dealt before the all-in are on both boards), null otherwise.
+   */
+  second_board: [Card, Card, Card, Card, Card, ...Card[]] | null;
   pots: Pot[];
   /**
    * @minItems 2
@@ -341,11 +362,21 @@ export interface HandCompletedMessage {
     results: [PlayerResult, PlayerResult, ...PlayerResult[]];
     seven_deuce: SevenDeuceAward | null;
     /**
-     * One row per player whose cards are face up after a showdown, by seat; [] when the hand was won by folds.
+     * One row per player whose cards are face up after a showdown, by seat, once per board when the hand was run twice (so up to 18); [] when the hand was won by folds.
      *
-     * @maxItems 9
+     * @maxItems 18
      */
     showdown: ShowdownHand[];
+    /**
+     * Both boards of a hand run twice, each with what it paid; null otherwise.
+     */
+    runouts: [Runout, Runout, ...Runout[]] | null;
+    /**
+     * Rabbit hunt (room.rabbit_hunt): for a hand over before the river, the board cards that would have come next, in order, burns skipped. Only to look at, no chips move; [] otherwise. Never sent before the hand is over.
+     *
+     * @maxItems 5
+     */
+    rabbit_cards: Card[];
   };
 }
 /**
@@ -394,17 +425,65 @@ export interface SevenDeucePayment {
   amount: number;
 }
 /**
- * The made hand of one player whose cards are face up at the end of a showdown. Never for a player who folded or mucked, nor for a win by folds (a revealed 7-2 bluff included). cards are the best five, from the player's two cards and the board, most significant first (bigger groups, then higher ranks; the ace of a five-high straight last).
+ * The made hand of one player whose cards are face up at the end of a showdown. Never for a player who folded or mucked, nor for a win by folds (a revealed 7-2 bluff included). cards are the best five, from the player's two cards and the board, most significant first (bigger groups, then higher ranks; the ace of a five-high straight last). A hand run twice names each player once per board.
  */
 export interface ShowdownHand {
   player_id: PlayerId;
   seat: SeatNumber;
+  /**
+   * Which board the hand is made with: 1, or 2 for the second board of a hand run twice.
+   */
+  board: number;
   category: HandCategory;
   /**
    * @minItems 5
    * @maxItems 5
    */
   cards: [VisibleCard, VisibleCard, VisibleCard, VisibleCard, VisibleCard, ...VisibleCard[]];
+}
+/**
+ * One board of a hand run twice and what it paid: half of every pot (an odd chip to the first board), to the best hand on this board among the players in that pot.
+ */
+export interface Runout {
+  /**
+   * @minItems 5
+   * @maxItems 5
+   */
+  board: [Card, Card, Card, Card, Card, ...Card[]];
+  /**
+   * By seat; several players when they split.
+   *
+   * @maxItems 9
+   */
+  winners: {
+    player_id: PlayerId;
+    seat: SeatNumber;
+    amount: number;
+  }[];
+}
+/**
+ * Notice (not a state event, version unchanged, not in a snapshot): a player of the hand hand_id showed their two cards to the whole table after it ended (command.show_cards). Kept with the hand's history (replay shown_cards).
+ */
+export interface CardsShownMessage {
+  protocol_version: ProtocolVersion;
+  type: "cards.shown";
+  room_id: RoomId;
+  hand_id: HandId;
+  version: Version;
+  server_time: ServerTime;
+  payload: ShownCards;
+}
+/**
+ * Two cards a player of the last finished hand chose to show the whole table (command.show_cards).
+ */
+export interface ShownCards {
+  player_id: PlayerId;
+  seat: SeatNumber;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  cards: [Card, Card, ...Card[]];
 }
 /**
  * State event: a seat changed (taken, left, sitting out or back, chips granted, connection). occupant null means the seat is now empty.
@@ -599,6 +678,17 @@ export interface SitInCommandMessage {
   protocol_version: ProtocolVersion;
   type: "command.sit_in";
   room_id: RoomId;
+  command_id: CommandId;
+  payload: {};
+}
+/**
+ * Command: show the sender's two cards to the whole table after the hand hand_id is over, until the next hand starts. Only for a player dealt into that hand whose cards the table does not see yet. Answered by cards.shown to everyone, or command.rejected (hand_in_progress, stale_hand, not_in_hand, already_shown).
+ */
+export interface ShowCardsCommandMessage {
+  protocol_version: ProtocolVersion;
+  type: "command.show_cards";
+  room_id: RoomId;
+  hand_id: HandId;
   command_id: CommandId;
   payload: {};
 }

@@ -55,6 +55,8 @@ function tableAt(replay: HandReplay, hand: HandView, me: string | null, roomName
       ante: 0,
       bomb_pot_every: 0,
       bomb_pot_amount: 0,
+      run_it_twice: false,
+      rabbit_hunt: false,
     },
     you: { player_id: me ?? "", seat: mySeat },
     seats: hand.players.map((p) => ({
