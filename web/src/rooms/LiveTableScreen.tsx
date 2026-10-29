@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Lock } from "lucide-react";
 
@@ -31,10 +32,13 @@ export function LiveTableScreen({ roomId, openInvite = false }: { roomId: number
   const [state, setState] = useState<"loading" | "ready" | { error: string }>("loading");
   const [detail, setDetail] = useState<RoomDetail | null>(null);
   // Read once: the ?moi=1 leaves the address bar at once, so a reload does not open it again.
+  // Through the router, not history.replaceState: Next keeps the rendered ?moi=1 page in the
+  // entry, and Back then Forward would open the sheet again.
+  const router = useRouter();
   const [inviteFirst] = useState(openInvite);
   useEffect(() => {
-    if (openInvite) window.history.replaceState(null, "", `/rooms/${roomId}/table`);
-  }, [openInvite, roomId]);
+    if (openInvite) router.replace(`/rooms/${roomId}/table`);
+  }, [openInvite, roomId, router]);
 
   // Who is there first: the snapshot would make a nameless visitor a guest with a random name.
   const known = me !== undefined && !needsName(me, guestsAllowed);
@@ -94,6 +98,7 @@ export function LiveTableScreen({ roomId, openInvite = false }: { roomId: number
         invite={invite}
         startWithInvite={inviteFirst}
         replayHref={(handId) => `/hands/${handId}`}
+        historyHref={`/rooms/${roomId}/history`}
       />
     );
   }

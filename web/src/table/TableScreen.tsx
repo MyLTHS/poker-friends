@@ -76,6 +76,8 @@ export type TableScreenProps = {
   startWithInvite?: boolean;
   /** Replay of a finished hand. */
   replayHref?: (handId: number) => string;
+  /** The room's win/loss page, linked from the top bar. */
+  historyHref?: string;
 };
 
 /** What the owner's sheet gets from the table. */
@@ -96,6 +98,7 @@ export function TableScreen({
   invite,
   startWithInvite = false,
   replayHref,
+  historyHref,
 }: TableScreenProps) {
   const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
   const refusal = useAuthRefusal(retry.final && !!retry.auth);
@@ -424,7 +427,7 @@ export function TableScreen({
                   Mất kết nối · đang thử lại
                 </span>
               ) : (
-                <MobileTools watchers={model.spectators.length} unread={unread} onChat={() => openDrawer(true)} owner={owner ? () => setDialog("owner") : undefined} onInvite={invite ? () => setDialog("invite") : undefined} onMore={() => setDialog("settings")} />
+                <MobileTools watchers={model.spectators.length} unread={unread} onChat={() => openDrawer(true)} owner={owner ? () => setDialog("owner") : undefined} onInvite={invite ? () => setDialog("invite") : undefined} historyHref={historyHref} onMore={() => setDialog("settings")} />
               )
             }
           />
@@ -527,6 +530,7 @@ export function TableScreen({
             onSitToggle={toggleSit}
             owner={owner ? { open: dialog === "owner", onOpen: () => setDialog("owner") } : undefined}
             onInvite={invite ? () => setDialog("invite") : undefined}
+            historyHref={historyHref}
             onSettings={() => setDialog("settings")}
             leave={isSeated ? leave : undefined}
           />
