@@ -6,7 +6,7 @@
 // socket (chat.send → chat.message).
 import Link from "next/link";
 import { memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ChartNoAxesColumn, ChevronLeft, Coffee, Crown, Eye, LogOut, Menu as MenuIcon, MessageCircle, MessageSquareText, Pause, Play, ScrollText, Send, Settings, Smile, UserPlus, X } from "lucide-react";
+import { ChartNoAxesColumn, ChevronLeft, Coffee, Crown, Eye, LogOut, Menu as MenuIcon, MessageCircle, MessageSquareText, Pause, Play, ScrollText, Send, Settings, Smile, UserPlus, Volume2, VolumeX, X } from "lucide-react";
 
 import type { ChatMessage, Spectator } from "@/api/protocol";
 import { Avatar, IconButton, Sheet, fmt } from "@/ui";
@@ -64,10 +64,22 @@ function WatchCount({ spectators }: { spectators: Spectator[] }) {
   );
 }
 
-export function TableTools({ onInvite, menu, spectators = [] }: { onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[] }) {
+/** Sound on/off in one tap (volume stays in the settings). */
+export type SoundToggle = { on: boolean; onToggle: () => void };
+
+function SoundButton({ sound, size }: { sound: SoundToggle; size: number }) {
+  return (
+    <IconButton label="Âm thanh" pressed={sound.on} onClick={sound.onToggle}>
+      {sound.on ? <Volume2 size={size} strokeWidth={1.9} aria-hidden /> : <VolumeX size={size} strokeWidth={1.9} aria-hidden />}
+    </IconButton>
+  );
+}
+
+export function TableTools({ onInvite, menu, spectators = [], sound }: { onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[]; sound?: SoundToggle }) {
   return (
     <>
       <WatchCount spectators={spectators} />
+      {sound && <SoundButton sound={sound} size={19} />}
       {onInvite && (
         <button type="button" className="tbar-btn" aria-haspopup="dialog" aria-label="Mời bạn" onClick={onInvite}>
           <UserPlus size={15} strokeWidth={1.9} aria-hidden />
@@ -207,11 +219,12 @@ export function MobileTableBar({ backHref, title, sub, right }: { backHref: stri
   );
 }
 
-export function MobileTools({ unread, onChat, onInvite, menu, spectators = [] }: { unread: number; onChat: () => void; onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[] }) {
+export function MobileTools({ unread, onChat, onInvite, menu, spectators = [], sound }: { unread: number; onChat: () => void; onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[]; sound?: SoundToggle }) {
   // id: the chat drawer gives focus back to this button when it closes
   return (
     <>
       <WatchCount spectators={spectators} />
+      {sound && <SoundButton sound={sound} size={18} />}
       <IconButton id="tbl-chat-btn" label="Chat" badge={unread > 0 ? unread : undefined} onClick={onChat}>
         <MessageCircle size={20} strokeWidth={1.9} aria-hidden />
       </IconButton>

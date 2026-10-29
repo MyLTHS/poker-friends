@@ -295,6 +295,7 @@ export function TableScreen({
     control: toggleRunning && { running, busy: controlBusy || !online, onToggle: toggleRunning },
   };
   const menu = { open: dialog === "menu", onOpen: () => setDialog("menu") };
+  const soundToggle = { on: sound.prefs.on, onToggle: () => sound.setPrefs({ ...sound.prefs, on: !sound.prefs.on }) };
   const pre = canPreAct(model) && !celebration ? (
     <PreActions device={device} choice={model.preAction?.kind ?? null} facingBet={facingBet(model)} disabled={!online} onChoose={(kind) => dispatch({ type: "pre.select", kind, commandId: newCommandId() })} />
   ) : null;
@@ -534,7 +535,7 @@ export function TableScreen({
                   Mất kết nối · đang thử lại
                 </span>
               ) : (
-                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} />
+                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} />
               )
             }
           />
@@ -655,7 +656,7 @@ export function TableScreen({
           </>
         }
         right={
-          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} />
+          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} />
         }
       />
       <div className={`table-area${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`} {...probe}>
