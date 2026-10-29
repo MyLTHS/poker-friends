@@ -269,14 +269,15 @@ class TestAtTheTable:
             spectator = await connect(room, watcher)
             started, _ = await started_hand(*conns.values(), spectator)
             folder = await fold_first(conns, room, started)
-            completed = by_type(await drain(conns[folder]), "hand.completed")[-1]
+            seen = await drain(conns[folder])  # hand.completed, then room.updated (the pause)
+            completed = by_type(seen, "hand.completed")[-1]
             assert len(completed["payload"]["rabbit_cards"]) == 5  # rabbit_hunt is on by default
             assert completed["payload"]["runouts"] is None
             await send_show(conns[folder], room, started["hand_id"])
             mine = await drain(conns[folder])
             [ack], [notice] = by_type(mine, "command.ack"), by_type(mine, "cards.shown")
-            # A notice: the room's version stays where hand.completed left it.
-            assert notice["version"] == completed["version"]
+            # A notice: the room's version stays where the last state event left it.
+            assert notice["version"] == seen[-1]["version"]
             assert ack["payload"]["result_version"] == notice["version"]
             shown = by_type(await drain(spectator), "cards.shown")[-1]
             assert shown["hand_id"] == started["hand_id"]
@@ -359,7 +360,7 @@ class TestAtTheTable:
             await send_show(conns[folder], room, started["hand_id"])
             assert by_type(await drain(conns[folder]), "cards.shown")
             table = await actor_module.get_actor(room.pk)
-            table._queue.put_nowait(actor_module._StartHand())  # skip the pause
+            table._queue.put_nowait(actor_module._StartHand(table._deal_epoch))  # skip the pause
             second, _ = await started_hand(*conns.values())
             assert second["hand_id"] != started["hand_id"]
             folder = await fold_first(conns, room, second, command_id="fold-second-1")

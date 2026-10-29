@@ -34,6 +34,7 @@ class Command(BaseCommand):
                 "big_blind": options["big_blind"],
                 "think_time_seconds": options["think_time"],
                 "seven_deuce_bonus": options["seven_deuce_bonus"],
+                "running": True,  # it has no owner to press Start
             },
         )
         verb = "Created" if created else "Reusing"

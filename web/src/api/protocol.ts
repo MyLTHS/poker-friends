@@ -217,6 +217,18 @@ export interface RoomInfo {
    * A hand over before the river shows the board cards that would have come (hand.completed rabbit_cards).
    */
   rabbit_hunt: boolean;
+  /**
+   * The break between two hands, in seconds (the result stays on the table).
+   */
+  hand_pause_seconds: number;
+  /**
+   * The owner pressed Start (and not Pause since): hands are dealt. A new room is paused.
+   */
+  running: boolean;
+  /**
+   * When the next hand will be dealt: the countdown after Start (or when a running room gets two players) or the pause after a hand. null when nothing is counting down; hand.started ends it.
+   */
+  next_hand_at: ServerTime | null;
 }
 /**
  * Who sits in a seat. stack is the room balance from the ledger: during a hand it is the balance before that hand; the live stack is in HandView.

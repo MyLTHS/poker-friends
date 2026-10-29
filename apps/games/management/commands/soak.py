@@ -31,8 +31,9 @@ from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 from apps.games import contract
 from apps.games.engine.hand import HandEngine
+from apps.games.management.commands._options import add_bomb_pot_arguments, bomb_pot_amount
 from apps.games.management.commands.create_demo_room import seat_guest_players
-from apps.games.models import MAX_SEATS, Hand, LedgerEntry, LedgerKind, Room
+from apps.games.models import MAX_SEATS, MIN_HAND_PAUSE, Hand, LedgerEntry, LedgerKind, Room
 
 # docs/api/ws-protocol.md section 4: these move ``version`` by exactly one.
 STATE_EVENTS = {
@@ -286,8 +287,8 @@ class Command(BaseCommand):
         parser.add_argument("--think-time", type=int, default=5)
         parser.add_argument("--seven-deuce-bonus", type=int, default=50)
         parser.add_argument("--ante", type=int, default=0)
-        parser.add_argument("--bomb-pot-every", type=int, default=0)
-        parser.add_argument("--bomb-pot-amount", type=int, default=0)
+        add_bomb_pot_arguments(parser)
+        parser.add_argument("--hand-pause", type=int, default=MIN_HAND_PAUSE, help="seconds")
         parser.add_argument("--run-it-twice", action="store_true")
         parser.add_argument("--reconnect", type=float, default=0.01, help="chance per message")
         parser.add_argument("--slow", type=float, default=0.03, help="chance to time out a turn")
@@ -304,7 +305,9 @@ class Command(BaseCommand):
             seven_deuce_bonus=options["seven_deuce_bonus"],
             ante=options["ante"],
             bomb_pot_every=options["bomb_pot_every"],
-            bomb_pot_amount=options["bomb_pot_amount"],
+            bomb_pot_amount=bomb_pot_amount(options, options["big_blind"]),
+            hand_pause_seconds=options["hand_pause"],
+            running=True,  # as if the owner had pressed Start: dealt after the countdown
             run_it_twice=options["run_it_twice"],
         )
         seated = seat_guest_players(room, options["players"], options["chips"])
