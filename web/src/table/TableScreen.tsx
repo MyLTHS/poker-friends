@@ -8,7 +8,7 @@ import "./table.css";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Coffee, Crown, Hourglass } from "lucide-react";
+import { Coffee, Coins, Crown, Hourglass } from "lucide-react";
 
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
 import { FeedbackDialog } from "@/feedback/FeedbackDialog";
@@ -44,6 +44,7 @@ import { useTableFx, type SeatPlace } from "./TableFx";
 import { SettingsModal, ShortcutHelp, SoundCues, useKeysPref, useTableSound } from "./TableSettings";
 import { globalCommand, isTyping } from "./shortcuts";
 import { useAuthRefusal } from "./authRefusal";
+import { noChipsText, offersRebuy } from "./rebuy";
 import { useTableSocket } from "./useTableSocket";
 
 const newCommandId = () => crypto.randomUUID();
@@ -68,6 +69,8 @@ export type TableScreenProps = {
   onTakeSeat?: (seat: number) => Promise<string | null>;
   /** Leave my seat (keep watching). */
   onLeaveSeat?: () => Promise<string | null>;
+  /** Out of chips: take the room's starting stack again ("Mua thêm"); resolves with an error text, or null. */
+  onRebuy?: () => Promise<string | null>;
   /** Room owner: renders the owner's sheet (rooms/OwnerPanel) over the table. */
   owner?: (slot: OwnerSlot) => ReactNode;
   /** "Mời bạn" in the top bar: renders the invite dialog (rooms/LiveTableScreen) over the table. */
@@ -94,6 +97,7 @@ export function TableScreen({
   loadChat,
   onTakeSeat,
   onLeaveSeat,
+  onRebuy,
   owner,
   invite,
   startWithInvite = false,
@@ -107,6 +111,7 @@ export function TableScreen({
   const [drawer, setDrawer] = useState(false);
   const [seen, setSeen] = useState(0);
   const [seatError, setSeatError] = useState<string | null>(null);
+  const [rebuying, setRebuying] = useState(false);
   const [dialog, setDialog] = useState<"owner" | "invite" | "settings" | "help" | "feedback" | null>(startWithInvite && invite ? "invite" : null);
   const sound = useTableSound();
   const [keysOn, setKeysOn] = useKeysPref();
@@ -339,15 +344,22 @@ export function TableScreen({
     </p>
   );
 
-  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, isOwner: !!owner });
-  // The owner seated with no chips grants them to themselves: the owner's sheet, one tap away.
-  // Not while their all-in is still being played; yes on a finished hand they lost it all in (the
+  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, canRebuy: !!onRebuy });
+  // Any seated player with no chips buys back in (the room's starting stack), owner included. Not
+  // while their all-in is still being played; yes on a finished hand they lost it all in (the
   // table keeps that hand on screen until the next one, which may never come heads-up).
-  const grantMine = owner && me && (me.stack ?? 0) === 0 && !inHand(you.player_id) ? () => setDialog("owner") : undefined;
-  const grantButton = (block: boolean) =>
-    grantMine && (
-      <Button kind="primary" block={block} icon={<Crown size={16} strokeWidth={2} aria-hidden />} onClick={grantMine}>
-        Cấp chip cho mình
+  const rebuy =
+    onRebuy && me && offersRebuy(table, me.stack ?? 0)
+      ? async () => {
+          setRebuying(true);
+          setSeatError(await onRebuy());
+          setRebuying(false);
+        }
+      : undefined;
+  const rebuyButton = (block: boolean) =>
+    rebuy && (
+      <Button kind="primary" block={block} busy={rebuying} disabled={!online} icon={<Coins size={16} strokeWidth={2} aria-hidden />} onClick={rebuy}>
+        Mua thêm
       </Button>
     );
 
@@ -389,7 +401,7 @@ export function TableScreen({
           {seatError && <span className="ip-error" role="alert">{seatError}</span>}
           <Spectators device="mobile" spectators={model.spectators} />
           <div className="ip-actions">
-            {grantButton(true)}
+            {rebuyButton(true)}
             {isSeated && (
               <Button kind="quiet" block icon={<Coffee size={16} />} onClick={toggleSit} aria-pressed={sittingOut} disabled={!online}>
                 {sittingOut ? "Quay lại chơi" : "Nghỉ ván sau"}
@@ -467,9 +479,9 @@ export function TableScreen({
                 từ thưởng 7-2
               </span>
             </span>
-          ) : grantMine && !seatError ? (
-            // before the winner's banner: busted, the owner's next move is to grant chips
-            grantButton(false)
+          ) : rebuy && !seatError ? (
+            // before the winner's banner: busted, the next move is to buy back in
+            rebuyButton(false)
           ) : idle.win ? (
             <span className="idle-msg">
               <Crown size={18} strokeWidth={2} />
@@ -631,7 +643,7 @@ function idleContent({
   sittingOut,
   clock,
   celebration,
-  isOwner,
+  canRebuy,
 }: {
   table: TableState;
   me: SeatView | undefined;
@@ -642,7 +654,8 @@ function idleContent({
   sittingOut: boolean;
   clock: TurnClock | undefined;
   celebration: boolean;
-  isOwner: boolean;
+  /** "Mua thêm" is offered (the live table; the mock server has none) */
+  canRebuy: boolean;
 }): Idle {
   const { hand, room } = table;
   const seated = table.seats.length;
@@ -665,12 +678,11 @@ function idleContent({
       winSub: shownSub || (showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined),
     };
   }
-  // Seated but not dealt in: say why (no chips, sitting out, or simply next hand).
+  // Seated but not dealt in: say why (no chips, sitting out, or simply next hand). A seat comes
+  // with the room's starting stack, so no chips means lost them all: "Mua thêm" sits next to it.
   const noChips = !!me && (me.stack ?? 0) === 0;
   const seatedWait = noChips
-    ? isOwner
-      ? "Chưa có chip" // the button "Cấp chip cho mình" sits right next to it
-      : "Chưa có chip — nhờ chủ phòng cấp chip"
+    ? noChipsText(canRebuy)
     : sittingOut
       ? "Đang nghỉ — bấm “Nghỉ ván sau” để quay lại"
       : "Bạn đã ngồi — vào từ ván sau";

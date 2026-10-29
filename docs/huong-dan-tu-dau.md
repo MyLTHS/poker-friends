@@ -124,52 +124,40 @@ bản trong lúc chạy; giữ 60 bản mới nhất).
 Thích gõ lệnh hơn? `scripts/play-online.sh up` làm đúng những việc trên, còn giữ máy thức và copy
 sẵn link; `scripts/play-online.sh status` cho xem lại link đang dùng.
 
-### 2.2. Tạo phòng
+### 2.2. Tạo bàn
 
-1. Mở link của buổi trên máy tính. Trang mở ra **Sảnh**.
-2. Lần đầu, tạo tài khoản chủ phòng (các buổi sau chỉ cần **Đăng nhập**):
-   - Trang đăng nhập: bấm **Đăng ký**, điền email, tên, mật khẩu. Xong là đã đăng nhập.
-   - Bấm **Sảnh** ở thanh trên, rồi **Tạo phòng**.
-3. Điền form tạo phòng:
-   - đặt tên, blind (ví dụ 10/20), số ghế, thời gian suy nghĩ;
-   - **thưởng 7-2** nếu muốn;
-   - chọn **Riêng** để chỉ người có link mời mới vào được.
-4. Bấm **Tạo phòng & lấy link mời**. Trang phòng hiện **link mời** và **mã QR**. Bấm **Chép
-   link** để copy.
+1. Mở link của buổi trên máy tính. Trang hỏi **Bạn tên gì?**: gõ tên, bấm **Vào chơi**. (Có tài
+   khoản rồi thì bấm **Đăng nhập** ngay dưới.)
+2. Ở **Sảnh**, bấm **Tạo bàn**. Tên bàn, blind (10/20) và **chip đầu vào** (mặc định 100 blind lớn)
+   đã điền sẵn; muốn đổi số ghế, giờ suy nghĩ, thưởng 7-2 hay bàn riêng thì mở **Thêm tuỳ chọn**.
+3. Bấm **Tạo bàn**. Bạn vào thẳng bàn chơi, khung **Mời bạn** mở sẵn **link mời** và **mã QR**.
+   Bấm **Chép link**.
 
 ### 2.3. Gửi bạn bè
 
-Dán **đoạn ở Phần 3** vào nhóm chat, thay `<LINK MỜI PHÒNG>` bằng link mời ở bước 2.2. Chỉ người có
-tài khoản mới vào được bàn, nhưng không ai phải chờ: bạn bè mở link mời, bấm **Đăng ký** là vào
-thẳng phòng. Ai đã có tài khoản thì mở link, **Đăng nhập** là vào.
+Dán **đoạn ở Phần 3** vào nhóm chat, thay `<LINK MỜI PHÒNG>` bằng link mời. Bạn bè mở link, gõ tên
+là vào bàn, không cần tài khoản.
 
-Link mời chứa link của buổi, nên **mỗi buổi phải lấy lại link mời**: đăng nhập, vào trang phòng cũ
-(Sảnh → phòng của bạn), bấm **Chép link**. Phòng, luật chơi và chip vẫn như buổi trước.
+Link mời chứa link của buổi, nên **mỗi buổi phải lấy lại link mời**: vào bàn cũ (Sảnh → bàn của
+bạn), bấm **Mời bạn** → **Chép link**. Link mời có mã bí mật: chỉ gửi trong nhóm kín.
 
-Link mời có mã bí mật: chỉ gửi trong nhóm kín.
+Có người tới muộn: bấm **Mời bạn** ngay trên bàn (trên điện thoại là biểu tượng người có dấu +)
+để chép link hoặc cho họ quét mã QR.
 
-Đang ở trong bàn chơi cũng lấy được link: bấm **Mời bạn** ở thanh trên cùng (trên điện thoại là
-biểu tượng người có dấu +). Bạn **Chép link** để gửi, hoặc mở **mã QR** cho bạn ngồi cạnh quét.
-Bạn bè chưa có tài khoản thì đăng ký ngay trên điện thoại là vào được.
+### 2.4. Ngồi vào bàn là có chip
 
-### 2.4. Ngồi vào bàn và cấp chip
+1. Bấm một **ghế trống** trên bàn. Ngồi xuống là có ngay **chip đầu vào** của bàn, không ai phải
+   chờ chủ phòng.
+2. Đủ **2 người có chip** là ván đầu tự chia. Các ván sau tự chia tiếp.
+3. Ai thua hết chip thì bấm **Mua thêm** để lấy lại chip đầu vào (khi đã ra khỏi ván đang chơi).
 
-1. Ở trang phòng, bấm **Ngồi đây** cạnh một ghế trống (hoặc **Vào bàn chơi** rồi **Ngồi vào**).
-2. Đợi bạn bè vào và **ngồi xuống ghế**. Chủ phòng chỉ cấp chip được cho người **đang ngồi**.
-3. Mở **Bảng chủ phòng**: trên máy tính là nút **Bảng chủ phòng** (có hình vương miện) ở đầu
-   trang phòng, cạnh **Vào bàn chơi**; trong bàn chơi và trên điện thoại là biểu tượng vương miện
-   ở thanh trên cùng. Ở mục **Người chơi & chip**, bấm **Cấp/trừ** cạnh từng người, rồi **Cấp
-   500** (hoặc gõ số khác). Nhớ cấp cho cả chính mình.
-4. Đủ **2 người có chip** là ván đầu tự chia. Các ván sau tự chia tiếp.
-
-Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip được.
+Chủ phòng vẫn cấp thêm hoặc trừ bớt chip cho từng người ở **Bảng chủ phòng** (biểu tượng vương
+miện trên thanh trên cùng), đổi blind hay chip đầu vào cũng ở đó.
 
 ### 2.5. Trong lúc chơi
 
 - **Không gập máy.** Màn hình tự tắt thì không sao.
 - Không tắt Docker Desktop, không ngắt Wi‑Fi, không cho máy cập nhật hay khởi động lại.
-- Có người tới muộn: bấm **Mời bạn** ngay trên bàn để chép link hoặc cho họ quét mã QR, không
-  cần rời bàn.
 - Ai gặp lỗi lạ thì nhắc họ bấm **Gửi phản hồi** (nút có ở mọi màn), hoặc nhắn bạn kèm giờ.
 
 ### 2.6. Hết buổi
@@ -191,7 +179,9 @@ Người đang trong ván thì đợi ván xong mới cấp hoặc trừ chip đ
    liệu lẫn bản sao lưu nằm cùng máy.
 
 Dữ liệu (tài khoản, phòng, chip, lịch sử) vẫn giữ nguyên khi tắt. Buổi sau bấm ▶ lại là có **link
-mới**: mọi người đăng nhập lại trên link mới là có lại hết phòng và chip.
+mới**: ai có tài khoản thì đăng nhập lại là có lại phòng và chip. Người chơi bằng tên khách thì
+trình duyệt quên họ khi đổi link; muốn giữ chip cho buổi sau, vào **Hồ sơ** nâng cấp thành tài
+khoản (email và mật khẩu) trước khi tắt.
 
 ---
 
@@ -201,12 +191,8 @@ mới**: mọi người đăng nhập lại trên link mới là có lại hết
 >
 > **1.** Mở link này (chỉ dùng tối nay): `<LINK MỜI PHÒNG>`
 > **2.** Điện thoại thì **xoay ngang** máy. Máy tính thì Chrome, Safari hay Edge đều được.
-> **3.** Lần đầu: bấm **Đăng ký** (email, tên, mật khẩu) là vào chơi luôn. Các buổi sau chỉ cần
->    **Đăng nhập**.
-> **4.** Vào phòng, bấm **Ngồi đây** cạnh một ghế trống.
-> **5.** Đợi mình cấp chip, rồi bấm **Vào bàn chơi** (hoặc **Về bàn**) là chơi.
->
-> Chip và lịch sử nằm trong tài khoản, chơi máy nào cũng được.
+> **3.** Gõ tên của bạn, bấm **Vào chơi**.
+> **4.** Bấm một ghế trống là có chip, đủ 2 người là chia bài. Hết chip thì bấm **Mua thêm**.
 >
 > Gặp gì lạ thì bấm **Gửi phản hồi** hoặc nhắn mình kèm giờ nhé!
 

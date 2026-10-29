@@ -1651,6 +1651,10 @@
     height: 40px;
     padding: 0 12px;
   }
+  .d1 .owner .os-stack .input {
+    height: 40px;
+    padding: 0 12px;
+  }
   .d1 .owner .quick-amts .qa {
     width: 44px;
     height: 40px;
@@ -1975,6 +1979,17 @@
     }
     .d1 .owner .os-link {
       grid-area: link;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 4px 8px;
+    }
+    /* "Đổi link" beside the link instead of on a row of its own (the starting stack took a row) */
+    .d1 .owner .os-link h4 {
+      grid-column: 1 / -1;
+    }
+    .d1 .owner .os-link .owner-inline .owner-hint {
+      display: none;
     }
     .d1 .owner .owner-two {
       grid-template-columns: 1fr;
@@ -1995,6 +2010,33 @@
       grid-column: 2;
       grid-row: 1 / span 2;
     }
+    /* the starting stack and the 7-2 switch (off) share a row, each label over its control: one
+       more row would push "Đóng phòng" under the screen. 7-2 on (amount, quick picks) takes the
+       whole row again, as before. */
+    .d1 .owner .owner-two {
+      grid-template-columns: 1fr 1fr;
+    }
+    .d1 .owner .owner-two > .owner-sec {
+      grid-column: 1 / -1;
+    }
+    .d1 .owner .owner-two > .os-stack,
+    .d1 .owner .owner-two > .os-seven:not(:has(.os-seven-row .input)) {
+      grid-column: auto;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      gap: 4px;
+    }
+    .d1 .owner .owner-two .os-stack .owner-hint {
+      display: none;
+    }
+    .d1 .owner .owner-two .os-stack .owner-hint.is-error {
+      display: block;
+      grid-row: auto;
+    }
+    .d1 .owner .owner-two .os-seven:not(:has(.os-seven-row .input)) .os-seven-row {
+      grid-column: 1;
+      grid-row: auto;
+    }
     .d1 .owner .owner-two .owner-hint {
       grid-column: 1;
       grid-row: 2;
@@ -2013,11 +2055,16 @@
       height: calc(100% + 2px);
       margin-block: -1px;
     }
-    .d1 .owner .blind-pair .input {
+    .d1 .owner .blind-pair .input,
+    .d1 .owner .os-stack .input {
       padding: 0;
     }
-    .d1 .owner .blind-pair .input input {
+    .d1 .owner .blind-pair .input input,
+    .d1 .owner .os-stack .input input {
       padding: 0 12px;
+    }
+    .d1 .owner .os-stack .input-trailing {
+      padding-right: 12px;
     }
     .d1 .owner .seg-item {
       height: 36px;
@@ -2060,6 +2107,7 @@
     }
     .d1 .owner .link-box,
     .d1 .owner .blind-pair .input,
+    .d1 .owner .os-stack .input,
     .d1 .owner .os-seven-row .input,
     .d1 .owner .quick-amts .qa {
       height: 44px;

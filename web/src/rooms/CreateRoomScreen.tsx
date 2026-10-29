@@ -13,14 +13,26 @@ import { Choices } from "./Choices";
 import { needsName, useMe, useOnline, usePhone } from "./hooks";
 import { NameGate } from "./NameGate";
 import { RoomsShell } from "./RoomsShell";
-import { checkRules, DEFAULT_RULES, SEAT_CHOICES, serverFieldErrors, SEVEN_CHOICES, THINK_CHOICES, type FieldErrors, type Rules } from "./rules";
+import {
+  checkRules,
+  DEFAULT_RULES,
+  SEAT_CHOICES,
+  serverFieldErrors,
+  SEVEN_CHOICES,
+  startingStackText,
+  THINK_CHOICES,
+  type FieldErrors,
+  type Rules,
+} from "./rules";
 
 /** The form keeps what the player typed (an empty box stays empty); `rules()` reads it. `name`
- *  null: not touched yet, the box shows "Bàn của <tên>". */
+ *  null: not touched yet, the box shows "Bàn của <tên>"; `starting` null: not touched yet, the box
+ *  follows the big blind (100 of them, like the server's default). */
 type Draft = {
   name: string | null;
   small_blind: string;
   big_blind: string;
+  starting: string | null;
   max_seats: number;
   think_time_seconds: number;
   sevenOn: boolean;
@@ -32,6 +44,7 @@ const DRAFT: Draft = {
   name: null,
   small_blind: String(DEFAULT_RULES.small_blind),
   big_blind: String(DEFAULT_RULES.big_blind),
+  starting: null,
   max_seats: DEFAULT_RULES.max_seats,
   think_time_seconds: DEFAULT_RULES.think_time_seconds,
   sevenOn: true,
@@ -41,6 +54,8 @@ const DRAFT: Draft = {
 
 const num = (text: string) => (text.trim() === "" ? NaN : Number(text));
 
+const startingText = (d: Draft) => startingStackText(d.starting, d.big_blind);
+
 function rules(d: Draft, name: string): Rules {
   return {
     name,
@@ -49,6 +64,7 @@ function rules(d: Draft, name: string): Rules {
     max_seats: d.max_seats,
     think_time_seconds: d.think_time_seconds,
     seven_deuce_bonus: d.sevenOn ? num(d.seven) : 0,
+    starting_stack: num(startingText(d)),
     is_private: d.is_private,
   };
 }
@@ -60,7 +76,7 @@ const digits = (text: string) => text.replace(/[^\d]/g, "").slice(0, 9);
 
 /**
  * /rooms/new — open a table (D1 "create-room"), as short as Poker Now's: a name (already filled
- * in), the blinds, "Tạo bàn". Seats, think time, the 7-2 bonus and who sees the room wait under
+ * in), the blinds, the chips each seat comes with (100 big blinds unless changed), "Tạo bàn". Seats, think time, the 7-2 bonus and who sees the room wait under
  * "Thêm tuỳ chọn" with their defaults. Then straight to the table, its "Mời bạn" sheet open.
  */
 export function CreateRoomScreen() {
@@ -126,8 +142,8 @@ export function CreateRoomScreen() {
             title="Đăng nhập để mở bàn"
             text={
               guestsAllowed === false
-                ? "Bàn chỉ dành cho thành viên: đăng nhập (hoặc đăng ký, xong là vào) để mở bàn."
-                : "Chủ phòng cần một tài khoản (chơi bằng khách cũng được) để cấp chip và quản lý bàn."
+                ? "Đăng nhập (hoặc đăng ký, xong là vào) để mở bàn."
+                : "Cần đăng nhập, hoặc gõ một cái tên để chơi bằng khách, rồi mới mở bàn."
             }
             actions={
               <ButtonLink kind="primary" href={loginPath("/rooms/new")} icon={<LogIn size={16} aria-hidden />}>
@@ -197,11 +213,11 @@ type FieldsProps = { draft: Draft; set: (patch: Partial<Draft>) => void; errors:
 
 function MainFields({ name, draft, set, errors, phone }: FieldsProps & { name: string }) {
   const id = useId();
-  const blindHint = errors.small_blind ?? (phone ? undefined : "Gợi ý cấp mỗi người 100 blind lớn = 2.000 chip.");
+  const blindHint = errors.small_blind;
   return (
     <div className="create-fields">
       <TextField
-        className="f-name"
+        className="span-2 f-name"
         label="Tên bàn"
         value={name}
         maxLength={100}
@@ -243,6 +259,17 @@ function MainFields({ name, draft, set, errors, phone }: FieldsProps & { name: s
           </span>
         )}
       </div>
+      <TextField
+        className="f-stack"
+        label="Chip đầu vào"
+        inputMode="numeric"
+        icon={<Chip denom={100} size={18} />}
+        trailing="chip / người"
+        value={startingText(draft)}
+        onChange={(e) => set({ starting: digits(e.target.value) })}
+        hint={phone ? undefined : "Ai ngồi vào ghế (và mỗi lần Mua thêm) nhận chừng này chip."}
+        error={errors.starting_stack}
+      />
     </div>
   );
 }

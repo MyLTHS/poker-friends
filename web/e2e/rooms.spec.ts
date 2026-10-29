@@ -43,6 +43,15 @@ test("lobby → create a table → at it with the invite link → a new visitor 
   await expect(an.getByLabel("Tên bàn")).toHaveValue("Bàn của Lan");
   await expect(an.getByRole("textbox", { name: "Blind nhỏ", exact: true })).toHaveValue("10");
   await expect(an.getByRole("textbox", { name: "Blind lớn", exact: true })).toHaveValue("20");
+  // "Chip đầu vào" follows the big blind (100 of them) until it is typed in.
+  const stack = an.getByRole("textbox", { name: "Chip đầu vào" });
+  const big = an.getByRole("textbox", { name: "Blind lớn", exact: true });
+  await expect(stack).toHaveValue("2000");
+  await big.fill("50");
+  await expect(stack).toHaveValue("5000");
+  await stack.fill("2000");
+  await big.fill("20");
+  await expect(stack).toHaveValue("2000");
   await expect(an.locator(".create-preview")).toHaveCount(0);
   await expect(an.getByRole("radio", { name: "6", exact: true })).toBeHidden();
   await an.getByLabel("Tên bàn").fill("Bàn E2E C4");
@@ -59,7 +68,7 @@ test("lobby → create a table → at it with the invite link → a new visitor 
   const shown = await created.getByTestId("invite-link").getAttribute("title");
   expect(shown).toMatch(/\/rooms\/join\?token=[\w-]+$/);
   const invite = new URL(shown!);
-  expect((await api(an, "GET", `/api/rooms/${roomId}/`)).room.max_seats).toBe(6);
+  expect((await api(an, "GET", `/api/rooms/${roomId}/`)).room).toMatchObject({ max_seats: 6, starting_stack: 2000 });
   await an.reload();
   await expect(an.locator("[data-hand]")).toBeVisible();
   await expect(created).toBeHidden();
@@ -157,19 +166,43 @@ test("a wrong invite link says so and leads back to the lobby", async ({ browser
   await expect(page).toHaveURL(/\/rooms$/);
 });
 
-test("the owner seated with no chips grants them to themselves from the bar", async ({ browser }) => {
+test("out of chips: any seated player buys back in with \"Mua thêm\"; the owner's self-grant button is gone", async ({ browser }) => {
   const owner = await newGuest(browser, "Minh");
-  const room = await api(owner, "POST", "/api/rooms/", { name: "Bàn E2E tự cấp", small_blind: 10, big_blind: 20, starting_stack: 800 });
+  const room = await api(owner, "POST", "/api/rooms/", { name: "Bàn E2E mua thêm", small_blind: 10, big_blind: 20, starting_stack: 800 });
   const roomId = room.room.room_id;
-  const seated = await api(owner, "POST", `/api/rooms/${roomId}/seats/`, { seat: 1 });
-  expect(seated.stack).toBe(800); // the chips come with the seat
-  await api(owner, "POST", `/api/rooms/${roomId}/chips/`, { player_id: seated.player_id, amount: -800 }); // all gone
+  const stackAt = async (seat: number) => (await api(owner, "GET", `/api/rooms/${roomId}/snapshot/`)).table.seats.find((s: { seat: number }) => s.seat === seat)?.stack;
+  // The owner sits (the chips come with the seat) and loses them all before anyone else sits, so
+  // no hand starts while the test sets up.
+  const mine = await api(owner, "POST", `/api/rooms/${roomId}/seats/`, { seat: 1 });
+  expect(mine.stack).toBe(800);
+  await api(owner, "POST", `/api/rooms/${roomId}/chips/`, { player_id: mine.player_id, amount: -800 });
+
+  const nga = await newGuest(browser, "Nga");
+  await api(nga, "POST", "/api/rooms/join/", { invite_token: room.invite_token });
+  const seated = await api(nga, "POST", `/api/rooms/${roomId}/seats/`, { seat: 2 });
+  expect(seated.stack).toBe(800);
+  // Still has chips: the server refuses a rebuy.
+  const csrf = (await nga.context().cookies(WEB)).find((c) => c.name === "csrftoken")?.value ?? "";
+  const early = await nga.request.post(`${WEB}/api/rooms/${roomId}/rebuy/`, { headers: { "X-CSRFToken": csrf, Referer: `${WEB}/`, Origin: WEB }, failOnStatusCode: false });
+  expect(early.status()).toBe(409);
+  expect(await early.json()).toMatchObject({ code: "has_chips" });
+
+  // Nga loses it all too (as if busted): the bar says so and offers "Mua thêm"; one tap gives the
+  // starting stack back.
+  await api(owner, "POST", `/api/rooms/${roomId}/chips/`, { player_id: seated.player_id, amount: -800 });
+  await nga.goto(`/rooms/${roomId}/table`);
+  await expect(nga.getByText("Hết chip — bấm Mua thêm").first()).toBeVisible();
+  await expect(nga.getByText(/nhờ chủ phòng/)).toHaveCount(0);
+  await nga.getByRole("button", { name: "Mua thêm" }).click();
+  await expect.poll(() => stackAt(2)).toBe(800);
+  await expect(nga.getByRole("button", { name: "Mua thêm" })).toHaveCount(0);
+
+  // The owner gets the same button, not "Cấp chip cho mình". Two players with chips: the hand
+  // deals at once, so the owner's stack is 800 less a blind.
   await owner.goto(`/rooms/${roomId}/table`);
-  await owner.getByRole("button", { name: "Cấp chip cho mình" }).click();
-  const row = owner.getByRole("dialog", { name: /Bảng chủ phòng/ }).getByRole("listitem").filter({ hasText: /Ghế 1/ });
-  await row.getByRole("button", { name: "Cấp/trừ" }).click();
-  await row.getByRole("button", { name: "Cấp 500" }).click();
-  await expect(row.locator(".op-stack")).toHaveText("500");
-  await owner.keyboard.press("Escape");
+  await expect(owner.getByRole("button", { name: "Mua thêm" })).toBeVisible();
   await expect(owner.getByRole("button", { name: "Cấp chip cho mình" })).toHaveCount(0);
+  await owner.getByRole("button", { name: "Mua thêm" }).click();
+  await expect.poll(() => stackAt(1)).toBeGreaterThanOrEqual(780);
+  await expect(owner.getByRole("button", { name: "Mua thêm" })).toHaveCount(0);
 });

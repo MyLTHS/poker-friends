@@ -25,6 +25,8 @@ const TEXT: Record<string, string> = {
   not_seated: "Người này không ngồi ở bàn.",
   negative_balance: "Không trừ được nhiều hơn số chip người đó đang có.",
   invalid_amount: "Số chip phải khác 0.",
+  has_chips: "Bạn vẫn còn chip, chưa cần mua thêm.",
+  room_suspended: "Bàn đang tạm dừng do lỗi server. Đợi một chút rồi thử lại.",
   seat_taken: "Ghế này có người rồi.",
   already_seated: "Bạn đang ngồi một ghế khác rồi.",
   invalid_seat: "Ghế không hợp lệ.",

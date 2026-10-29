@@ -98,7 +98,7 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
 
   const ledger =
     summary.length === 0 ? (
-      <EmptyState title="Chưa ai được cấp chip" text="Chủ phòng cấp chip cho người ngồi vào bàn, rồi lời/lỗ hiện ở đây." />
+      <EmptyState title="Chưa ai ngồi vào bàn" text="Ai bấm một ghế trống là có chip đầu vào; lời/lỗ của họ hiện ở đây." />
     ) : phone ? (
       <ul className="m-ledger">
         {summary.map((r) => (

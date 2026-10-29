@@ -57,6 +57,8 @@ export function createRoomsApi(
     join: (token: string) => request<RoomDetail>("POST", "/api/rooms/join/", { invite_token: token }),
     grantChips: (id: number, body: Schemas["GrantChipsRequest"]) =>
       request<Schemas["GrantChipsResult"]>("POST", room(id, "chips/"), body),
+    /** Out of chips, not in the running hand: take the room's starting stack again. */
+    rebuy: (id: number) => request<Schemas["GrantChipsResult"]>("POST", room(id, "rebuy/")),
     kick: (id: number, playerId: string) => request<void>("POST", room(id, "kick/"), { player_id: playerId }),
     close: (id: number) => request<RoomDetail>("POST", room(id, "close/")),
     rotateInvite: (id: number) => request<RoomDetail>("POST", room(id, "invite/")),

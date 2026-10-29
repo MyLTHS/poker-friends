@@ -27,6 +27,7 @@ describe("createRoomsApi", () => {
       [() => api.update(7, { big_blind: 4 }), "PATCH", "/api/rooms/7/", { big_blind: 4 }],
       [() => api.join("abc"), "POST", "/api/rooms/join/", { invite_token: "abc" }],
       [() => api.grantChips(7, { player_id: "3", amount: 50 }), "POST", "/api/rooms/7/chips/", { player_id: "3", amount: 50 }],
+      [() => api.rebuy(7), "POST", "/api/rooms/7/rebuy/", undefined],
       [() => api.kick(7, "3"), "POST", "/api/rooms/7/kick/", { player_id: "3" }],
       [() => api.close(7), "POST", "/api/rooms/7/close/", undefined],
       [() => api.rotateInvite(7), "POST", "/api/rooms/7/invite/", undefined],
