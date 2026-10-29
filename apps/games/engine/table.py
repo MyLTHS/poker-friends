@@ -142,15 +142,22 @@ class TableSession:
 
     # ---- hands -------------------------------------------------------------------------
 
-    def start_hand(self) -> HandEngine:
-        if self.current_hand is not None:
-            raise TableError("hand_in_progress")
+    def _eligible(self) -> list[Seat]:
+        """Who would be dealt in now: seated, not sitting out, with chips."""
         stacks = self.stacks
-        eligible = [
+        return [
             Seat(seat=seat, player_id=player, stack=stacks.get(player, 0))
             for seat, player in sorted(self.seats.items())
             if player not in self.sitting_out and stacks.get(player, 0) > 0
         ]
+
+    def can_start_hand(self) -> bool:
+        return self.current_hand is None and len(self._eligible()) >= 2
+
+    def start_hand(self) -> HandEngine:
+        if self.current_hand is not None:
+            raise TableError("hand_in_progress")
+        eligible = self._eligible()
         if len(eligible) < 2:
             raise TableError("not_enough_players")
 

@@ -14,6 +14,7 @@ from django.db import transaction
 from apps.games.engine.cards import shuffled_deck
 from apps.games.engine.simulate import random_action
 from apps.games.engine.table import TableSession
+from apps.games.management.commands._options import add_bomb_pot_arguments, bomb_pot_amount
 from apps.games.models import Hand, HandCommand, LedgerEntry, LedgerKind, Room, RoomSeat, User
 from apps.games.services import save_completed_hand
 
@@ -28,8 +29,7 @@ class Command(BaseCommand):
         parser.add_argument("--chips", type=int, default=200)
         parser.add_argument("--seven-deuce-bonus", type=int, default=0)
         parser.add_argument("--ante", type=int, default=0)
-        parser.add_argument("--bomb-pot-every", type=int, default=0)
-        parser.add_argument("--bomb-pot-amount", type=int, default=0)
+        add_bomb_pot_arguments(parser)
         parser.add_argument("--run-it-twice", action="store_true")
         parser.add_argument("--seed", type=int, default=0)
         parser.add_argument(
@@ -53,7 +53,7 @@ class Command(BaseCommand):
                 seven_deuce_bonus=options["seven_deuce_bonus"],
                 ante=options["ante"],
                 bomb_pot_every=options["bomb_pot_every"],
-                bomb_pot_amount=options["bomb_pot_amount"],
+                bomb_pot_amount=bomb_pot_amount(options, big_blind=2),
                 run_it_twice=options["run_it_twice"],
             )
             session = TableSession(

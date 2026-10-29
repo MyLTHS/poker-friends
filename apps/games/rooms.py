@@ -20,7 +20,9 @@ from apps.accounts.views import client_ip
 from . import actor as actor_module
 from .accounts import player_for_request
 from .models import (
+    MAX_HAND_PAUSE,
     MAX_STARTING_STACK,
+    MIN_HAND_PAUSE,
     Hand,
     OwnerAction,
     Room,
@@ -105,6 +107,7 @@ SETTING_RULES = {
     "bomb_pot_amount": (int, 0, MAX_STARTING_STACK),
     "run_it_twice": (bool, None, None),
     "rabbit_hunt": (bool, None, None),
+    "hand_pause_seconds": (int, MIN_HAND_PAUSE, MAX_HAND_PAUSE),
     "is_private": (bool, None, None),
 }
 
@@ -186,6 +189,9 @@ def room_info(room: Room) -> dict[str, Any]:
         "bomb_pot_amount": room.bomb_pot_amount,
         "run_it_twice": room.run_it_twice,
         "rabbit_hunt": room.rabbit_hunt,
+        "hand_pause_seconds": room.hand_pause_seconds,
+        "running": room.running,
+        "next_hand_at": None,  # no actor, so nothing scheduled
     }
 
 
@@ -365,6 +371,31 @@ async def grant_chips(request: HttpRequest, room_id: int) -> JsonResponse:
         return _reject_response(reject)
     await log_action(room, user, OwnerAction.Kind.GRANT, {"player_id": player_id, "amount": amount})
     return JsonResponse({"player_id": player_id, "amount": amount, "balance": balance})
+
+
+async def start(request: HttpRequest, room_id: int) -> JsonResponse:
+    """The owner's Start: hands are dealt (after a countdown) until Pause. Already running:
+    nothing changes."""
+    return await _start_or_pause(request, room_id, start=True)
+
+
+async def pause(request: HttpRequest, room_id: int) -> JsonResponse:
+    """The owner's Pause: the countdown stops, a running hand is played out, then no new one.
+    Already paused: nothing changes."""
+    return await _start_or_pause(request, room_id, start=False)
+
+
+async def _start_or_pause(request: HttpRequest, room_id: int, start: bool) -> JsonResponse:
+    owned = await _owned_room(request, room_id)
+    if isinstance(owned, JsonResponse):
+        return owned
+    room, _ = owned
+    live = await actor_module.get_actor(room.pk)
+    try:
+        info = await (live.start() if start else live.pause())
+    except actor_module.Reject as reject:
+        return _reject_response(reject)
+    return JsonResponse(info)
 
 
 async def kick(request: HttpRequest, room_id: int) -> JsonResponse:

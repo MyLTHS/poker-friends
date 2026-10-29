@@ -256,7 +256,8 @@ Ví dụ đầy đủ: [giữa hai ván](fixtures/server/valid/table.snapshot.be
     "room": {"room_id": 1, "name": "Bàn bạn bè", "status": "playing", "max_seats": 9,
              "small_blind": 5, "big_blind": 10, "think_time_seconds": 20, "seven_deuce_bonus": 50,
              "starting_stack": 1000, "ante": 0, "bomb_pot_every": 0, "bomb_pot_amount": 0,
-             "run_it_twice": false, "rabbit_hunt": true},
+             "run_it_twice": false, "rabbit_hunt": true, "hand_pause_seconds": 10,
+             "running": true, "next_hand_at": null},
     "you": {"player_id": "1", "seat": 1},
     "seats": [
       {"seat": 1, "player_id": "1", "display_name": "Lym", "stack": 1000, "sitting_out": false, "connected": true},
@@ -484,6 +485,21 @@ cấu hình cũ**; sự kiện này được phát khi cấu hình mới bắt �
 trong DB nên không mất khi server khởi động lại. Đóng phòng giữa ván cũng chờ ván xong; sau đó `room.status` là
 `"closed"`, server không chia ván mới, vào ghế bị từ chối `room_closed`.
 
+**Bắt đầu, đếm ngược, nghỉ giữa ván, tạm dừng.** Bàn chỉ chia bài khi `room.running` (chủ phòng bấm
+Bắt đầu, `POST /api/rooms/{id}/start/`; phòng mới thì tạm dừng). `room.next_hand_at` là lúc ván tới
+được chia; mỗi lần nó đổi, cả bàn nhận `room.updated`:
+- Đang chạy, không có ván, có người đang xem bàn và từ 2 người chơi được (có chip, không nghỉ):
+  đếm ngược **10 giây** rồi chia. Xảy ra khi bấm Bắt đầu, khi người thứ hai ngồi xuống (hoặc có chip,
+  hoặc quay lại), và khi server vừa khởi động lại.
+- Hết một ván: nghỉ `room.hand_pause_seconds` giây (6–20, mặc định 10, chủ phòng chọn) rồi chia ván sau. Không
+  có gì làm ván sau tới sớm hơn.
+- Tới giờ mà không còn đủ người: không chia, `next_hand_at: null` (`room.updated`); đủ người lại thì
+  đếm 10 giây lại.
+- `hand.started` là hết đếm (không có `room.updated` riêng cho việc này): từ đó `next_hand_at` cũ
+  không còn nghĩa, snapshot trả `null`.
+- Tạm dừng (`POST .../pause/`): `running: false`, huỷ đếm ngược (`next_hand_at: null`); ván đang
+  dở vẫn chơi hết, sau đó không chia tiếp.
+
 ```json
 {
   "protocol_version": 1, "type": "room.updated", "room_id": 1, "hand_id": null,
@@ -492,7 +508,8 @@ trong DB nên không mất khi server khởi động lại. Đóng phòng giữa
               "small_blind": 10, "big_blind": 20, "think_time_seconds": 30,
               "seven_deuce_bonus": 50, "starting_stack": 1000, "ante": 0,
               "bomb_pot_every": 0, "bomb_pot_amount": 0, "run_it_twice": false,
-              "rabbit_hunt": true}}
+              "rabbit_hunt": true, "hand_pause_seconds": 10, "running": true,
+              "next_hand_at": "2026-10-27T15:10:10.000Z"}}
 }
 ```
 
@@ -597,7 +614,8 @@ Không phải lệnh (không đổi gì trên bàn) nên không có `command_id`
 Góc nhìn Lym, ván ví dụ ở mục 8 (`v` = `version`):
 
 ```
-← table.snapshot  v11  (vừa kết nối, chưa có ván)
+← table.snapshot  v10  (vừa kết nối, chưa có ván, phòng đang chạy)
+← room.updated    v11  (đủ 2 người: next_hand_at = 10 giây nữa)
 ← hand.started    v12  (Lym thấy 7h 2c)
 ← turn.deadline   v13  (lượt Lym, 20 giây)
 → command.act     raise 30, command_id A

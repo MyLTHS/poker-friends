@@ -40,7 +40,9 @@ class FakeSession(dict):
 
 @pytest.fixture(autouse=True)
 def _slow_next_hand(monkeypatch):
-    # Keep the next hand from starting inside an assertion window; tests that want it lower it.
+    # The first hand without the 10 s countdown, but keep the next hand from starting inside an
+    # assertion window; tests that want it lower it.
+    monkeypatch.setattr(actor_module.TableActor, "start_countdown", 0)
     monkeypatch.setattr(actor_module.TableActor, "next_hand_delay", 60)
     yield
     actor_module._actors.clear()
@@ -57,7 +59,9 @@ def run_async(body) -> None:
 
 
 def make_room(**kwargs) -> Room:
+    # Running, as if the owner had pressed Start (a new room is paused: test_start_countdown).
     defaults = {"name": "T", "small_blind": 1, "big_blind": 2, "think_time_seconds": 30}
+    defaults |= {"running": True}
     defaults.update(kwargs)
     return Room.objects.create(**defaults)
 

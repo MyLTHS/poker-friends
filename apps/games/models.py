@@ -14,6 +14,8 @@ MAX_SEATS = 9
 # table of rebuys far below what a ledger amount (a 32-bit integer) can hold.
 STARTING_STACK_BIG_BLINDS = 100
 MAX_STARTING_STACK = 10_000_000
+# Seconds between two hands the owner may pick (Room.hand_pause_seconds).
+MIN_HAND_PAUSE, MAX_HAND_PAUSE = 6, 20
 
 
 class User(AbstractUser):
@@ -35,6 +37,12 @@ class Room(models.Model):
     small_blind = models.PositiveIntegerField()
     big_blind = models.PositiveIntegerField()
     think_time_seconds = models.PositiveIntegerField(default=30)
+    # The break between two hands, in seconds: the result stays on the table (the web's end of
+    # hand animations take up to about 5.5 s, hence at least 6).
+    hand_pause_seconds = models.PositiveSmallIntegerField(default=10)
+    # Hands are dealt only while the owner has the room running (Start / Pause); kept here so a
+    # restart does not change it. A new room, and every room from before this, starts paused.
+    running = models.BooleanField(default=False)
     # Fixed chip bonus every other seated player (sit-out included) owes a player who wins the
     # pot holding a 7 and a 2 (any suits) because everyone else folded: a successful bluff, a
     # walk included; never at showdown (spec.md #27). 0 means the room has no seven-deuce bonus.
@@ -80,6 +88,12 @@ class Room(models.Model):
             models.CheckConstraint(
                 condition=models.Q(bomb_pot_every=0) | models.Q(bomb_pot_amount__gt=0),
                 name="room_bomb_pot_has_an_amount",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    hand_pause_seconds__gte=MIN_HAND_PAUSE, hand_pause_seconds__lte=MAX_HAND_PAUSE
+                ),
+                name="room_hand_pause_between_6_and_20",
             ),
         ]
 

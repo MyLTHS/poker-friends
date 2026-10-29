@@ -30,6 +30,8 @@ urlpatterns = [
     path("api/rooms/<int:room_id>/chips/", rooms.grant_chips),
     path("api/rooms/<int:room_id>/kick/", rooms.kick),
     path("api/rooms/<int:room_id>/close/", rooms.close),
+    path("api/rooms/<int:room_id>/start/", rooms.start),
+    path("api/rooms/<int:room_id>/pause/", rooms.pause),
     path("api/rooms/<int:room_id>/invite/", rooms.rotate_invite),
     path("api/rooms/<int:room_id>/chat/", history.chat_history),
     path("api/rooms/<int:room_id>/hands/", history.list_hands),
