@@ -79,8 +79,11 @@ test("pre-actions play a hand to the showdown; the hand is named on the table an
     await expect(p.locator(".board .pc.is-hi").first()).toBeVisible();
   }
   await shot(button, "showdown-desktop");
-  await button.getByRole("tab", { name: /Nhật ký/ }).click();
-  await expect(button.locator(".log li").filter({ hasText: /^Lật bài: .+ — / }).first()).toBeVisible();
+  await button.getByRole("button", { name: "Menu", exact: true }).click();
+  await button.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Nhật ký ván" }).click();
+  const log = button.getByRole("dialog", { name: "Nhật ký ván" });
+  await expect(log.locator(".log li").filter({ hasText: /^Lật bài: .+ — / }).first()).toBeVisible();
+  await button.keyboard.press("Escape");
 
   // The replay of that hand names it too; after a second hand it steps to it and back.
   const firstId = (await api(owner.page, "GET", `/api/rooms/${id}/hands/`)).hands[0].hand_id;
@@ -139,7 +142,8 @@ test("pre-actions play a hand to the showdown; the hand is named on the table an
     if (where === "desktop") await expect(page.getByRole("link", { name: "Huỷ" })).toHaveAttribute("aria-label", "Huỷ"); // the phone goes back from its bar
     await expect(page.getByRole("button", { name: "Tạo bàn" })).toHaveAttribute("aria-label", "Tạo bàn");
     await page.goto(`/rooms/${id}/table`);
-    await page.getByRole("button", { name: "Bảng chủ phòng" }).click();
+    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await page.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Bảng chủ phòng" }).click();
     await expect(page.getByRole("button", { name: "Đóng phòng" })).toHaveAttribute("aria-label", "Đóng phòng");
     await page.context().close();
   }

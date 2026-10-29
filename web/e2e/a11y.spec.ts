@@ -54,13 +54,63 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
   expect(fold, `Tab order: ${order.join(" | ")}`).toBeGreaterThanOrEqual(0);
   expect(chat === -1 || fold < chat, `Tab order: ${order.join(" | ")}`).toBeTruthy();
 
-  // The owner's sheet, settings and key help on the desktop table.
-  await owner.page.getByRole("button", { name: "Bảng chủ phòng" }).click();
+  // The top bar keeps only the lobby, the room, "Mời bạn" and ☰; the column is the chat alone.
+  const bar = owner.page.locator(".tbar");
+  await expect(bar.getByRole("button")).toHaveCount(2);
+  await expect(bar.getByRole("button", { name: "Mời bạn" })).toBeVisible();
+  await expect(owner.page.getByRole("tab")).toHaveCount(0);
+  await expect(owner.page.getByRole("complementary", { name: "Chat" }).getByRole("textbox", { name: "Tin nhắn" })).toBeVisible();
+
+  // The ☰ menu: the seated owner's items; Esc closes it and the focus is back on ☰.
+  const menuButton = owner.page.getByRole("button", { name: "Menu", exact: true });
+  const menu = owner.page.getByRole("dialog", { name: "Menu" });
+  await menuButton.click();
+  await expect(menu).toBeVisible();
+  await expect(menuButton).toHaveAttribute("aria-expanded", "true");
+  await expect(menu).toContainText(/\d+ đang xem/);
+  const items = await menu.locator(".tmenu-item").allTextContents();
+  expect(items.map((t) => t.trim())).toEqual(["Nghỉ ván sau", "Bảng chủ phòng", "Nhật ký ván", "Lời / lỗ", "Cài đặt", "Góp ý", "Rời ghế"]);
+  await expect(menu.getByRole("link", { name: "Lời / lỗ" })).toHaveAttribute("href", `/rooms/${id}/history`);
+  await settled(owner.page);
+  await audit(owner.page, "menu bàn");
+  await owner.page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(menuButton).toBeFocused();
+  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+
+  // The friend is not the owner: no owner's sheet. "Nhật ký ván" opens the hand log in a sheet;
+  // closing it gives the focus back to ☰. "Nghỉ ván sau" from the menu turns into "Quay lại bàn".
+  const friendMenu = friend.page.getByRole("dialog", { name: "Menu" });
+  await friend.page.getByRole("button", { name: "Menu", exact: true }).click();
+  await expect(friendMenu.getByRole("button", { name: "Bảng chủ phòng" })).toHaveCount(0);
+  await friendMenu.getByRole("button", { name: "Nhật ký ván" }).click();
+  const log = friend.page.getByRole("dialog", { name: "Nhật ký ván" });
+  // the log starts when this page joined, mid-hand: maybe nothing yet, then it says so
+  await expect(log.locator(".log li, .log-empty").first()).toBeVisible();
+  await expect(log.locator(".plist-row")).toHaveCount(2);
+  await friend.page.keyboard.press("Escape");
+  await expect(log).toBeHidden();
+  await expect(friend.page.getByRole("button", { name: "Menu", exact: true })).toBeFocused();
+  await friend.page.getByRole("button", { name: "Menu", exact: true }).click();
+  await friendMenu.getByRole("button", { name: "Nghỉ ván sau" }).click();
+  await expect(friendMenu).toBeHidden();
+  await friend.page.getByRole("button", { name: "Menu", exact: true }).click();
+  await expect(friendMenu.getByRole("button", { name: "Quay lại bàn" })).toBeVisible();
+  await friendMenu.getByRole("button", { name: "Quay lại bàn" }).click();
+  await friend.page.getByRole("button", { name: "Menu", exact: true }).click();
+  await expect(friendMenu.getByRole("button", { name: "Nghỉ ván sau" })).toBeVisible();
+  await friend.page.keyboard.press("Escape");
+
+  // The owner's sheet, settings and key help on the desktop table, each from the menu.
+  await menuButton.click();
+  await menu.getByRole("button", { name: "Bảng chủ phòng" }).click();
   await expect(owner.page.getByRole("dialog", { name: /Bảng chủ phòng/ })).toBeVisible();
   await settled(owner.page);
   await audit(owner.page, "bảng chủ phòng");
   await owner.page.keyboard.press("Escape");
-  await owner.page.getByRole("button", { name: "Cài đặt bàn" }).click();
+  await expect(menuButton).toBeFocused();
+  await menuButton.click();
+  await menu.getByRole("button", { name: "Cài đặt" }).click();
   await expect(owner.page.getByRole("dialog", { name: "Cài đặt bàn" })).toBeVisible();
   await settled(owner.page);
   await audit(owner.page, "cài đặt bàn");
@@ -72,7 +122,8 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
 
   // Single-key shortcuts can be switched off (WCAG 2.1.4), and the choice is kept on reload.
   await expect(owner.page.getByRole("dialog")).toHaveCount(0);
-  await owner.page.getByRole("button", { name: "Cài đặt bàn" }).click();
+  await menuButton.click();
+  await menu.getByRole("button", { name: "Cài đặt" }).click();
   const keysSwitch = owner.page.getByRole("switch", { name: "Phím tắt một phím" });
   await expect(keysSwitch).toHaveAttribute("aria-checked", "true");
   await keysSwitch.click();
@@ -82,7 +133,8 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
   await expect(owner.page.locator("[data-hand]")).toBeVisible();
   await owner.page.keyboard.press("?");
   await expect(owner.page.getByRole("dialog", { name: "Phím tắt trên bàn" })).toBeHidden();
-  await owner.page.getByRole("button", { name: "Cài đặt bàn" }).click();
+  await menuButton.click();
+  await menu.getByRole("button", { name: "Cài đặt" }).click();
   await expect(keysSwitch).toHaveAttribute("aria-checked", "false");
   await keysSwitch.click();
   await owner.page.keyboard.press("Escape");
@@ -99,6 +151,11 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
   await mobile.getByRole("button", { name: /^Chat/ }).click();
   await settled(mobile);
   await audit(mobile, "ngăn chat điện thoại");
+  await mobile.keyboard.press("Escape");
+  await mobile.getByRole("button", { name: "Menu", exact: true }).click();
+  await expect(mobile.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Bảng chủ phòng" })).toBeVisible();
+  await settled(mobile);
+  await audit(mobile, "menu điện thoại");
   await mobile.context().close();
 
   // Room screens (desktop).

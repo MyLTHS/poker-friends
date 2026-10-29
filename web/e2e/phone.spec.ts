@@ -1,6 +1,6 @@
 // C5: the landscape phone. Tables of 2 to 9 seats and every room screen, at 844×390, 932×430 and
-// 667×375 (iPhone SE): every seat, bet, the right column, the chat drawer and the owner's sheet
-// stay on screen, nothing scrolls sideways, and every control is at least 44 px to tap.
+// 667×375 (iPhone SE): every seat, bet, the right column, the chat drawer, the ☰ menu and the
+// owner's sheet stay on screen, nothing scrolls sideways, and every control is at least 44 px to tap.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -36,7 +36,7 @@ async function expectFits(page: Page, where: string) {
   expect(await smallTargets(page), `${where}: under 44 px`).toEqual([]);
 }
 
-test("phone: tables of 2–9 seats, the chat drawer and the owner's sheet fit every landscape phone", async ({ browser }) => {
+test("phone: tables of 2–9 seats, the chat drawer, the menu and the owner's sheet fit every landscape phone", async ({ browser }) => {
   test.setTimeout(420_000);
   const owner = await newGuest(browser, `Chu${RUN}`);
   const friend = await newGuest(browser, `Ban${RUN}`);
@@ -105,12 +105,20 @@ test("phone: tables of 2–9 seats, the chat drawer and the owner's sheet fit ev
     await settled(page); // the drawer slides in
     await expectFits(page, `${size.name}, chat`);
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Thêm tuỳ chọn" }).click();
+    // The bar over the stage: chat, "Mời bạn" and ☰; the rest is in the menu, which fits too.
+    await expect(page.locator(".tbar-m-right > *")).toHaveCount(3);
+    const menu = page.getByRole("dialog", { name: "Menu" });
+    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await expect(menu).toBeVisible();
+    await settled(page);
+    await expectFits(page, `${size.name}, menu`);
+    await menu.getByRole("button", { name: "Cài đặt" }).click();
     await expect(page.getByRole("dialog", { name: "Cài đặt bàn" })).toBeVisible();
     await settled(page);
     await expectFits(page, `${size.name}, cài đặt`);
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Bảng chủ phòng" }).click();
+    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await menu.getByRole("button", { name: "Bảng chủ phòng" }).click();
     await expect(page.getByRole("dialog", { name: /Bảng chủ phòng/ })).toBeVisible();
     await settled(page);
     await expectFits(page, `${size.name}, bảng chủ phòng`);

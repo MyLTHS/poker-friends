@@ -1,14 +1,15 @@
 "use client";
 
-// Chrome around the table (design table.tsx): the desktop top bar and right column (chat /
-// players / log), the phone's bar over the stage and its chat drawer, chat lines and composer,
-// who is watching. Chat goes through the table's own socket (chat.send → chat.message).
+// Chrome around the table (design table.tsx): the desktop top bar and its chat column, the phone's
+// bar over the stage and its chat drawer, the ☰ menu both share (everything that is not playing
+// or chatting), chat lines and composer, who is watching. Chat goes through the table's own
+// socket (chat.send → chat.message).
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ChartNoAxesColumn, ChevronLeft, Coffee, Crown, Ellipsis, Eye, LogOut, MessageCircle, Send, Settings, Smile, UserPlus, X } from "lucide-react";
+import { ChartNoAxesColumn, ChevronLeft, Coffee, Crown, Eye, LogOut, Menu as MenuIcon, MessageCircle, MessageSquareText, ScrollText, Send, Settings, Smile, UserPlus, X } from "lucide-react";
 
 import type { ChatMessage, Spectator } from "@/api/protocol";
-import { Avatar, IconButton, fmt } from "@/ui";
+import { Avatar, IconButton, Sheet, fmt } from "@/ui";
 
 import type { SeatView } from "./seatView";
 
@@ -50,72 +51,121 @@ export function TableTopBar({
   );
 }
 
-export function TableTools({
-  watchers,
-  sittingOut,
-  canSit,
-  online,
-  onSitToggle,
-  owner,
-  onInvite,
-  historyHref,
-  onSettings,
-  leave,
-}: {
-  watchers: number;
-  sittingOut: boolean;
-  canSit: boolean;
-  online: boolean;
-  onSitToggle: () => void;
-  /** room owner: the crown opens the owner's sheet */
-  owner?: { open: boolean; onOpen: () => void };
-  /** opens the invite dialog (link of this room for friends) */
-  onInvite?: () => void;
-  /** the room's win/loss page (/rooms/<id>/history) */
-  historyHref?: string;
-  onSettings: () => void;
-  leave?: { onLeave: () => void; label: string };
-}) {
+/** The desktop bar's right end: "Mời bạn" and the ☰ menu (everything else lives in the menu). */
+export function TableTools({ onInvite, menu }: { onInvite?: () => void; menu: MenuButtonProps }) {
   return (
     <>
-      <span className="tbar-watch" title="Người đang xem">
-        <Eye size={16} strokeWidth={1.9} aria-hidden />
-        {watchers} đang xem
-      </span>
-      {canSit && (
-        <button type="button" className={`tbar-btn${sittingOut ? " is-on" : ""}`} aria-pressed={sittingOut} onClick={onSitToggle} disabled={!online}>
-          <Coffee size={15} strokeWidth={1.9} aria-hidden />
-          {sittingOut ? "Đang nghỉ · quay lại" : "Nghỉ ván sau"}
-        </button>
-      )}
       {onInvite && (
         <button type="button" className="tbar-btn" aria-haspopup="dialog" aria-label="Mời bạn" onClick={onInvite}>
           <UserPlus size={15} strokeWidth={1.9} aria-hidden />
           <span className="tbar-label">Mời bạn</span>
         </button>
       )}
-      {owner && (
-        <button type="button" className={`tbar-btn${owner.open ? " is-on" : ""}`} aria-haspopup="dialog" aria-label="Bảng chủ phòng" title="Cấp chip, ghế, luật bàn" onClick={owner.onOpen}>
-          <Crown size={15} strokeWidth={1.9} aria-hidden />
-          <span className="tbar-label">Chủ phòng</span>
-        </button>
-      )}
-      {historyHref && (
-        <Link className="tbar-btn" href={historyHref} aria-label="Lời / lỗ">
-          <ChartNoAxesColumn size={15} strokeWidth={1.9} aria-hidden />
-          <span className="tbar-label">Lời / lỗ</span>
-        </Link>
-      )}
-      <IconButton label="Cài đặt bàn" aria-haspopup="dialog" onClick={onSettings}>
-        <Settings size={17} strokeWidth={1.9} aria-hidden />
-      </IconButton>
-      {leave && (
-        <button type="button" className="tbar-btn is-quiet" onClick={leave.onLeave}>
-          <LogOut size={15} strokeWidth={1.9} aria-hidden />
-          {leave.label}
-        </button>
-      )}
+      <MenuButton {...menu} />
     </>
+  );
+}
+
+/* ---------- the ☰ menu (desktop top bar and phone bar) ---------- */
+
+type MenuButtonProps = { open: boolean; onOpen: () => void };
+
+function MenuButton({ open, onOpen }: MenuButtonProps) {
+  // The menu is a native modal <dialog>: closing it gives the focus back to this button.
+  return (
+    <IconButton label="Menu" aria-haspopup="dialog" aria-expanded={open} active={open} onClick={onOpen}>
+      <MenuIcon size={20} strokeWidth={2} aria-hidden />
+    </IconButton>
+  );
+}
+
+/** What the ☰ menu offers; an item without its handler is left out. */
+export type TableMenuItems = {
+  watchers: number;
+  /** seated: sit out from the next hand, or come back */
+  sit?: { sittingOut: boolean; disabled: boolean; onToggle: () => void };
+  /** room owner: the owner's sheet */
+  onOwner?: () => void;
+  /** the hand log (and who sits where) in a sheet */
+  onLog: () => void;
+  /** the room's win/loss page (/rooms/<id>/history) */
+  historyHref?: string;
+  /** sound, keys, feedback (TableSettings) */
+  onSettings: () => void;
+  onFeedback?: () => void;
+  /** seated: leave the seat and keep watching */
+  onLeave?: () => void;
+};
+
+/** The table's menu: a narrow sheet of plain buttons. Picking one closes the menu first, so a
+ *  dialog it opens (settings, owner's sheet…) gives the focus back to the ☰ button. */
+export function TableMenu({ open, onClose, items }: { open: boolean; onClose: () => void; items: TableMenuItems }) {
+  const { watchers, sit, onOwner, onLog, historyHref, onSettings, onFeedback, onLeave } = items;
+  const pick = (run: () => void) => () => {
+    onClose();
+    run();
+  };
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Menu"
+      className="tmenu"
+      aside={
+        <span className="tmenu-watch">
+          <Eye size={15} strokeWidth={1.9} aria-hidden />
+          {watchers} đang xem
+        </span>
+      }
+    >
+      <ul className="tmenu-list">
+        {sit && (
+          <MenuItem icon={<Coffee size={18} strokeWidth={1.9} />} onClick={pick(sit.onToggle)} disabled={sit.disabled}>
+            {sit.sittingOut ? "Quay lại bàn" : "Nghỉ ván sau"}
+          </MenuItem>
+        )}
+        {onOwner && (
+          <MenuItem icon={<Crown size={18} strokeWidth={1.9} />} onClick={pick(onOwner)} dialog>
+            Bảng chủ phòng
+          </MenuItem>
+        )}
+        <MenuItem icon={<ScrollText size={18} strokeWidth={1.9} />} onClick={pick(onLog)} dialog>
+          Nhật ký ván
+        </MenuItem>
+        {historyHref && (
+          <li>
+            <Link className="tmenu-item" href={historyHref}>
+              <ChartNoAxesColumn size={18} strokeWidth={1.9} aria-hidden />
+              Lời / lỗ
+            </Link>
+          </li>
+        )}
+        <MenuItem icon={<Settings size={18} strokeWidth={1.9} />} onClick={pick(onSettings)} dialog>
+          Cài đặt
+        </MenuItem>
+        {onFeedback && (
+          <MenuItem icon={<MessageSquareText size={18} strokeWidth={1.9} />} onClick={pick(onFeedback)} dialog>
+            Góp ý
+          </MenuItem>
+        )}
+        {onLeave && (
+          <MenuItem icon={<LogOut size={18} strokeWidth={1.9} />} onClick={pick(onLeave)} quiet>
+            Rời ghế
+          </MenuItem>
+        )}
+      </ul>
+    </Sheet>
+  );
+}
+
+function MenuItem({ icon, onClick, disabled, dialog, quiet, children }: { icon: ReactNode; onClick: () => void; disabled?: boolean; dialog?: boolean; quiet?: boolean; children: ReactNode }) {
+  return (
+    <li>
+      <button type="button" className={`tmenu-item${quiet ? " is-quiet" : ""}`} onClick={onClick} disabled={disabled} aria-haspopup={dialog ? "dialog" : undefined}>
+        <span aria-hidden>{icon}</span>
+        {children}
+      </button>
+    </li>
   );
 }
 
@@ -136,30 +186,10 @@ export function MobileTableBar({ backHref, title, sub, right }: { backHref: stri
   );
 }
 
-export function MobileTools({
-  watchers,
-  unread,
-  onChat,
-  owner,
-  onInvite,
-  historyHref,
-  onMore,
-}: {
-  watchers: number;
-  unread: number;
-  onChat: () => void;
-  owner?: () => void;
-  onInvite?: () => void;
-  historyHref?: string;
-  onMore: () => void;
-}) {
+export function MobileTools({ unread, onChat, onInvite, menu }: { unread: number; onChat: () => void; onInvite?: () => void; menu: MenuButtonProps }) {
   // id: the chat drawer gives focus back to this button when it closes
   return (
     <>
-      <span className="tbar-m-watch" title="Người đang xem" aria-label={`${watchers} người đang xem`}>
-        <Eye size={15} strokeWidth={2} aria-hidden />
-        {watchers}
-      </span>
       <IconButton id="tbl-chat-btn" label="Chat" badge={unread > 0 ? unread : undefined} onClick={onChat}>
         <MessageCircle size={20} strokeWidth={1.9} aria-hidden />
       </IconButton>
@@ -168,58 +198,18 @@ export function MobileTools({
           <UserPlus size={19} strokeWidth={1.9} aria-hidden />
         </IconButton>
       )}
-      {owner && (
-        <IconButton label="Bảng chủ phòng" aria-haspopup="dialog" onClick={owner}>
-          <Crown size={19} strokeWidth={1.9} aria-hidden />
-        </IconButton>
-      )}
-      {historyHref && (
-        <Link className="iconbtn" href={historyHref} aria-label="Lời / lỗ" title="Lời / lỗ">
-          <ChartNoAxesColumn size={19} strokeWidth={1.9} aria-hidden />
-        </Link>
-      )}
-      <IconButton label="Thêm tuỳ chọn" aria-haspopup="dialog" onClick={onMore}>
-        <Ellipsis size={20} strokeWidth={2} aria-hidden />
-      </IconButton>
+      <MenuButton {...menu} />
     </>
   );
 }
 
 /* ---------- desktop right column ---------- */
 
-export type SideTab = "chat" | "players" | "log";
-
-export function SidePanel({
-  tab,
-  onTab,
-  counts,
-  children,
-  footer,
-}: {
-  tab: SideTab;
-  onTab: (tab: SideTab) => void;
-  counts: Partial<Record<SideTab, number>>;
-  children: ReactNode;
-  footer?: ReactNode;
-}) {
-  const tabs: [SideTab, string][] = [
-    ["chat", "Chat"],
-    ["players", "Người chơi"],
-    ["log", "Nhật ký"],
-  ];
+/** The desktop right column: the table's chat (who is watching, the lines, emoji and the box). */
+export function SidePanel({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
   return (
-    <aside className="side" aria-label="Bên bàn">
-      <div className="side-tabs" role="tablist">
-        {tabs.map(([key, label]) => (
-          <button key={key} type="button" role="tab" aria-selected={tab === key} className={`side-tab${tab === key ? " is-active" : ""}`} onClick={() => onTab(key)}>
-            {label}
-            {counts[key] !== undefined && <i>{counts[key]}</i>}
-          </button>
-        ))}
-      </div>
-      <div className="side-body" role="tabpanel">
-        {children}
-      </div>
+    <aside className="side" aria-label="Chat">
+      <div className="side-body">{children}</div>
       {footer && <div className="side-foot">{footer}</div>}
     </aside>
   );
