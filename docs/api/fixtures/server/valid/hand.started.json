@@ -12,6 +12,8 @@
       "button_seat": 1,
       "small_blind": 5,
       "big_blind": 10,
+      "ante": 0,
+      "bomb_pot": 0,
       "board": [],
       "pots": [],
       "players": [

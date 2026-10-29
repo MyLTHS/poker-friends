@@ -37,6 +37,14 @@ export type Version = number;
 export type ServerTime = string;
 export type Chips = number;
 /**
+ * Dead money every player dealt in puts in before the blinds (all of it if short); 0 = no ante.
+ */
+export type Chips1 = number;
+/**
+ * What everyone dealt in puts in for a bomb pot; above 0 whenever bomb_pot_every is.
+ */
+export type Chips2 = number;
+/**
  * String form of the user's id (str(User.pk)), the id the engine uses.
  */
 export type PlayerId = string;
@@ -45,6 +53,14 @@ export type SeatNumber = number;
  * Database id of the hand (Hand.pk), not the hand number within the room.
  */
 export type HandId = number;
+/**
+ * The ante of this hand, taken from everyone dealt in before the blinds; 0 in a bomb pot (bomb_pot replaces it).
+ */
+export type Chips3 = number;
+/**
+ * Above 0 for a bomb pot: what everyone dealt in put in. Such a hand has no blinds and no betting before the flop: the first decision is on the flop, from the left of the button. 0 for a normal hand.
+ */
+export type Chips4 = number;
 /**
  * A face-up card; never ??.
  */
@@ -178,6 +194,12 @@ export interface RoomInfo {
    * Chips a player gets on sitting down with none in this room, and again on a rebuy once busted.
    */
   starting_stack: number;
+  ante: Chips1;
+  /**
+   * Every bomb_pot_every-th hand of the room (by hand_no) is a bomb pot; 0 = never.
+   */
+  bomb_pot_every: number;
+  bomb_pot_amount: Chips2;
 }
 /**
  * Who sits in a seat. stack is the room balance from the ledger: during a hand it is the balance before that hand; the live stack is in HandView.
@@ -199,6 +221,8 @@ export interface HandView {
   button_seat: SeatNumber;
   small_blind: number;
   big_blind: number;
+  ante: Chips3;
+  bomb_pot: Chips4;
   /**
    * @maxItems 5
    */

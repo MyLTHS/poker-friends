@@ -88,6 +88,8 @@ paths:
               think_time_seconds: 20
               seven_deuce_bonus: 50
               starting_stack: 1000
+              ante: 0
+              bomb_pot_every: 0
               is_private: true
       responses:
         "201":
@@ -166,7 +168,8 @@ paths:
       description: |
         Chỉ chủ phòng (`forbidden` với người khác). Đang có ván thì ván đó giữ cấu hình cũ: thay đổi
         nằm trong `pending` và có hiệu lực từ ván sau; cả bàn nhận `room.updated` lúc đó. Không có ván
-        thì có hiệu lực ngay. `small_blind` phải nhỏ hơn `big_blind` (tính cả giá trị đang có).
+        thì có hiệu lực ngay. `small_blind` phải nhỏ hơn `big_blind` (tính cả giá trị đang có); bật
+        `bomb_pot_every` thì `bomb_pot_amount` phải lớn hơn 0. Ante, bomb pot tính cho ván sau.
         `starting_stack` mới chỉ dùng cho những lần vào ghế và mua thêm sau đó; chip đang có giữ nguyên.
       x-phase: B7
       requestBody:
@@ -1013,6 +1016,27 @@ components:
           minimum: 1
           maximum: 10000000
           description: Chip mỗi người nhận khi vào ghế lần đầu và khi mua thêm. Bỏ trống thì 100 × `big_blind`.
+        ante:
+          type: integer
+          minimum: 0
+          maximum: 10000000
+          default: 0
+          description: Tiền chết mỗi người được chia bài bỏ vào pot trước blind (thiếu thì all-in); 0 là không có.
+        bomb_pot_every:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          default: 0
+          description: |
+            Cứ ván thứ N, 2N, 3N… của phòng (theo `hand_no`) là một ván bomb pot; 0 là tắt. Ván bomb:
+            mọi người được chia bài bỏ `bomb_pot_amount` (thiếu thì all-in, không lấy thêm ante), không
+            có blind, không có vòng cược trước flop; cược bắt đầu ở flop, từ người bên trái nút.
+        bomb_pot_amount:
+          type: integer
+          minimum: 0
+          maximum: 10000000
+          default: 0
+          description: Bắt buộc lớn hơn 0 khi `bomb_pot_every` lớn hơn 0 (không thì `validation_error` ở trường này).
         is_private:
           type: boolean
           default: false
@@ -1097,6 +1121,19 @@ components:
           type: integer
           minimum: 1
           maximum: 10000000
+        ante:
+          type: integer
+          minimum: 0
+          maximum: 10000000
+        bomb_pot_every:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        bomb_pot_amount:
+          type: integer
+          minimum: 0
+          maximum: 10000000
+          description: Tính cả giá trị đang có (và đang chờ), phải lớn hơn 0 khi `bomb_pot_every` lớn hơn 0.
       additionalProperties: false
     JoinRoomRequest:
       type: object

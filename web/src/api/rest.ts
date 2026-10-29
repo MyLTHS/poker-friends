@@ -76,7 +76,8 @@ export interface paths {
          * Chủ phòng đổi cấu hình
          * @description Chỉ chủ phòng (`forbidden` với người khác). Đang có ván thì ván đó giữ cấu hình cũ: thay đổi
          *     nằm trong `pending` và có hiệu lực từ ván sau; cả bàn nhận `room.updated` lúc đó. Không có ván
-         *     thì có hiệu lực ngay. `small_blind` phải nhỏ hơn `big_blind` (tính cả giá trị đang có).
+         *     thì có hiệu lực ngay. `small_blind` phải nhỏ hơn `big_blind` (tính cả giá trị đang có); bật
+         *     `bomb_pot_every` thì `bomb_pot_amount` phải lớn hơn 0. Ante, bomb pot tính cho ván sau.
          *     `starting_stack` mới chỉ dùng cho những lần vào ghế và mua thêm sau đó; chip đang có giữ nguyên.
          */
         patch: operations["updateRoom"];
@@ -729,6 +730,23 @@ export interface components {
             /** @description Chip mỗi người nhận khi vào ghế lần đầu và khi mua thêm. Bỏ trống thì 100 × `big_blind`. */
             starting_stack?: number;
             /**
+             * @description Tiền chết mỗi người được chia bài bỏ vào pot trước blind (thiếu thì all-in); 0 là không có.
+             * @default 0
+             */
+            ante?: number;
+            /**
+             * @description Cứ ván thứ N, 2N, 3N… của phòng (theo `hand_no`) là một ván bomb pot; 0 là tắt. Ván bomb:
+             *     mọi người được chia bài bỏ `bomb_pot_amount` (thiếu thì all-in, không lấy thêm ante), không
+             *     có blind, không có vòng cược trước flop; cược bắt đầu ở flop, từ người bên trái nút.
+             * @default 0
+             */
+            bomb_pot_every?: number;
+            /**
+             * @description Bắt buộc lớn hơn 0 khi `bomb_pot_every` lớn hơn 0 (không thì `validation_error` ở trường này).
+             * @default 0
+             */
+            bomb_pot_amount?: number;
+            /**
              * @description Phòng private không hiện ở lobby; chỉ chủ phòng và người có link mời thấy.
              * @default false
              */
@@ -766,6 +784,10 @@ export interface components {
             think_time_seconds?: number;
             seven_deuce_bonus?: number;
             starting_stack?: number;
+            ante?: number;
+            bomb_pot_every?: number;
+            /** @description Tính cả giá trị đang có (và đang chờ), phải lớn hơn 0 khi `bomb_pot_every` lớn hơn 0. */
+            bomb_pot_amount?: number;
         };
         JoinRoomRequest: {
             invite_token: string;
@@ -989,6 +1011,12 @@ export interface components {
             seven_deuce_bonus: components["schemas"]["Chips"];
             /** @description Chips a player gets on sitting down with none in this room, and again on a rebuy once busted. */
             starting_stack: number;
+            /** @description Dead money every player dealt in puts in before the blinds (all of it if short); 0 = no ante. */
+            ante: components["schemas"]["Chips"];
+            /** @description Every bomb_pot_every-th hand of the room (by hand_no) is a bomb pot; 0 = never. */
+            bomb_pot_every: number;
+            /** @description What everyone dealt in puts in for a bomb pot; above 0 whenever bomb_pot_every is. */
+            bomb_pot_amount: components["schemas"]["Chips"];
         };
         /**
          * PlayerId
@@ -1072,6 +1100,10 @@ export interface components {
             button_seat: components["schemas"]["SeatNumber"];
             small_blind: number;
             big_blind: number;
+            /** @description The ante of this hand, taken from everyone dealt in before the blinds; 0 in a bomb pot (bomb_pot replaces it). */
+            ante: components["schemas"]["Chips"];
+            /** @description Above 0 for a bomb pot: what everyone dealt in put in. Such a hand has no blinds and no betting before the flop: the first decision is on the flop, from the left of the button. 0 for a normal hand. */
+            bomb_pot: components["schemas"]["Chips"];
             board: components["schemas"]["VisibleCard"][];
             pots: components["schemas"]["Pot"][];
             players: components["schemas"]["HandPlayer"][];
@@ -1262,6 +1294,8 @@ export interface operations {
                  *       "think_time_seconds": 20,
                  *       "seven_deuce_bonus": 50,
                  *       "starting_stack": 1000,
+                 *       "ante": 0,
+                 *       "bomb_pot_every": 0,
                  *       "is_private": true
                  *     }
                  */

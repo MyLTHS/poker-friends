@@ -43,7 +43,7 @@ describe("liveReducer", () => {
   it("counts state events so the page knows to reload the table, but not notices", () => {
     let state = liveReducer(initialLive, {
       kind: "server",
-      message: { ...envelope, type: "room.updated", payload: { room: { room_id: 1, name: "x", status: "open", max_seats: 9, small_blind: 1, big_blind: 2, think_time_seconds: 30, seven_deuce_bonus: 0, starting_stack: 200 } } },
+      message: { ...envelope, type: "room.updated", payload: { room: { room_id: 1, name: "x", status: "open", max_seats: 9, small_blind: 1, big_blind: 2, think_time_seconds: 30, seven_deuce_bonus: 0, starting_stack: 200, ante: 0, bomb_pot_every: 0, bomb_pot_amount: 0 } } },
     });
     expect(state.tableChanges).toBe(1);
     state = liveReducer(state, { kind: "server", message: { ...envelope, type: "chat.message", payload: { message: line(1) } } });

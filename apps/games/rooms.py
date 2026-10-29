@@ -100,6 +100,9 @@ SETTING_RULES = {
     "think_time_seconds": (int, 5, 120),
     "seven_deuce_bonus": (int, 0, None),
     "starting_stack": (int, 1, MAX_STARTING_STACK),
+    "ante": (int, 0, MAX_STARTING_STACK),
+    "bomb_pot_every": (int, 0, 1000),
+    "bomb_pot_amount": (int, 0, MAX_STARTING_STACK),
     "is_private": (bool, None, None),
 }
 
@@ -176,6 +179,9 @@ def room_info(room: Room) -> dict[str, Any]:
         "think_time_seconds": room.think_time_seconds,
         "seven_deuce_bonus": room.seven_deuce_bonus,
         "starting_stack": room.starting_stack,
+        "ante": room.ante,
+        "bomb_pot_every": room.bomb_pot_every,
+        "bomb_pot_amount": room.bomb_pot_amount,
     }
 
 
@@ -256,6 +262,8 @@ async def _create(request: HttpRequest) -> JsonResponse:
             raise BadRequest({key: ["Required."] for key in missing})
         if settings["small_blind"] >= settings["big_blind"]:
             raise BadRequest({"small_blind": ["Must be below big_blind."]})
+        if settings.get("bomb_pot_every", 0) > 0 and not settings.get("bomb_pot_amount"):
+            raise BadRequest({"bomb_pot_amount": [actor_module.BOMB_POT_NEEDS_AMOUNT]})
         ROOMS_PER_USER.hit(str(user.pk))
     except BadRequest as exc:
         return error("validation_error", "Invalid body.", exc.fields)
@@ -304,7 +312,8 @@ async def log_action(room: Room, user, kind: str, details: dict[str, Any]) -> No
 
 def _reject_response(reject: actor_module.Reject) -> JsonResponse:
     if reject.code == "validation_error":
-        return error("validation_error", str(reject), {"small_blind": [str(reject)]})
+        field = reject.field or "non_field_errors"
+        return error("validation_error", str(reject), {field: [str(reject)]})
     return error(reject.code, str(reject))
 
 

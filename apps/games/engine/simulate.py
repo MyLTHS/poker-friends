@@ -2,6 +2,7 @@
 
 python -m apps.games.engine.simulate --hands 5000 --players 9
 python -m apps.games.engine.simulate --hands 2000 --players 2 --seven-deuce-bonus 150
+python -m apps.games.engine.simulate --hands 2000 --players 6 --ante 1 --bomb-pot-every 5
 """
 
 import argparse
@@ -60,6 +61,9 @@ def run_simulation(
     small_blind: int = 1,
     big_blind: int = 2,
     seven_deuce_bonus: int = 0,
+    ante: int = 0,
+    bomb_pot_every: int = 0,
+    bomb_pot_amount: int = 10,
 ) -> SimulationReport:
     rng = random.Random(seed)
     table = TableSession(
@@ -67,6 +71,9 @@ def run_simulation(
         big_blind,
         shuffle=lambda: shuffled_deck(rng),
         seven_deuce_bonus=seven_deuce_bonus,
+        ante=ante,
+        bomb_pot_every=bomb_pot_every,
+        bomb_pot_amount=bomb_pot_amount,
     )
     ids = [f"P{i}" for i in range(1, players + 1)]
     for player, seat in zip(ids, rng.sample(range(1, 10), players), strict=True):
@@ -113,11 +120,20 @@ def main() -> None:
     parser.add_argument("--players", type=int, default=9)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--seven-deuce-bonus", type=int, default=0)
+    parser.add_argument("--ante", type=int, default=0)
+    parser.add_argument("--bomb-pot-every", type=int, default=0)
+    parser.add_argument("--bomb-pot-amount", type=int, default=10)
     args = parser.parse_args()
 
     started = time.perf_counter()
     report = run_simulation(
-        args.hands, args.players, args.seed, seven_deuce_bonus=args.seven_deuce_bonus
+        args.hands,
+        args.players,
+        args.seed,
+        seven_deuce_bonus=args.seven_deuce_bonus,
+        ante=args.ante,
+        bomb_pot_every=args.bomb_pot_every,
+        bomb_pot_amount=args.bomb_pot_amount,
     )
     elapsed = time.perf_counter() - started
     print(
