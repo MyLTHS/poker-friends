@@ -39,6 +39,12 @@ class Room(models.Model):
     # pot holding a 7 and a 2 (any suits) because everyone else folded: a successful bluff, a
     # walk included; never at showdown (spec.md #27). 0 means the room has no seven-deuce bonus.
     seven_deuce_bonus = models.PositiveIntegerField(default=0)
+    # Dead money every player dealt in puts in before the blinds; 0 = no ante.
+    ante = models.PositiveIntegerField(default=0)
+    # Every bomb_pot_every-th hand (by hand number) is a bomb pot: everyone dealt in puts in
+    # bomb_pot_amount, no blinds, no betting before the flop. 0 = no bomb pots.
+    bomb_pot_every = models.PositiveIntegerField(default=0)
+    bomb_pot_amount = models.PositiveIntegerField(default=0)
     # Chips a player gets on sitting down with nothing in this room, and again on a rebuy once
     # busted; each time a grant in the ledger. Left out: STARTING_STACK_BIG_BLINDS big blinds
     # (at most MAX_STARTING_STACK).
@@ -66,10 +72,23 @@ class Room(models.Model):
             models.CheckConstraint(
                 condition=models.Q(starting_stack__gt=0), name="room_starting_stack_positive"
             ),
+            models.CheckConstraint(
+                condition=models.Q(bomb_pot_every=0) | models.Q(bomb_pot_amount__gt=0),
+                name="room_bomb_pot_has_an_amount",
+            ),
         ]
 
     def __str__(self) -> str:
         return self.name
+
+    def engine_rules(self) -> dict[str, int]:
+        """The room's house rules as ``TableSession`` keyword arguments."""
+        return {
+            "seven_deuce_bonus": self.seven_deuce_bonus,
+            "ante": self.ante,
+            "bomb_pot_every": self.bomb_pot_every,
+            "bomb_pot_amount": self.bomb_pot_amount,
+        }
 
     def save(self, *args, **kwargs):
         if self.starting_stack is None:

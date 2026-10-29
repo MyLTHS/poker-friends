@@ -285,6 +285,9 @@ class Command(BaseCommand):
         parser.add_argument("--big-blind", type=int, default=10)
         parser.add_argument("--think-time", type=int, default=5)
         parser.add_argument("--seven-deuce-bonus", type=int, default=50)
+        parser.add_argument("--ante", type=int, default=0)
+        parser.add_argument("--bomb-pot-every", type=int, default=0)
+        parser.add_argument("--bomb-pot-amount", type=int, default=0)
         parser.add_argument("--reconnect", type=float, default=0.01, help="chance per message")
         parser.add_argument("--slow", type=float, default=0.03, help="chance to time out a turn")
         parser.add_argument("--seed", default="soak")
@@ -298,6 +301,9 @@ class Command(BaseCommand):
             big_blind=options["big_blind"],
             think_time_seconds=options["think_time"],
             seven_deuce_bonus=options["seven_deuce_bonus"],
+            ante=options["ante"],
+            bomb_pot_every=options["bomb_pot_every"],
+            bomb_pot_amount=options["bomb_pot_amount"],
         )
         seated = seat_guest_players(room, options["players"], options["chips"])
         options["room_id"] = room.pk

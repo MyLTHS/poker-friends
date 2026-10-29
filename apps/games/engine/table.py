@@ -49,11 +49,18 @@ class TableSession:
         max_seats: int = 9,
         shuffle: Callable[[], tuple[str, ...]] = shuffled_deck,
         seven_deuce_bonus: int = 0,
+        ante: int = 0,
+        bomb_pot_every: int = 0,
+        bomb_pot_amount: int = 0,
     ):
         self.small_blind = small_blind
         self.big_blind = big_blind
         self.max_seats = max_seats
         self.seven_deuce_bonus = seven_deuce_bonus
+        self.ante = ante
+        # Every bomb_pot_every-th hand of the room (by hand number) is a bomb pot; 0 = never.
+        self.bomb_pot_every = bomb_pot_every
+        self.bomb_pot_amount = bomb_pot_amount
         self._shuffle = shuffle
         self.seats: dict[int, str] = {}
         self.sitting_out: set[str] = set()
@@ -145,6 +152,7 @@ class TableSession:
 
         self._button_seat = self._next_button([s.seat for s in eligible])
         self.hand_no += 1
+        bomb = self.is_bomb_pot(self.hand_no)
         self.current_hand = HandEngine(
             HandConfig(
                 seats=tuple(eligible),
@@ -153,9 +161,15 @@ class TableSession:
                 big_blind=self.big_blind,
                 deck=tuple(self._shuffle()),
                 seven_deuce_bonus=self.seven_deuce_bonus,
+                ante=0 if bomb else self.ante,
+                bomb_pot=self.bomb_pot_amount if bomb else 0,
             )
         )
         return self.current_hand
+
+    def is_bomb_pot(self, hand_no: int) -> bool:
+        every = self.bomb_pot_every
+        return every > 0 and self.bomb_pot_amount > 0 and hand_no % every == 0
 
     def finish_hand(self) -> HandEngine:
         hand = self.current_hand

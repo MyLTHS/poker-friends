@@ -70,6 +70,12 @@ class HandConfig:
     # The room's 7-2 bonus for this hand (rule #27); only decides whether the winner's 7-2 is
     # revealed here, the bonus itself is paid by ``TableSession``.
     seven_deuce_bonus: int = 0
+    # Dead money every player dealt in puts in before the blinds (all of it if short).
+    ante: int = 0
+    # A bomb pot when above 0: every player dealt in puts in this much (all of it if short), no
+    # blinds and no betting before the flop; the first bet is made on the flop, from the left of
+    # the button. ``ante`` is not taken on top of it.
+    bomb_pot: int = 0
 
 
 @dataclass(frozen=True)
@@ -147,11 +153,12 @@ class HandEngine:
         self._deck = iter(config.deck)
         self._actions: list[Action] = []
         self._chip_total = sum(self._starting_stacks)
+        bomb = config.bomb_pot > 0
         self._state = NoLimitTexasHoldem.create_state(
             AUTOMATIONS,
-            True,
-            0,
-            (config.small_blind, config.big_blind),
+            True,  # antes are trimmed like bets: a short ante only plays for what it matches
+            config.bomb_pot if bomb else config.ante,
+            (0, 0) if bomb else (config.small_blind, config.big_blind),
             config.big_blind,
             self._starting_stacks,
             len(self.player_order),
@@ -318,10 +325,18 @@ class HandEngine:
         return "".join(next(self._deck) for _ in range(count))
 
     def _advance(self) -> None:
-        """Deal and burn from the server deck until a player must act or the hand ends."""
+        """Deal and burn from the server deck until a player must act or the hand ends.
+
+        In a bomb pot nobody acts before the flop: with no blinds everyone checks, so the engine
+        checks for them (these checks are not player actions and are not recorded).
+        """
         state = self._state
-        while state.status and state.actor_index is None:
-            if state.can_deal_hole():
+        while state.status:
+            if state.actor_index is not None:
+                if not (self.config.bomb_pot > 0 and state.street_index == 0):
+                    return
+                state.check_or_call()
+            elif state.can_deal_hole():
                 state.deal_hole(self._draw(1))
             elif state.can_burn_card():
                 state.burn_card(self._draw(1))
@@ -355,6 +370,8 @@ class HandEngine:
             "button_seat": self.config.button_seat,
             "small_blind": self.config.small_blind,
             "big_blind": self.config.big_blind,
+            "ante": self.config.ante,
+            "bomb_pot": self.config.bomb_pot,
             "board": list(self.board()),
             "pots": [
                 {
@@ -393,6 +410,8 @@ class HandEngine:
                 "big_blind": self.config.big_blind,
                 "deck": list(self.config.deck),
                 "seven_deuce_bonus": self.config.seven_deuce_bonus,
+                "ante": self.config.ante,
+                "bomb_pot": self.config.bomb_pot,
             },
             "actions": [
                 {"player_id": a.player_id, "kind": str(a.kind), "amount": a.amount}
@@ -412,6 +431,9 @@ class HandEngine:
                 deck=tuple(raw["deck"]),
                 # Records written before rule #27 changed have no bonus.
                 seven_deuce_bonus=raw.get("seven_deuce_bonus", 0),
+                # Records written before antes and bomb pots have neither.
+                ante=raw.get("ante", 0),
+                bomb_pot=raw.get("bomb_pot", 0),
             )
         )
         for a in record["actions"]:
