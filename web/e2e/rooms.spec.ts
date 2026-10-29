@@ -57,6 +57,11 @@ test("lobby → create a table → at it with the invite link → a new visitor 
   await an.getByLabel("Tên bàn").fill("Bàn E2E C4");
   await an.getByText("Thêm tuỳ chọn").click();
   await an.getByRole("radio", { name: "6", exact: true }).click();
+  // A new room has no 7-2 bonus and is public unless chosen; this one is made private.
+  await expect(an.getByRole("switch", { name: "Bật thưởng 7-2" })).toHaveAttribute("aria-checked", "false");
+  await expect(an.getByRole("textbox", { name: "Thưởng 7-2 mỗi người" })).toHaveCount(0);
+  await expect(an.getByRole("radio", { name: /Công khai/ })).toBeChecked();
+  await an.getByRole("radio", { name: /Riêng/ }).click();
   await an.getByRole("button", { name: "Tạo bàn" }).click();
 
   // Straight to the table, the "Mời bạn" sheet open with the invite link and its QR; the ?moi=1
@@ -68,7 +73,7 @@ test("lobby → create a table → at it with the invite link → a new visitor 
   const shown = await created.getByTestId("invite-link").getAttribute("title");
   expect(shown).toMatch(/\/rooms\/join\?token=[\w-]+$/);
   const invite = new URL(shown!);
-  expect((await api(an, "GET", `/api/rooms/${roomId}/`)).room).toMatchObject({ max_seats: 6, starting_stack: 2000 });
+  expect(await api(an, "GET", `/api/rooms/${roomId}/`)).toMatchObject({ is_private: true, room: { max_seats: 6, starting_stack: 2000, seven_deuce_bonus: 0 } });
   await an.reload();
   await expect(an.locator("[data-hand]")).toBeVisible();
   await expect(created).toBeHidden();
@@ -92,7 +97,8 @@ test("lobby → create a table → at it with the invite link → a new visitor 
 
   // Bình sat down with the starting stack (100 big blinds of the form's 10/20: 2.000); the owner's
   // panel on the table grants 500 more.
-  await an.getByRole("button", { name: "Bảng chủ phòng" }).click();
+  await an.getByRole("button", { name: "Menu", exact: true }).click();
+  await an.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Bảng chủ phòng" }).click();
   const sheet = an.getByRole("dialog", { name: /Bảng chủ phòng/ });
   const row = sheet.getByRole("listitem").filter({ hasText: /Ghế 1/ });
   await row.getByRole("button", { name: "Cấp/trừ" }).click();

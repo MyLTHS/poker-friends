@@ -12,8 +12,10 @@ import {
   changedRules,
   checkRules,
   DEFAULT_RULES,
+  draftRules,
   fieldText,
   MAX_STARTING_STACK,
+  NEW_ROOM_DRAFT,
   pendingText,
   rulesLine,
   serverFieldErrors,
@@ -114,6 +116,16 @@ describe("starting stack", () => {
 });
 
 describe("rules", () => {
+  it("a fresh create form sends no 7-2 bonus and a public room; the switch brings back 50", () => {
+    expect(NEW_ROOM_DRAFT.sevenOn).toBe(false);
+    expect(NEW_ROOM_DRAFT.is_private).toBe(false);
+    expect(draftRules(NEW_ROOM_DRAFT, "Bàn")).toEqual({ ...DEFAULT_RULES, name: "Bàn", seven_deuce_bonus: 0, is_private: false });
+    expect(draftRules({ ...NEW_ROOM_DRAFT, sevenOn: true }, "Bàn").seven_deuce_bonus).toBe(50);
+    expect(draftRules({ ...NEW_ROOM_DRAFT, is_private: true }, "Bàn").is_private).toBe(true);
+    // switched off again: the typed amount is kept in the box but not sent
+    expect(draftRules({ ...NEW_ROOM_DRAFT, seven: "100" }, "Bàn").seven_deuce_bonus).toBe(0);
+  });
+
   it("checks the server's limits before sending", () => {
     expect(checkRules({ ...DEFAULT_RULES, name: "Bàn" })).toEqual({});
     expect(checkRules({ ...DEFAULT_RULES, name: " " }).name).toBeTruthy();
@@ -136,7 +148,8 @@ describe("rules", () => {
   });
 
   it("describes the rules and the change waiting for the next hand", () => {
-    expect(rulesLine({ ...DEFAULT_RULES })).toBe("10/20 · 9 ghế · 20s · 7-2: 50 · Riêng");
+    expect(rulesLine({ ...DEFAULT_RULES })).toBe("10/20 · 9 ghế · 20s · Không 7-2 · Công khai");
+    expect(rulesLine({ ...DEFAULT_RULES, seven_deuce_bonus: 50, is_private: true })).toBe("10/20 · 9 ghế · 20s · 7-2: 50 · Riêng");
     expect(pendingText({ big_blind: 40, think_time_seconds: 15 }, info())).toBe("Ván sau: blind 10/40 · 15 giây");
     expect(pendingText({ starting_stack: 5000 }, info())).toBe("Ván sau: chip đầu vào 5.000");
     expect(pendingText(null, info())).toBeNull();

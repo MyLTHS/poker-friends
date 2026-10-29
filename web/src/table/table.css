@@ -1034,7 +1034,6 @@
     align-items: center;
     gap: 8px;
   }
-  .d1 .tbar-watch,
   .d1 .tbar-btn {
     display: inline-flex;
     align-items: center;
@@ -1047,15 +1046,10 @@
     color: var(--ivory-2);
     white-space: nowrap;
   }
-  .d1 .tbar-watch {
-    border: 0;
-    color: var(--ivory-3);
-  }
   .d1 .tbar-btn.is-quiet {
     color: var(--ivory-3);
   }
-  /* a window under 980 px: "Mời bạn" and "Chủ phòng" keep their icon (and name) only; at 1000 px a
-     seated owner's full bar still fits */
+  /* a window under 980 px: "Mời bạn" keeps its icon (and name) only */
   @media (max-width: 979px) {
     .d1 .tbar-btn .tbar-label {
       display: none;
@@ -1075,36 +1069,6 @@
     border-left: 1px solid var(--line);
     box-shadow: -16px 0 40px rgba(0, 0, 0, 0.4);
     z-index: 6;
-  }
-  .d1 .side-tabs {
-    display: flex;
-    gap: 4px;
-    padding: 10px 14px 0;
-    border-bottom: 1px solid var(--hair);
-  }
-  .d1 .side-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 10px 12px;
-    margin-bottom: -1px;
-    border-bottom: 2px solid transparent;
-    font: var(--w-label) var(--fs-md)/1 var(--text);
-    color: var(--ivory-3);
-  }
-  .d1 .side-tab i {
-    padding: 2px 6px;
-    border-radius: 999px;
-    background: rgba(243, 234, 215, 0.08);
-    font-size: var(--fs-xs);
-  }
-  .d1 .side-tab.is-active {
-    color: var(--ivory);
-    border-bottom-color: var(--brass);
-  }
-  .d1 .side-tab.is-active i {
-    background: rgba(232, 207, 146, 0.16);
-    color: var(--brass-2);
   }
   .d1 .side-title {
     display: flex;
@@ -1935,18 +1899,6 @@
     display: flex;
     align-items: center;
     gap: 2px;
-  }
-  .d1 .tbar-m-watch {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    height: 30px;
-    padding: 0 10px;
-    margin-right: 4px;
-    border-radius: 999px;
-    background: rgba(243, 234, 215, 0.06);
-    font: var(--w-label) var(--fs-md)/1 var(--text);
-    color: var(--ivory-2);
   }
   .d1 .ppanel {
     position: absolute;
@@ -3418,7 +3370,7 @@
       .preset,
       .step-btn,
       .pre,
-      .side-tab,
+      .tmenu-item,
       .emoji,
       .composer-send,
       .tbar-btn,
@@ -3597,7 +3549,77 @@
     }
   }
 
-  /* side column extras: the players tab, empty log */
+  /* the ☰ menu (Side.tsx TableMenu): a narrow sheet of big rows, on the desktop and the phone */
+  .d1 .sheet.tmenu {
+    width: min(340px, 100vw);
+  }
+  .d1 .tmenu-watch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font: var(--w-label) var(--fs-sm)/1 var(--text);
+    color: var(--ivory-3);
+    white-space: nowrap;
+  }
+  .d1 .tmenu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .d1 .tmenu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: 12px;
+    font: var(--w-label) var(--fs-lg)/1.2 var(--text);
+    color: var(--ivory);
+    text-align: left;
+    cursor: pointer;
+  }
+  .d1 .tmenu-item > span,
+  .d1 .tmenu-item > svg {
+    display: inline-flex;
+    color: var(--brass-2);
+  }
+  .d1 .tmenu-item:hover:not(:disabled) {
+    background: rgba(243, 234, 215, 0.06);
+  }
+  .d1 .tmenu-item:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .d1 .tmenu-item.is-quiet,
+  .d1 .tmenu-item.is-quiet > span {
+    color: var(--ivory-3);
+  }
+  @media (orientation: landscape) and (max-height: 500px) {
+    /* the phone's sheet starts 120px from the left; the menu stays a narrow column at the right */
+    .d1 .sheet.tmenu {
+      left: auto;
+      width: min(320px, 100vw);
+    }
+    .d1 .tmenu-list {
+      gap: 0;
+    }
+    .d1 .tmenu-item {
+      min-height: 44px;
+    }
+  }
+  .d1 .log-sub {
+    margin-top: 8px;
+    font: var(--w-label) var(--fs-sm)/1.2 var(--text);
+    color: var(--ivory-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* the log sheet's extras: the players list, empty log */
   .d1 .plist {
     display: flex;
     flex-direction: column;

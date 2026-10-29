@@ -40,17 +40,65 @@ export const SEAT_CHOICES = [2, 3, 4, 5, 6, 7, 8, 9];
 export const THINK_CHOICES = [15, 20, 30, 45, 60];
 export const SEVEN_CHOICES = [25, 50, 100];
 
-/** The design's sample room: 10/20, 2.000 chips each, 9 seats, 20 s, 7-2 bonus 50, private. */
+/** What a new room gets unless changed: 10/20, 2.000 chips each, 9 seats, 20 s, no 7-2 bonus,
+ *  public (shown in the lobby). */
 export const DEFAULT_RULES: Rules = {
   name: "",
   small_blind: 10,
   big_blind: 20,
   max_seats: 9,
   think_time_seconds: 20,
-  seven_deuce_bonus: 50,
+  seven_deuce_bonus: 0,
   starting_stack: 2000,
-  is_private: true,
+  is_private: false,
 };
+
+/** The bonus the 7-2 box starts at once the player switches the bonus on. */
+export const SEVEN_DEFAULT = 50;
+
+/** The create form keeps what the player typed (an empty box stays empty); `draftRules()` reads it.
+ *  `name` null: not touched yet, the box shows "Bàn của <tên>"; `starting` null: not touched yet,
+ *  the box follows the big blind (100 of them, like the server's default). */
+export type RoomDraft = {
+  name: string | null;
+  small_blind: string;
+  big_blind: string;
+  starting: string | null;
+  max_seats: number;
+  think_time_seconds: number;
+  sevenOn: boolean;
+  seven: string;
+  is_private: boolean;
+};
+
+/** A fresh create form: the 7-2 switch off (its box waits at 50), the room public. */
+export const NEW_ROOM_DRAFT: RoomDraft = {
+  name: null,
+  small_blind: String(DEFAULT_RULES.small_blind),
+  big_blind: String(DEFAULT_RULES.big_blind),
+  starting: null,
+  max_seats: DEFAULT_RULES.max_seats,
+  think_time_seconds: DEFAULT_RULES.think_time_seconds,
+  sevenOn: DEFAULT_RULES.seven_deuce_bonus > 0,
+  seven: String(DEFAULT_RULES.seven_deuce_bonus || SEVEN_DEFAULT),
+  is_private: DEFAULT_RULES.is_private,
+};
+
+const num = (text: string) => (text.trim() === "" ? NaN : Number(text));
+
+/** What the create form sends for `draft` (the bonus is 0 while its switch is off). */
+export function draftRules(draft: RoomDraft, name: string): Rules {
+  return {
+    name,
+    small_blind: num(draft.small_blind),
+    big_blind: num(draft.big_blind),
+    max_seats: draft.max_seats,
+    think_time_seconds: draft.think_time_seconds,
+    seven_deuce_bonus: draft.sevenOn ? num(draft.seven) : 0,
+    starting_stack: num(startingStackText(draft.starting, draft.big_blind)),
+    is_private: draft.is_private,
+  };
+}
 
 export type FieldErrors = Partial<Record<keyof Rules, string>>;
 
