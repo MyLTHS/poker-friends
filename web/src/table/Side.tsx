@@ -93,14 +93,15 @@ export type TableMenuItems = {
   /** sound, keys, feedback (TableSettings) */
   onSettings: () => void;
   onFeedback?: () => void;
-  /** seated: leave the seat and keep watching */
-  onLeave?: () => void;
+  /** seated: leave the seat and keep watching (`busy`: dealt into the running hand, which the
+   *  server refuses until it ends, folded or not) */
+  leave?: { onLeave: () => void; busy: boolean };
 };
 
 /** The table's menu: a narrow sheet of plain buttons. Picking one closes the menu first, so a
  *  dialog it opens (settings, owner's sheet…) gives the focus back to the ☰ button. */
 export function TableMenu({ open, onClose, items }: { open: boolean; onClose: () => void; items: TableMenuItems }) {
-  const { watchers, sit, onOwner, onLog, historyHref, onSettings, onFeedback, onLeave } = items;
+  const { watchers, sit, onOwner, onLog, historyHref, onSettings, onFeedback, leave } = items;
   const pick = (run: () => void) => () => {
     onClose();
     run();
@@ -148,9 +149,9 @@ export function TableMenu({ open, onClose, items }: { open: boolean; onClose: ()
             Góp ý
           </MenuItem>
         )}
-        {onLeave && (
-          <MenuItem icon={<LogOut size={18} strokeWidth={1.9} />} onClick={pick(onLeave)} quiet>
-            Rời ghế
+        {leave && (
+          <MenuItem icon={<LogOut size={18} strokeWidth={1.9} />} onClick={pick(leave.onLeave)} disabled={leave.busy} quiet>
+            {leave.busy ? "Rời ghế · hết ván mới rời được" : "Rời ghế"}
           </MenuItem>
         )}
       </ul>

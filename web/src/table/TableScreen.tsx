@@ -260,7 +260,7 @@ export function TableScreen({
     historyHref,
     onSettings: () => setDialog("settings"),
     onFeedback: () => setDialog("feedback"),
-    onLeave: leave,
+    leave: leave && { onLeave: leave, busy: !!hand && !hand.complete && hand.players.some((p) => p.player_id === you.player_id) },
   };
   const menu = { open: dialog === "menu", onOpen: () => setDialog("menu") };
   const pre = canPreAct(model) && !celebration ? (
