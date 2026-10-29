@@ -681,6 +681,13 @@ class TableActor:
             await self._room_updated()
         return paused, self._room_info()
 
+    async def _hand_recorded(self, hand_no: int) -> bool:
+        """Whether the hand's row exists after all (an unreadable database: assume not, retry)."""
+        try:
+            return await Hand.objects.filter(room=self.room, hand_no=hand_no).aexists()
+        except Exception:
+            return False
+
     async def _set_running(self, running: bool) -> None:
         await Room.objects.filter(pk=self.room.pk).aupdate(running=running)
         self.room.running = running
@@ -693,19 +700,24 @@ class TableActor:
             engine = self.session.start_hand()
         except TableError:
             return False  # cannot happen after _ready_to_deal
+        hand_no = self.session.hand_no
         try:
             self.hand = await Hand.objects.acreate(
                 room=self.room,
-                hand_no=self.session.hand_no,
+                hand_no=hand_no,
                 button_seat=engine.config.button_seat,
                 config=engine.record()["config"],
             )
-        except Exception:
+        except Exception as error:
             # Nothing recorded, so undo the in-memory start and stay between hands.
-            log.exception("room %s: recording hand %s failed", self.room.pk, self.session.hand_no)
+            log.exception("room %s: recording hand %s failed", self.room.pk, hand_no)
             self.session.current_hand = None
             self.session.hand_no -= 1
             self.session._button_seat = previous_button
+            if isinstance(error, IntegrityError) or await self._hand_recorded(hand_no):
+                # The number is taken, or the insert went through and still failed: every retry
+                # would fail the same way. Stop until a restart reads what the database holds.
+                await self._fail_stop(f"hand {hand_no} could not be recorded: {error}")
             return False
         self._last_hand, self._shown = None, []  # too late to show the previous hand's cards
         await self._broadcast("hand.started", lambda viewer: {"hand": self._hand_view(viewer)})
@@ -1026,9 +1038,11 @@ class TableActor:
             raise Reject("player_in_hand")
         seat = self._seat_of(player_id) if player_id in self.session.seats.values() else None
         if seat is not None:
-            # the row first: a failed delete leaves the seat as it was, not freed in memory only
+            # the row first: a failed delete leaves the seat as it was, not freed in memory only;
+            # then tell the table at once, whatever fails after (a retry finds no seat to free)
             await RoomSeat.objects.filter(room=self.room, user_id=user_id).adelete()
             self.session.stand_up(player_id)
+            await self._seat_updated(seat)
         await RoomBan.objects.aget_or_create(room=self.room, user_id=user_id)
         await RoomMember.objects.filter(room=self.room, user_id=user_id).adelete()
         # Drop their connections first so they get nothing more, then close them.
@@ -1039,8 +1053,6 @@ class TableActor:
             channel = self.channels.pop(conn, None)
             if channel is not None and layer is not None:
                 await layer.send(channel, {"type": "table.close", "code": KICKED_CLOSE_CODE})
-        if seat is not None:
-            await self._seat_updated(seat)
 
     async def _drop_player(self, user_id: int, code: int) -> None:
         player_id = str(user_id)

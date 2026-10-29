@@ -379,8 +379,9 @@ async def grant_chips(request: HttpRequest, room_id: int) -> JsonResponse:
 
 
 async def start(request: HttpRequest, room_id: int) -> JsonResponse:
-    """The owner's Start: hands are dealt (after a countdown) until Pause. Already running:
-    nothing changes."""
+    """The owner's Start: hands are dealt (after a countdown) until Pause. Already running: no
+    countdown is shortened; a table standing still (no hand, nothing counting, ready) counts down
+    again."""
     return await _start_or_pause(request, room_id, start=True)
 
 

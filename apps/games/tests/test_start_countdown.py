@@ -9,7 +9,7 @@ import asyncio
 from datetime import datetime
 
 import pytest
-from django.db import DatabaseError
+from django.db import DatabaseError, IntegrityError
 
 from apps.games import actor as actor_module
 from apps.games.models import Hand, OwnerAction, Room, RoomSeat
@@ -430,6 +430,29 @@ class TestWhenToDeal:
         run_async(body)
         assert refused == [1]
         assert list(Hand.objects.filter(room=room).values_list("hand_no", flat=True)) == [1]
+
+    def test_a_hand_number_already_taken_suspends_instead_of_retrying(self, monkeypatch):
+        """The insert committed and then failed (or the number is taken): every retry would hit
+        the same unique constraint, so the room stops for a restart instead of looping."""
+        countdown(monkeypatch, 0.05)
+        room, a, b = heads_up_room()
+        attempts = []
+
+        async def create(**kwargs):
+            attempts.append(kwargs["hand_no"])
+            raise IntegrityError("duplicate key value violates unique constraint")
+
+        monkeypatch.setattr(Hand.objects, "acreate", create)
+
+        async def body():
+            ca = await connect(room, a)
+            await connect(room, b)
+            messages = await drain(ca, wait=0.6)
+            assert by_type(messages, "room.suspended")
+            assert not by_type(messages, "hand.started")
+
+        run_async(body)
+        assert attempts == [1]  # one try, no loop
 
     def test_the_e2e_pause_setting_shortens_the_pause_between_hands(self, monkeypatch, settings):
         monkeypatch.setattr(actor_module.TableActor, "next_hand_delay", None)  # no test override
