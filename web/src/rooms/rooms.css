@@ -1405,6 +1405,10 @@
     border-color: var(--hair);
     background: rgba(243, 234, 215, 0.02);
   }
+  /* bomb pot: "how often" and "how much" side by side, each with its label over the box */
+  .d1 .bomb-amounts {
+    align-items: flex-start;
+  }
   .d1 .sp,
   .d1 .qa,
   .d1 .vis {
@@ -1947,16 +1951,18 @@
     }
 
     /* owner panel: a wide sheet, the table still showing at left; the notice sits under the
-       header row and the body splits into players | settings */
+       header row and the body splits into the room (players, invite link, closing) | the rules,
+       which take the whole column (ante and bomb pot left no room for the link under them) */
     .d1 .owner {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 296px;
-      grid-template-rows: auto auto auto 1fr;
+      grid-template-rows: auto auto auto auto 1fr;
       grid-template-areas:
         "notice  notice"
         "players two"
-        "players link"
-        "players danger";
+        "link    two"
+        "danger  two"
+        ".       two";
       align-content: start;
       gap: 6px 20px;
     }
@@ -2036,6 +2042,29 @@
     .d1 .owner .owner-two .os-seven:not(:has(.os-seven-row .input)) .os-seven-row {
       grid-column: 1;
       grid-row: auto;
+    }
+    /* bomb pot on: the switch and its two boxes are too wide beside the label; a row of their own */
+    .d1 .owner .owner-two .os-bomb:has(.os-seven-row .input) .os-seven-row {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+    .d1 .owner .owner-two .os-bomb:has(.os-seven-row .input) .owner-hint {
+      grid-column: 1 / -1;
+      grid-row: 3;
+    }
+    /* a change to save keeps "Bỏ" / "Lưu luật" on screen (bomb pot on, the column is taller than
+       a small phone), the rules scrolling under it */
+    .d1 .owner .owner-save {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+      background: linear-gradient(rgba(232, 207, 146, 0.07), rgba(232, 207, 146, 0.07)), #1d1510;
+    }
+    /* the two boxes share the row after the switch: wide enough for 44 px taps */
+    .d1 .owner .owner-two .os-bomb .os-seven-row .input {
+      flex: 1;
+      width: auto;
+      min-width: 0;
     }
     .d1 .owner .owner-two .owner-hint {
       grid-column: 1;

@@ -10,7 +10,7 @@ import "./table.css";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Coins, Crown, Hourglass } from "lucide-react";
+import { Bomb, Coins, Crown, Hourglass } from "lucide-react";
 
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
 import { FeedbackDialog } from "@/feedback/FeedbackDialog";
@@ -23,6 +23,7 @@ import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
 import { ConnStrip, PausedCard, ReconnectCard } from "./Overlays";
 import { winnerLines } from "./handName";
+import { bombPotHand, isBombPot, stakesText } from "./houseRules";
 import { canPreAct, facingBet } from "./reducer";
 import { describeAction, raisePresets, tableView, type SeatView } from "./seatView";
 import { SevenDeuceStage, SevenLedger, SevenMedal } from "./SevenDeuce";
@@ -238,6 +239,8 @@ export function TableScreen({
 
   const handNo = hand?.hand_no;
   const blinds = `${fmt(room.small_blind)}/${fmt(room.big_blind)}`;
+  // Between hands: the one about to be dealt is a bomb pot (by the room's rules as they stand).
+  const nextBomb = !!hand?.complete && bombPotHand(room, hand.hand_no + 1);
   const winners = (model.results ?? []).filter((r) => r.hand_net > 0);
   const myResult = model.results?.find((r) => r.player_id === you.player_id);
   const nameOf = (playerId: string) => table.seats.find((s) => s.player_id === playerId)?.display_name ?? "?";
@@ -304,6 +307,14 @@ export function TableScreen({
       boardHi={view.boardHi}
       pot={view.pot}
       mark={`${room.name} · ${blinds}`}
+      badge={
+        isBombPot(hand) ? (
+          <>
+            <Bomb size={device === "desktop" ? 15 : 12} strokeWidth={2.2} aria-hidden />
+            Bomb pot
+          </>
+        ) : undefined
+      }
       clock={clock}
       meHint={meHint}
       showPot={!hand?.complete}
@@ -367,7 +378,7 @@ export function TableScreen({
     </p>
   );
 
-  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, canRebuy: !!onRebuy });
+  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, canRebuy: !!onRebuy, nextBomb });
   // Any seated player with no chips buys back in (the room's starting stack), owner included. Not
   // while their all-in is still being played; yes on a finished hand they lost it all in (the
   // table keeps that hand on screen until the next one, which may never come heads-up).
@@ -400,7 +411,7 @@ export function TableScreen({
       panel = (
         <aside className="ppanel sd-panel">
           <SevenLedger device="mobile" award={celebration} seats={table.seats} />
-          <NextHand />
+          <NextHand bomb={nextBomb} />
         </aside>
       );
     } else {
@@ -408,7 +419,7 @@ export function TableScreen({
         <aside className="ppanel idle-panel">
           <div className="ip-next">
             <span className="abar-eyebrow">{idle.eyebrow}</span>
-            {hand?.complete ? <NextHand /> : <span className="ip-status">{idle.status}</span>}
+            {hand?.complete ? <NextHand bomb={nextBomb} /> : <span className="ip-status">{idle.status}</span>}
           </div>
           {idle.win && (
             <div className="ip-win">
@@ -444,7 +455,7 @@ export function TableScreen({
           <MobileTableBar
             backHref={backHref}
             title={room.name}
-            sub={`Blind ${blinds}${handNo ? ` · Ván #${handNo}` : ""}`}
+            sub={`${stakesText(room)}${handNo ? ` · Ván #${handNo}` : ""}`}
             right={
               !online ? (
                 <span className="conn-strip conn-strip-m" role="status">
@@ -519,7 +530,7 @@ export function TableScreen({
                 Xem lại ván
               </Link>
             )}
-            {hand?.complete && <NextHand />}
+            {hand?.complete && <NextHand bomb={nextBomb} />}
           </>
         }
       />
@@ -535,6 +546,12 @@ export function TableScreen({
         meta={
           <>
             <span>Blind {blinds}</span>
+            {room.ante > 0 && (
+              <>
+                <i />
+                <span>Ante {fmt(room.ante)}</span>
+              </>
+            )}
             {handNo && (
               <>
                 <i />
@@ -578,11 +595,11 @@ export function TableScreen({
 
 /* ---------- pieces ---------- */
 
-function NextHand() {
+function NextHand({ bomb = false }: { bomb?: boolean }) {
   return (
     <span className="next-hand">
-      <Hourglass size={15} strokeWidth={2} />
-      Ván mới sắp bắt đầu…
+      {bomb ? <Bomb size={15} strokeWidth={2} aria-hidden /> : <Hourglass size={15} strokeWidth={2} />}
+      {bomb ? "Ván sau là bomb pot…" : "Ván mới sắp bắt đầu…"}
     </span>
   );
 }
@@ -633,6 +650,7 @@ function idleContent({
   clock,
   celebration,
   canRebuy,
+  nextBomb,
 }: {
   table: TableState;
   me: SeatView | undefined;
@@ -645,6 +663,8 @@ function idleContent({
   celebration: boolean;
   /** "Mua thêm" is offered (the live table; the mock server has none) */
   canRebuy: boolean;
+  /** the hand about to be dealt is a bomb pot */
+  nextBomb: boolean;
 }): Idle {
   const { hand, room } = table;
   const seated = table.seats.length;
@@ -660,8 +680,8 @@ function idleContent({
     const shownSub = lines?.detail && (winners.length === 1 ? `với ${lines.detail}` : lines.detail);
     return {
       eyebrow: `Ván #${hand.hand_no} đã xong`,
-      status: "Chờ ván mới",
-      center: "Ván mới sắp bắt đầu.",
+      status: nextBomb ? "Ván sau là bomb pot" : "Chờ ván mới",
+      center: nextBomb ? "Ván sau là bomb pot." : "Ván mới sắp bắt đầu.",
       mine: net === null ? (me ? undefined : "Bạn đang xem") : `Bạn: ${mine ? `${mine} · ` : ""}${net > 0 ? `thắng ${signed(net)}` : net < 0 ? `thua ${fmt(net)}` : "hoà vốn"}`,
       win: celebration ? undefined : win,
       winSub: shownSub || (showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined),
@@ -712,7 +732,15 @@ function LogList({ entries, seats, you }: { entries: LogEntry[]; seats: SeatOccu
           case "hand":
             return (
               <li key={i} className="is-street">
-                Ván #{e.handNo} · {name(e.button)} cầm nút · {name(e.sb)} blind nhỏ {fmt(e.small)} · {name(e.bb)} blind lớn {fmt(e.big)}
+                Ván #{e.handNo} · {name(e.button)} cầm nút ·{" "}
+                {e.bomb > 0 ? (
+                  <>Bomb pot: mỗi người góp {fmt(e.bomb)}</>
+                ) : (
+                  <>
+                    {e.ante > 0 && <>Ante {fmt(e.ante)} · </>}
+                    {name(e.sb)} blind nhỏ {fmt(e.small)} · {name(e.bb)} blind lớn {fmt(e.big)}
+                  </>
+                )}
               </li>
             );
           case "action":

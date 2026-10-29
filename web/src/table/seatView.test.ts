@@ -205,6 +205,12 @@ describe("hand order", () => {
     expect(blindSeats(hand)).toEqual({ sb: 5, bb: 1 });
     expect(dealOrder(hand)).toEqual([5, 1]);
   });
+
+  it("a bomb pot has no blinds: no SB/BB markers on the seats", () => {
+    const blinds = (t: TableState) => tableView(t).seats.filter((s) => s.blind).map((s) => s.blind);
+    expect(blinds(midHand)).toEqual(["SB", "BB"]);
+    expect(blinds({ ...midHand, hand: { ...midHand.hand!, bomb_pot: 40 } })).toEqual([]);
+  });
 });
 
 describe("labels and presets", () => {

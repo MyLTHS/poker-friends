@@ -248,6 +248,8 @@ export type StageProps = {
   pot: number;
   potLabel?: string;
   mark: string;
+  /** Shown on the felt in the mark's place, e.g. "Bomb pot" for such a hand. */
+  badge?: ReactNode;
   clock?: TurnClock;
   meHint?: ReactNode;
   showPot?: boolean;
@@ -259,7 +261,7 @@ export type StageProps = {
   className?: string;
 };
 
-export function Stage({ device, seats, board, boardHi, pot, potLabel, mark, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, children, className = "" }: StageProps) {
+export function Stage({ device, seats, board, boardHi, pot, potLabel, mark, badge, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, children, className = "" }: StageProps) {
   const g = GEO[device];
   const me = seats.find((s) => s.isMe);
   const button = seats.find((s) => s.isButton);
@@ -271,9 +273,15 @@ export function Stage({ device, seats, board, boardHi, pot, potLabel, mark, cloc
           <div className="felt-line" />
         </div>
       </div>
-      <div className="felt-mark" style={at(g.mark)}>
-        {mark}
-      </div>
+      {badge ? (
+        <div className="felt-badge" style={at(g.mark)}>
+          {badge}
+        </div>
+      ) : (
+        <div className="felt-mark" style={at(g.mark)}>
+          {mark}
+        </div>
+      )}
       {showPot && pot > 0 && <Pot device={device} amount={pot} label={potLabel} />}
       <Board device={device} cards={board} hi={boardHi} hidden={boardHidden} />
       {seats.filter((s) => (s.bet ?? 0) > 0).map((s) => <Bet key={s.seat} device={device} s={s} />)}

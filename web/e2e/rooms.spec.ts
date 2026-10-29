@@ -212,3 +212,94 @@ test("out of chips: any seated player buys back in with \"Mua thêm\"; the owner
   await expect.poll(() => stackAt(1)).toBeGreaterThanOrEqual(780);
   await expect(owner.getByRole("button", { name: "Mua thêm" })).toHaveCount(0);
 });
+
+test("house rules: the create form sends an ante and a bomb pot every hand; the table shows the bomb pot, its pot and then the antes", async ({ browser }) => {
+  // names differ from the other specs: they all share one database per run
+  const owner = await newGuest(browser, "Phượng");
+
+  // The create form: ante and bomb pot wait under "Thêm tuỳ chọn", both off.
+  await owner.goto("/rooms/new");
+  await owner.getByLabel("Tên bàn").fill("Bàn E2E bomb pot");
+  const big = owner.getByRole("textbox", { name: "Blind lớn", exact: true });
+  await owner.getByRole("textbox", { name: "Blind nhỏ", exact: true }).fill("5");
+  await big.fill("10");
+  await owner.getByRole("textbox", { name: "Chip đầu vào" }).fill("1000");
+  await owner.getByText("Thêm tuỳ chọn").click();
+  const ante = owner.getByRole("textbox", { name: /^Ante/ });
+  await expect(ante).toHaveValue("0");
+  const bombSwitch = owner.getByRole("switch", { name: "Bật bomb pot" });
+  await expect(bombSwitch).toHaveAttribute("aria-checked", "false");
+  await expect(owner.getByRole("textbox", { name: "Mỗi người góp" })).toHaveCount(0);
+  await ante.fill("2");
+  // Switched on: every 5 hands, 2 big blinds each, following the big blind until typed in.
+  await bombSwitch.click();
+  const every = owner.getByRole("textbox", { name: "Cứ mấy ván một lần" });
+  const amount = owner.getByRole("textbox", { name: "Mỗi người góp" });
+  await expect(every).toHaveValue("5");
+  await expect(amount).toHaveValue("20");
+  await big.fill("20");
+  await expect(amount).toHaveValue("40");
+  await big.fill("10");
+  await expect(amount).toHaveValue("20");
+  // 0 is not "every 0 hands": the form says so before sending
+  await every.fill("0");
+  await owner.getByRole("button", { name: "Tạo bàn" }).click();
+  await expect(every).toHaveAccessibleDescription("Từ 1 đến 1.000 ván.");
+  await every.fill("1");
+  await amount.fill("30");
+  await owner.getByRole("button", { name: "Tạo bàn" }).click();
+  await expect(owner).toHaveURL(/\/rooms\/\d+\/table$/);
+  const roomId = Number(new URL(owner.url()).pathname.split("/")[2]);
+  const detail = await api(owner, "GET", `/api/rooms/${roomId}/`);
+  expect(detail.room).toMatchObject({ small_blind: 5, big_blind: 10, starting_stack: 1000, ante: 2, bomb_pot_every: 1, bomb_pot_amount: 30 });
+  await owner.keyboard.press("Escape"); // the "Mời bạn" sheet
+
+  // Two players sit: hand #1 is a bomb pot (every hand is). Everyone put 30 in (no ante on top),
+  // there are no blinds, and the flop is out at once.
+  const quynh = await newGuest(browser, "Quỳnh");
+  if (detail.invite_token) await api(quynh, "POST", "/api/rooms/join/", { invite_token: detail.invite_token });
+  await api(owner, "POST", `/api/rooms/${roomId}/seats/`, { seat: 1 });
+  await api(quynh, "POST", `/api/rooms/${roomId}/seats/`, { seat: 2 });
+  await quynh.goto(`/rooms/${roomId}/table`);
+  for (const page of [owner, quynh]) {
+    await expect(page.locator("[data-hand=live]")).toBeVisible();
+    await expect(page.locator(".felt-badge")).toHaveText(/Bomb pot/);
+    await expect(page.locator("[data-pot] .pot-pill b")).toHaveText("60");
+    await expect(page.locator(".board [role=img]")).toHaveCount(3);
+  }
+  await expect(owner.locator(".tbl-desktop").getByText("Ante 2", { exact: true })).toBeVisible();
+
+  // Play it out: whoever is to act folds, or checks when that is all there is (nothing to call on
+  // the flop of a bomb pot). Between hands the bar says the next hand is a bomb pot too.
+  const playOut = async () => {
+    for (let i = 0; i < 40 && !(await owner.locator("[data-hand=complete]").count()); i++) {
+      for (const p of [owner, quynh]) await p.locator(".act-fold, .act-call").first().click({ timeout: 1000 }).catch(() => {});
+    }
+    await expect(owner.locator("[data-hand=complete]")).toBeVisible();
+  };
+  await playOut();
+  await expect(owner.getByText("Ván sau là bomb pot…")).toBeVisible();
+
+  // Hand #2 (a bomb pot again): the owner switches bomb pots off; the panel says it waits for the
+  // next hand.
+  await expect(owner.locator("[data-hand=live]")).toBeVisible({ timeout: 20_000 });
+  await expect(owner.locator(".felt-badge")).toBeVisible();
+  await owner.getByRole("button", { name: "Menu", exact: true }).click();
+  await owner.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Bảng chủ phòng" }).click();
+  const sheet = owner.getByRole("dialog", { name: /Bảng chủ phòng/ });
+  await expect(sheet.getByRole("textbox", { name: "Bomb pot cứ mấy ván một lần" })).toHaveValue("1");
+  await expect(sheet.getByRole("textbox", { name: "Bomb pot mỗi người góp" })).toHaveValue("30");
+  await sheet.getByRole("switch", { name: "Bật bomb pot" }).click();
+  await sheet.getByRole("button", { name: "Lưu luật" }).click();
+  await expect(sheet.getByText("Ván sau: tắt bomb pot")).toBeVisible();
+  await owner.keyboard.press("Escape");
+  await playOut();
+
+  // Hand #3: a normal hand. Both antes (2 each) are in the pot; the blinds are still bets.
+  await expect.poll(async () => (await api(owner, "GET", `/api/rooms/${roomId}/snapshot/`)).table.hand?.hand_no, { timeout: 20_000 }).toBe(3);
+  await expect(owner.locator("[data-hand=live]")).toBeVisible();
+  await expect(owner.locator(".felt-badge")).toHaveCount(0);
+  await expect(owner.locator("[data-pot] .pot-pill b")).toHaveText("4");
+  await expect(owner.locator(".board [role=img]")).toHaveCount(0);
+  expect((await api(owner, "GET", `/api/rooms/${roomId}/`)).room).toMatchObject({ ante: 2, bomb_pot_every: 0 });
+});

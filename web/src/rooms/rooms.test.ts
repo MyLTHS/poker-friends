@@ -9,6 +9,8 @@ import { needsName } from "./hooks";
 import { filterCount, filterRooms, fold, inviteToken, roomCta } from "./lobby";
 import { qrModules } from "./qr";
 import {
+  bombAmountText,
+  bombText,
   changedRules,
   checkRules,
   DEFAULT_RULES,
@@ -153,6 +155,71 @@ describe("rules", () => {
     expect(pendingText({ big_blind: 40, think_time_seconds: 15 }, info())).toBe("Ván sau: blind 10/40 · 15 giây");
     expect(pendingText({ starting_stack: 5000 }, info())).toBe("Ván sau: chip đầu vào 5.000");
     expect(pendingText(null, info())).toBeNull();
+  });
+});
+
+describe("ante and bomb pot", () => {
+  it("are off on a fresh create form; the bomb pot switch brings every 5 hands at 2 big blinds", () => {
+    expect(NEW_ROOM_DRAFT.ante).toBe("0");
+    expect(NEW_ROOM_DRAFT.bombOn).toBe(false);
+    const off = draftRules(NEW_ROOM_DRAFT, "Bàn");
+    expect(off).toMatchObject({ ante: 0, bomb_pot_every: 0, bomb_pot_amount: 0 });
+    expect(checkRules(off)).toEqual({});
+    const on = draftRules({ ...NEW_ROOM_DRAFT, bombOn: true }, "Bàn");
+    expect(on).toMatchObject({ bomb_pot_every: 5, bomb_pot_amount: 40 });
+    expect(checkRules(on)).toEqual({});
+    // switched off again: what was typed stays in the boxes but is not sent
+    expect(draftRules({ ...NEW_ROOM_DRAFT, bombEvery: "3", bombAmount: "100" }, "Bàn")).toMatchObject({ bomb_pot_every: 0, bomb_pot_amount: 0 });
+    expect(draftRules({ ...NEW_ROOM_DRAFT, ante: "5" }, "Bàn").ante).toBe(5);
+    expect(draftRules({ ...NEW_ROOM_DRAFT, ante: "" }, "Bàn").ante).toBe(0); // an empty box: no ante
+  });
+
+  it("the bomb pot amount follows the big blind (2 of them) until the player types one", () => {
+    expect(bombAmountText(null, "20")).toBe("40");
+    expect(bombAmountText(null, "50")).toBe("100");
+    expect(bombAmountText(null, "")).toBe("");
+    expect(bombAmountText("75", "50")).toBe("75");
+    expect(bombAmountText("", "50")).toBe(""); // emptied on purpose: stays empty
+    expect(draftRules({ ...NEW_ROOM_DRAFT, bombOn: true, big_blind: "50" }, "Bàn").bomb_pot_amount).toBe(100);
+  });
+
+  it("are checked like the server: ante 0 to 10.000.000, bomb pot every 1 to 1.000 hands with at least 1 chip", () => {
+    const rules = { ...DEFAULT_RULES, name: "Bàn" };
+    expect(checkRules({ ...rules, ante: -1 }).ante).toBe("Số chip không âm.");
+    expect(checkRules({ ...rules, ante: 1.5 }).ante).toBe("Số chip không âm.");
+    expect(checkRules({ ...rules, ante: MAX_STARTING_STACK + 1 }).ante).toBe("Tối đa 10.000.000 chip.");
+    expect(checkRules({ ...rules, ante: MAX_STARTING_STACK })).toEqual({});
+    expect(checkRules({ ...rules, bomb_pot_every: 1001, bomb_pot_amount: 40 }).bomb_pot_every).toBe("Từ 1 đến 1.000 ván.");
+    expect(checkRules({ ...rules, bomb_pot_every: 1000, bomb_pot_amount: 40 })).toEqual({});
+    expect(checkRules({ ...rules, bomb_pot_every: 5, bomb_pot_amount: 0 }).bomb_pot_amount).toBe("Ít nhất 1 chip.");
+    expect(checkRules({ ...rules, bomb_pot_every: 5, bomb_pot_amount: MAX_STARTING_STACK + 1 }).bomb_pot_amount).toBe("Tối đa 10.000.000 chip.");
+    expect(checkRules({ ...rules, bomb_pot_every: 0, bomb_pot_amount: 0 })).toEqual({}); // off: no amount needed
+    // switched on, "0" or an empty box is not "never": the form asks for 1 to 1.000
+    expect(checkRules(draftRules({ ...NEW_ROOM_DRAFT, bombOn: true, bombEvery: "0" }, "Bàn")).bomb_pot_every).toBe("Từ 1 đến 1.000 ván.");
+    expect(checkRules(draftRules({ ...NEW_ROOM_DRAFT, bombOn: true, bombEvery: "" }, "Bàn")).bomb_pot_every).toBe("Từ 1 đến 1.000 ván.");
+    expect(checkRules(draftRules({ ...NEW_ROOM_DRAFT, bombOn: true, bombAmount: "" }, "Bàn")).bomb_pot_amount).toBe("Ít nhất 1 chip.");
+    expect(serverFieldErrors({ bomb_pot_amount: ["bomb_pot_amount must be above 0 while bomb_pot_every is on"] })).toEqual({ bomb_pot_amount: "Ít nhất 1 chip khi bật bomb pot." });
+  });
+
+  it("the owner sends only what changed", () => {
+    const room = info();
+    expect(changedRules(room, { ...room, ante: 5 })).toEqual({ ante: 5 });
+    expect(changedRules(room, { ...room, bomb_pot_every: 5, bomb_pot_amount: 40 })).toEqual({ bomb_pot_every: 5, bomb_pot_amount: 40 });
+    const bombing = info({ bomb_pot_every: 5, bomb_pot_amount: 40 });
+    expect(changedRules(bombing, { ...bombing, bomb_pot_every: 0 })).toEqual({ bomb_pot_every: 0 });
+  });
+
+  it("the waiting change says what the next hand gets", () => {
+    expect(bombText(5, 40)).toBe("bomb pot 40 mỗi 5 ván");
+    expect(bombText(1, 1000)).toBe("bomb pot 1.000 mọi ván");
+    expect(bombText(0, 40)).toBe("tắt bomb pot");
+    expect(pendingText({ ante: 5 }, info())).toBe("Ván sau: ante 5");
+    expect(pendingText({ ante: 0 }, info({ ante: 5 }))).toBe("Ván sau: tắt ante");
+    expect(pendingText({ bomb_pot_every: 3, bomb_pot_amount: 60 }, info())).toBe("Ván sau: bomb pot 60 mỗi 3 ván");
+    // one half of the bomb pot changed: the other half is the room's
+    expect(pendingText({ bomb_pot_amount: 80 }, info({ bomb_pot_every: 4, bomb_pot_amount: 40 }))).toBe("Ván sau: bomb pot 80 mỗi 4 ván");
+    expect(pendingText({ bomb_pot_every: 0 }, info({ bomb_pot_every: 4, bomb_pot_amount: 40 }))).toBe("Ván sau: tắt bomb pot");
+    expect(pendingText({ big_blind: 40, ante: 10, bomb_pot_every: 2, bomb_pot_amount: 80 }, info())).toBe("Ván sau: blind 10/40 · ante 10 · bomb pot 80 mỗi 2 ván");
   });
 });
 

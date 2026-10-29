@@ -124,6 +124,29 @@
     font-size: var(--fs-xs);
     letter-spacing: 0.2em;
   }
+  /* in the mark's place under the board: this hand is a bomb pot */
+  .d1 .felt-badge {
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(10, 7, 5, 0.78);
+    border: 1px solid rgba(197, 72, 75, 0.7);
+    box-shadow: 0 0 16px rgba(158, 43, 49, 0.45);
+    font: var(--w-heavy) var(--fs-sm)/1 var(--text);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--claret-text);
+    white-space: nowrap;
+    z-index: 2;
+  }
+  .d1 .stage-mobile .felt-badge {
+    gap: 4px;
+    padding: 3px 9px;
+    font-size: var(--fs-xs);
+  }
   .d1 .board {
     transform: translate(-50%, -50%);
     display: flex;
