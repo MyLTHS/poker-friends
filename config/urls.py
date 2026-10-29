@@ -37,6 +37,7 @@ urlpatterns = [
     path("api/hands/<int:hand_id>/replay/", history.hand_replay),
     path("api/rooms/<int:room_id>/seats/", games_views.take_seat),
     path("api/rooms/<int:room_id>/seats/me/", games_views.leave_seat),
+    path("api/rooms/<int:room_id>/rebuy/", games_views.rebuy),
     path("api/rooms/<int:room_id>/snapshot/", games_views.get_snapshot),
     path("api/feedback/", feedback_views.feedback),
     path("api/client-errors/", feedback_views.client_errors),

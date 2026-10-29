@@ -236,7 +236,8 @@ Ví dụ đầy đủ: [giữa hai ván](fixtures/server/valid/table.snapshot.be
   "version": 11, "server_time": "2026-10-27T14:03:05.120Z",
   "payload": {"table": {
     "room": {"room_id": 1, "name": "Bàn bạn bè", "status": "playing", "max_seats": 9,
-             "small_blind": 5, "big_blind": 10, "think_time_seconds": 20, "seven_deuce_bonus": 50},
+             "small_blind": 5, "big_blind": 10, "think_time_seconds": 20, "seven_deuce_bonus": 50,
+             "starting_stack": 1000},
     "you": {"player_id": "1", "seat": 1},
     "seats": [
       {"seat": 1, "player_id": "1", "display_name": "Lym", "stack": 1000, "sitting_out": false, "connected": true},
@@ -363,8 +364,8 @@ Ván thắng ở showdown: [ví dụ](fixtures/server/valid/hand.completed.showd
 
 ### `seat.updated` (sự kiện)
 
-Một ghế thay đổi: có người ngồi (qua REST), rời ghế, sit-out, quay lại, được cấp chip, mất/có
-kết nối. `occupant` là trạng thái mới của ghế, `null` nếu ghế trống.
+Một ghế thay đổi: có người ngồi (qua REST; chưa có chip thì đã kèm `starting_stack` của phòng),
+rời ghế, sit-out, quay lại, được cấp chip hoặc tự mua thêm (`rebuy`), mất/có kết nối. `occupant` là trạng thái mới của ghế, `null` nếu ghế trống.
 
 ```json
 {
@@ -447,7 +448,7 @@ trong DB nên không mất khi server khởi động lại. Đóng phòng giữa
   "version": 31, "server_time": "2026-10-27T15:10:02.000Z",
   "payload": {"room": {"room_id": 1, "name": "Bàn bạn bè", "status": "open", "max_seats": 9,
               "small_blind": 10, "big_blind": 20, "think_time_seconds": 30,
-              "seven_deuce_bonus": 50}}
+              "seven_deuce_bonus": 50, "starting_stack": 1000}}
 }
 ```
 
@@ -567,7 +568,8 @@ Góc nhìn Lym, ván ví dụ ở mục 8 (`v` = `version`):
   kết nối im 20 giây và đóng nếu 30 giây không có pong; trình duyệt tự trả pong. Kết nối đóng thì
   cả bàn nhận `seat.updated` với `connected: false` (B5).
 - (Đã có từ B7) Chủ phòng cấp chip, kick: REST, kết quả phát bằng `seat.updated`; đổi cấu hình
-  và đóng phòng: `room.updated`.
+  và đóng phòng: `room.updated`. Người chơi hết chip tự mua thêm (`POST .../rebuy/`): cũng
+  `seat.updated`.
 - (Đã có từ B8) Chat (`chat.send` → `chat.message`), danh sách người xem (`audience.updated`);
   lịch sử ván, replay và bảng lời/lỗ qua REST ([`openapi.yaml`](openapi.yaml), tag `history`).
 

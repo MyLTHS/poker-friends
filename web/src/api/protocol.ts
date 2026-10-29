@@ -174,6 +174,10 @@ export interface RoomInfo {
   big_blind: number;
   think_time_seconds: number;
   seven_deuce_bonus: Chips;
+  /**
+   * Chips a player gets on sitting down with none in this room, and again on a rebuy once busted.
+   */
+  starting_stack: number;
 }
 /**
  * Who sits in a seat. stack is the room balance from the ledger: during a hand it is the balance before that hand; the live stack is in HandView.

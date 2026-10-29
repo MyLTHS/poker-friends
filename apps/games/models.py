@@ -10,6 +10,10 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 MAX_SEATS = 9
+# A room made without a starting stack gives this many big blinds, up to the cap. The cap keeps a
+# table of rebuys far below what a ledger amount (a 32-bit integer) can hold.
+STARTING_STACK_BIG_BLINDS = 100
+MAX_STARTING_STACK = 10_000_000
 
 
 class User(AbstractUser):
@@ -35,6 +39,10 @@ class Room(models.Model):
     # pot holding a 7 and a 2 (any suits) because everyone else folded: a successful bluff, a
     # walk included; never at showdown (spec.md #27). 0 means the room has no seven-deuce bonus.
     seven_deuce_bonus = models.PositiveIntegerField(default=0)
+    # Chips a player gets on sitting down with nothing in this room, and again on a rebuy once
+    # busted; each time a grant in the ledger. Left out: STARTING_STACK_BIG_BLINDS big blinds
+    # (at most MAX_STARTING_STACK).
+    starting_stack = models.PositiveIntegerField()
     # Private rooms are hidden from the lobby; only the owner and members (who opened the invite
     # link) see them. The token is in the invite link; rotating it kills old links.
     is_private = models.BooleanField(default=False)
@@ -55,10 +63,20 @@ class Room(models.Model):
                 condition=models.Q(small_blind__gt=0, small_blind__lt=models.F("big_blind")),
                 name="room_small_blind_positive_and_below_big_blind",
             ),
+            models.CheckConstraint(
+                condition=models.Q(starting_stack__gt=0), name="room_starting_stack_positive"
+            ),
         ]
 
     def __str__(self) -> str:
         return self.name
+
+    def save(self, *args, **kwargs):
+        if self.starting_stack is None:
+            self.starting_stack = min(
+                STARTING_STACK_BIG_BLINDS * self.big_blind, MAX_STARTING_STACK
+            )
+        super().save(*args, **kwargs)
 
 
 class RoomSeat(models.Model):

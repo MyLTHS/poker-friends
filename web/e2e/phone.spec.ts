@@ -42,12 +42,11 @@ test("phone: tables of 2–9 seats, the chat drawer and the owner's sheet fit ev
   const friend = await newGuest(browser, `Ban${RUN}`);
   const rooms: number[] = [];
   for (let seats = 2; seats <= 9; seats++) {
-    const detail = await api(owner.page, "POST", "/api/rooms/", { name: `Ngang ${seats} ghế`, max_seats: seats, small_blind: 10, big_blind: 20, think_time_seconds: 60, is_private: true });
+    const detail = await api(owner.page, "POST", "/api/rooms/", { name: `Ngang ${seats} ghế`, max_seats: seats, small_blind: 10, big_blind: 20, think_time_seconds: 60, is_private: true, starting_stack: 1000 });
     const id = detail.room.room_id;
     await api(friend.page, "POST", "/api/rooms/join/", { invite_token: detail.invite_token });
     await api(owner.page, "POST", `/api/rooms/${id}/seats/`, { seat: 1 });
     await api(friend.page, "POST", `/api/rooms/${id}/seats/`, { seat: seats });
-    for (const p of [owner, friend]) await api(owner.page, "POST", `/api/rooms/${id}/chips/`, { player_id: p.id, amount: 1000 });
     rooms.push(id);
   }
   const state = await owner.context.storageState();

@@ -58,6 +58,15 @@ set_env() { # set_env KEY VALUE: replace the line KEY=... in .env.home, or add i
   chmod 600 "$ENV_FILE"
 }
 
+guests_back_on() { # a file made while guests were off: on again, once (a later false stays)
+  grep -q '^# Members only: no guests' "$ENV_FILE" || return 0
+  local tmp="$ENV_FILE.tmp"
+  awk '/^# Members only: no guests/ { print "# Guests welcome: friends type a name and play (chips come with the seat)."; next }
+    { print }' "$ENV_FILE" >"$tmp"
+  mv "$tmp" "$ENV_FILE"
+  set_env GUESTS_ALLOWED true
+}
+
 ensure_env() {
   if [ -f "$ENV_FILE" ]; then
     chmod 600 "$ENV_FILE" # also fixes a file left 0644 by an older version of this script
@@ -78,8 +87,9 @@ TRUSTED_PROXIES=1
 DJANGO_ALLOWED_HOSTS=.trycloudflare.com,localhost,127.0.0.1
 FRONTEND_URL=http://localhost
 FRONTEND_URL_FROM_REQUEST=true
-# Members only: no guests. Friends sign up on the link and play at once.
-GUESTS_ALLOWED=false
+# Guests welcome: friends type a name on the link and play (chips come with the seat). An
+# account staff switch off in /admin stays out.
+GUESTS_ALLOWED=true
 POSTGRES_DB=poker
 POSTGRES_USER=poker
 POSTGRES_PASSWORD=$password
@@ -181,6 +191,7 @@ cmd_up() {
   # Files made by older versions of this script: Redis is gone, the host list was one fixed
   # link, and email links followed FRONTEND_URL.
   set_env REDIS_URL ""
+  guests_back_on
   set_env DJANGO_ALLOWED_HOSTS ".trycloudflare.com,localhost,127.0.0.1"
   set_env FRONTEND_URL_FROM_REQUEST true
   set_env FRONTEND_URL http://localhost

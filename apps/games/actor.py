@@ -142,7 +142,14 @@ class _Call:
 
 
 # Settings the owner may change (PATCH /api/rooms/{id}/); they apply between hands.
-ROOM_SETTINGS = ("name", "small_blind", "big_blind", "think_time_seconds", "seven_deuce_bonus")
+ROOM_SETTINGS = (
+    "name",
+    "small_blind",
+    "big_blind",
+    "think_time_seconds",
+    "seven_deuce_bonus",
+    "starting_stack",
+)
 KICKED_CLOSE_CODE = 4403
 # A client that stopped reading (its channel is full) is dropped, then its socket is closed with
 # this code once the channel has room: the client reconnects and gets a fresh snapshot.
@@ -205,6 +212,10 @@ class TableActor:
 
     async def grant_chips(self, player_id: str, amount: int) -> int:
         return await self._call(lambda: self._grant_chips(player_id, amount))
+
+    async def rebuy(self, player_id: str) -> int:
+        """A busted seated player takes the room's starting stack again; returns the new stack."""
+        return await self._call(lambda: self._rebuy(player_id))
 
     async def update_settings(self, changes: dict[str, Any]) -> None:
         await self._call(lambda: self._update_settings(changes))
@@ -680,6 +691,8 @@ class TableActor:
                 raise Reject("seat_taken") from error
             self.session.take_seat(player_id, item.seat)
             self.names[player_id] = item.user.username
+            if self.session.stacks.get(player_id, 0) == 0:
+                await self._starting_chips(player_id)
             await self._seat_updated(item.seat)
         except (Reject, TableError) as error:
             code = error.code
@@ -719,6 +732,36 @@ class TableActor:
         self._refuse_if_suspended()
         if player_id not in self.session.seats.values():
             raise Reject("not_seated")
+        await self._record_grant(player_id, amount)
+        await self._seat_updated(self._seat_of(player_id))
+        await self._maybe_start_hand()
+        return self.session.stacks[player_id]
+
+    async def _rebuy(self, player_id: str) -> int:
+        self._refuse_if_suspended()
+        if self.closed or self.closing:
+            raise Reject("room_closed")
+        if player_id not in self.session.seats.values():
+            raise Reject("not_seated")
+        if self.session._in_hand(player_id):
+            raise Reject("player_in_hand")
+        if self.session.stacks.get(player_id, 0) > 0:
+            raise Reject("has_chips")
+        await self._record_grant(player_id, self.room.starting_stack)
+        await self._seat_updated(self._seat_of(player_id))
+        await self._maybe_start_hand()
+        return self.session.stacks[player_id]
+
+    async def _starting_chips(self, player_id: str) -> None:
+        """Sitting down with nothing in this room: the starting stack, no owner needed. A failed
+        write leaves the seat taken with no chips (a rebuy can try again)."""
+        try:
+            await self._record_grant(player_id, self.room.starting_stack)
+        except Exception:
+            log.exception("room %s: starting stack for %s not recorded", self.room.pk, player_id)
+
+    async def _record_grant(self, player_id: str, amount: int) -> None:
+        """A grant in memory and in the database, or in neither."""
         before = len(self.session.ledger)
         try:
             self.session.grant_chips(player_id, amount)
@@ -731,9 +774,6 @@ class TableActor:
         except Exception:
             del self.session.ledger[before:]  # not recorded: undo the in-memory entry too
             raise
-        await self._seat_updated(self._seat_of(player_id))
-        await self._maybe_start_hand()
-        return self.session.stacks[player_id]
 
     async def _update_settings(self, changes: dict[str, Any]) -> None:
         self._refuse_if_suspended()
@@ -876,6 +916,7 @@ class TableActor:
             "big_blind": self.room.big_blind,
             "think_time_seconds": self.room.think_time_seconds,
             "seven_deuce_bonus": self.room.seven_deuce_bonus,
+            "starting_stack": self.room.starting_stack,
         }
 
     def _occupant(self, seat: int) -> dict[str, Any] | None:

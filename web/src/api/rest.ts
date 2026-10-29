@@ -19,9 +19,10 @@ export interface paths {
         put?: never;
         /**
          * Tạo phòng
-         * @description Người gọi (kể cả khách) thành chủ phòng. Phòng mới ở trạng thái `open`, chưa ai ngồi, chưa ai
-         *     có chip: chủ phòng cấp chip bằng `grantChips` sau khi người chơi vào ghế. Phòng private chỉ
-         *     người có link mời (`invite_token`) mới thấy. Giới hạn 10 phòng/giờ mỗi người.
+         * @description Người gọi (kể cả khách) thành chủ phòng. Phòng mới ở trạng thái `open`, chưa ai ngồi. Ai vào
+         *     ghế mà chưa có chip trong phòng thì nhận ngay `starting_stack` (không cần chủ phòng); hết chip
+         *     thì tự mua thêm bằng `rebuy`. Chủ phòng vẫn cấp thêm hoặc trừ bớt bằng `grantChips`. Phòng
+         *     private chỉ người có link mời (`invite_token`) mới thấy. Giới hạn 10 phòng/giờ mỗi người.
          */
         post: operations["createRoom"];
         delete?: never;
@@ -76,6 +77,7 @@ export interface paths {
          * @description Chỉ chủ phòng (`forbidden` với người khác). Đang có ván thì ván đó giữ cấu hình cũ: thay đổi
          *     nằm trong `pending` và có hiệu lực từ ván sau; cả bàn nhận `room.updated` lúc đó. Không có ván
          *     thì có hiệu lực ngay. `small_blind` phải nhỏ hơn `big_blind` (tính cả giá trị đang có).
+         *     `starting_stack` mới chỉ dùng cho những lần vào ghế và mua thêm sau đó; chip đang có giữ nguyên.
          */
         patch: operations["updateRoom"];
         trace?: never;
@@ -190,7 +192,9 @@ export interface paths {
         put?: never;
         /**
          * Vào ghế (dự kiến B4)
-         * @description Người gọi ngồi vào một ghế trống. Được dealt từ ván kế tiếp nếu có chip trong phòng.
+         * @description Người gọi ngồi vào một ghế trống. Chưa có chip trong phòng (lần đầu, hoặc rời ghế lúc hết chip)
+         *     thì nhận ngay `starting_stack` của phòng (một bút toán `grant`, `stack` trong kết quả đã tính);
+         *     còn chip thì giữ nguyên, không cấp thêm. Được chia bài từ ván kế tiếp.
          *     Cả bàn nhận `seat.updated` qua WebSocket. Phòng private cần quyền xem (`room_not_found`);
          *     người đã bị kick nhận `kicked`; phòng đã đóng nhận `room_closed`; phòng tạm dừng nhận
          *     `room_suspended`. Chưa đăng nhập thì server tạo khách và đăng nhập luôn (tối đa 20 khách/giờ
@@ -221,6 +225,32 @@ export interface paths {
          *     rồi rời sau. Chip vẫn thuộc phòng, vào lại vẫn còn. Cả bàn nhận `seat.updated`.
          */
         delete: operations["leaveSeat"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/rebuy/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mua thêm chip khi đã hết
+         * @description Người đang ngồi ghế mà hết chip tự lấy lại `starting_stack` của phòng, không cần chủ phòng.
+         *     Ghi một bút toán `grant` (bảng lời/lỗ tính nó như chip được cấp). Cả bàn nhận `seat.updated`
+         *     với `stack` mới; đủ hai người có chip thì ván mới bắt đầu. Không có body. Lỗi (409):
+         *     `not_seated` (chưa ngồi ghế), `player_in_hand` (đang trong ván chạy), `has_chips` (còn chip),
+         *     `room_closed` (phòng đã đóng hoặc sắp đóng), `room_suspended`.
+         */
+        post: operations["rebuy"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -696,6 +726,8 @@ export interface components {
              * @default 0
              */
             seven_deuce_bonus?: number;
+            /** @description Chip mỗi người nhận khi vào ghế lần đầu và khi mua thêm. Bỏ trống thì 100 × `big_blind`. */
+            starting_stack?: number;
             /**
              * @description Phòng private không hiện ở lobby; chỉ chủ phòng và người có link mời thấy.
              * @default false
@@ -733,6 +765,7 @@ export interface components {
             big_blind?: number;
             think_time_seconds?: number;
             seven_deuce_bonus?: number;
+            starting_stack?: number;
         };
         JoinRoomRequest: {
             invite_token: string;
@@ -763,7 +796,8 @@ export interface components {
             /** @description `false` khi server chưa có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: ẩn nút Google. */
             google_enabled: boolean;
             /**
-             * @description `false` (chơi từ máy nhà, production): chỉ thành viên mới vào được: bất kỳ tài khoản
+             * @description `false` (`GUESTS_ALLOWED=false`, như mẫu production; chơi từ máy nhà để `true`: khách
+             *     gõ tên là chơi): chỉ thành viên mới vào được: bất kỳ tài khoản
              *     thật nào đã đăng nhập (không cần duyệt, không cần xác minh email). Ẩn nút khách. Mọi
              *     API ngoài `/api/auth/`: 401 `login_required` cho người chưa đăng nhập hay phiên khách
              *     cũ. WebSocket đóng với mã 4401.
@@ -930,7 +964,7 @@ export interface components {
              * @description Mã ổn định, client được phép `switch` theo mã.
              * @enum {string}
              */
-            code: "validation_error" | "not_authenticated" | "login_required" | "guests_disabled" | "not_approved" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked" | "hand_not_found" | "hand_voided" | "room_suspended";
+            code: "validation_error" | "not_authenticated" | "login_required" | "guests_disabled" | "not_approved" | "forbidden" | "room_not_found" | "room_closed" | "invalid_seat" | "seat_taken" | "already_seated" | "not_seated" | "player_in_hand" | "has_chips" | "rate_limited" | "invalid_credentials" | "email_not_verified" | "email_taken" | "username_taken" | "invalid_token" | "not_guest" | "method_not_allowed" | "invalid_amount" | "negative_balance" | "kicked" | "hand_not_found" | "hand_voided" | "room_suspended";
             /** @description Để đọc log, không hiện cho người chơi. */
             message: string;
             /** @description Chỉ có khi `validation_error`, lỗi theo từng trường của body. */
@@ -953,6 +987,8 @@ export interface components {
             big_blind: number;
             think_time_seconds: number;
             seven_deuce_bonus: components["schemas"]["Chips"];
+            /** @description Chips a player gets on sitting down with none in this room, and again on a rebuy once busted. */
+            starting_stack: number;
         };
         /**
          * PlayerId
@@ -1160,7 +1196,7 @@ export interface components {
                 "application/json": components["schemas"]["ApiError"];
             };
         };
-        /** @description Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`, `room_suspended`) */
+        /** @description Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `has_chips`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`, `room_suspended`) */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -1225,6 +1261,7 @@ export interface operations {
                  *       "big_blind": 10,
                  *       "think_time_seconds": 20,
                  *       "seven_deuce_bonus": 50,
+                 *       "starting_stack": 1000,
                  *       "is_private": true
                  *     }
                  */
@@ -1516,6 +1553,33 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    rebuy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã mua thêm; `amount` và `balance` đều bằng `starting_stack` của phòng */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrantChipsResult"];
+                };
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];

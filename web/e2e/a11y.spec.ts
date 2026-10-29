@@ -24,12 +24,11 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
   test.setTimeout(240_000);
   const owner = await newGuest(browser, `A11y${RUN}`, { viewport: { width: 1440, height: 900 } });
   const friend = await newGuest(browser, `Ban${RUN}`, { viewport: { width: 1440, height: 900 } });
-  const detail = await api(owner.page, "POST", "/api/rooms/", { name: "Bàn trợ năng", max_seats: 6, small_blind: 10, big_blind: 20, think_time_seconds: 90, seven_deuce_bonus: 50 });
+  const detail = await api(owner.page, "POST", "/api/rooms/", { name: "Bàn trợ năng", max_seats: 6, small_blind: 10, big_blind: 20, think_time_seconds: 90, seven_deuce_bonus: 50, starting_stack: 1000 });
   const id = detail.room.room_id;
   await api(friend.page, "POST", "/api/rooms/join/", { invite_token: detail.invite_token });
   await api(owner.page, "POST", `/api/rooms/${id}/seats/`, { seat: 1 });
   await api(friend.page, "POST", `/api/rooms/${id}/seats/`, { seat: 4 });
-  for (const p of [owner, friend]) await api(owner.page, "POST", `/api/rooms/${id}/chips/`, { player_id: p.id, amount: 1000 });
 
   // Desktop table, live hand: whoever is to act sees the action bar.
   await owner.page.goto(`/rooms/${id}/table`);

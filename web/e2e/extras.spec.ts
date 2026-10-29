@@ -38,12 +38,11 @@ test("pre-actions play a hand to the showdown; the hand is named on the table an
   test.setTimeout(360_000);
   const owner = await newGuest(browser, `Chu${RUN}`, DESKTOP);
   const friend = await newGuest(browser, `Ban${RUN}`, DESKTOP);
-  const detail = await api(owner.page, "POST", "/api/rooms/", { name: "Bàn chọn trước", max_seats: 6, small_blind: 10, big_blind: 20, think_time_seconds: 90, seven_deuce_bonus: 0 });
+  const detail = await api(owner.page, "POST", "/api/rooms/", { name: "Bàn chọn trước", max_seats: 6, small_blind: 10, big_blind: 20, think_time_seconds: 90, seven_deuce_bonus: 0, starting_stack: 1000 });
   const id = detail.room.room_id;
   await api(friend.page, "POST", "/api/rooms/join/", { invite_token: detail.invite_token });
   await api(owner.page, "POST", `/api/rooms/${id}/seats/`, { seat: 1 });
   await api(friend.page, "POST", `/api/rooms/${id}/seats/`, { seat: 4 });
-  for (const p of [owner, friend]) await api(owner.page, "POST", `/api/rooms/${id}/chips/`, { player_id: p.id, amount: 1000 });
 
   await owner.page.goto(`/rooms/${id}/table`);
   await friend.page.goto(`/rooms/${id}/table`);

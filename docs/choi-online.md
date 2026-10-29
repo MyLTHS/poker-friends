@@ -53,10 +53,14 @@ lỗi** có góp ý của bạn bè và lỗi trình duyệt (xem [runbook.md](r
 Trình duyệt coi mỗi link mới là một trang web khác, nên đăng nhập của buổi trước không theo sang
 buổi sau.
 
-- **Chỉ thành viên**: server ở nhà tắt chế độ khách (`GUESTS_ALLOWED=false` trong `.env.home`).
-  Ai cũng phải có tài khoản email + mật khẩu, nhưng **đăng ký xong là vào chơi được ngay**: không
+- **Khách vào được**: server ở nhà bật chế độ khách (`GUESTS_ALLOWED=true` trong `.env.home`;
+  `play-online.sh up` tự sửa file cũ còn ghi `false`). Bạn bè **chỉ cần gõ tên** là tạo phòng, ngồi
+  vào bàn được; ngồi xuống là **có chip ngay** (chip khởi điểm của phòng), hết chip thì tự **mua
+  thêm**. Tài khoản bị bỏ tick **Active** trong `/admin/` vẫn bị chặn.
+- **Khách mất chỗ khi link đổi**: khách gắn với trình duyệt và link của buổi đó. Ai muốn giữ phòng,
+  chip và lịch sử qua nhiều buổi thì tạo tài khoản email + mật khẩu (hoặc nâng cấp từ khách), không
   cần xác minh email, không cần ai duyệt.
-- **Mỗi buổi đăng nhập lại** trên link mới là có lại hết phòng và chip.
+- **Mỗi buổi đăng nhập lại** trên link mới là có lại hết phòng và chip (với tài khoản).
 - Email chỉ cần cho **quên mật khẩu**:
   - Có cấu hình Gmail (`EMAIL_URL` trong file `.env.home`, cách làm ở
     [huong-dan-google-smtp.md](huong-dan-google-smtp.md)): email tự gửi đi.
