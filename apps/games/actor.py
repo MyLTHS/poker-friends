@@ -19,6 +19,7 @@ from typing import Any
 from channels.db import database_sync_to_async
 from channels.exceptions import ChannelFull
 from channels.layers import get_channel_layer
+from django.conf import settings
 from django.db import IntegrityError
 from django.utils import timezone
 
@@ -226,10 +227,15 @@ class TableActor:
         self._queue.put_nowait(_TakeSeat(user, seat, future))
         return await future
 
-    async def leave_seat(self, user: User) -> None:
+    async def leave_seat(self, user: User) -> bool:
+        """Stand up; ``False`` when they are in the running hand and go only once it ends."""
         future: asyncio.Future = asyncio.get_running_loop().create_future()
         self._queue.put_nowait(_LeaveSeat(user, future))
-        await future
+        return await future
+
+    async def stay(self, user: User) -> dict[str, Any]:
+        """Take back a leave asked during the hand; returns the occupant."""
+        return await self._call(lambda: self._stay(str(user.pk)))
 
     async def grant_chips(self, player_id: str, amount: int) -> int:
         return await self._call(lambda: self._grant_chips(player_id, amount))
@@ -307,8 +313,9 @@ class TableActor:
         if self.hand is not None and self.session.current_hand.actor is not None:
             await self._schedule_turn(self.resume_deadline)
         elif self.hand is None and not self.suspended:
-            # Restarted between hands with owner changes still waiting: apply them now. No
-            # hand just ended, so no pause before the next one.
+            # Restarted between hands: whoever was waiting for a hand that is over by now
+            # (finished by _recover, voided by an admin) leaves, and owner changes still waiting
+            # apply. No hand just ended, so no pause before the next one.
             await self._between_hands(pause=False)
         while True:
             item = await self._queue.get()
@@ -612,7 +619,11 @@ class TableActor:
         Start, a second player sat down or got chips, someone came back): deal in
         START_COUNTDOWN_SECONDS. Never shortens a countdown or a pause already running."""
         if self._next_hand_at is None and self._ready_to_deal():
-            await self._schedule_deal(_seconds(self.start_countdown, START_COUNTDOWN_SECONDS))
+            await self._schedule_deal(
+                _seconds(
+                    self.start_countdown, "TABLE_START_COUNTDOWN_SECONDS", START_COUNTDOWN_SECONDS
+                )
+            )
 
     async def _schedule_deal(self, seconds: float) -> None:
         self._cancel_deal()
@@ -648,7 +659,13 @@ class TableActor:
         if not self.room.running:
             await self._set_running(True)
             if self._ready_to_deal():
-                await self._schedule_deal(_seconds(self.start_countdown, START_COUNTDOWN_SECONDS))
+                await self._schedule_deal(
+                    _seconds(
+                        self.start_countdown,
+                        "TABLE_START_COUNTDOWN_SECONDS",
+                        START_COUNTDOWN_SECONDS,
+                    )
+                )
             else:
                 await self._room_updated()  # running, waiting for players (or the hand to end)
         return self._room_info()
@@ -777,10 +794,12 @@ class TableActor:
         await self._between_hands()
 
     async def _between_hands(self, pause: bool = True) -> None:
-        """The owner's changes made during the hand take effect, then the pause before the next
-        hand while the room is running (or, after a restart, a countdown when one can start).
-        Until the pause is over nothing else (a new connection, a seat) deals early: players
-        get the whole pause to see the result."""
+        """Players who asked to leave during the hand stand up and the owner's changes made
+        during it take effect, then the pause before the next hand while the room is running
+        (or, after a restart, a countdown when one can start). Until the pause is over nothing
+        else (a new connection, a seat) deals early: players get the whole pause to see the
+        result."""
+        await self._stand_up_leaving()
         try:
             if self.pending:
                 await self._apply_settings()
@@ -792,7 +811,11 @@ class TableActor:
         if not pause:
             await self._maybe_count_down()
         elif self.room.running and not self.closed and not self.closing:
-            await self._schedule_deal(_seconds(self.next_hand_delay, self.room.hand_pause_seconds))
+            await self._schedule_deal(
+                _seconds(
+                    self.next_hand_delay, "TABLE_HAND_PAUSE_SECONDS", self.room.hand_pause_seconds
+                )
+            )
 
     # ---- seats (REST) ----------------------------------------------------------------------
 
@@ -837,13 +860,54 @@ class TableActor:
             if player_id not in self.session.seats.values():
                 raise Reject("not_seated")
             seat = self._seat_of(player_id)
-            self.session.stand_up(player_id)
-            await RoomSeat.objects.filter(room=self.room, user=item.user).adelete()
+            left_now = not self.session._in_hand(player_id)
+            if left_now:
+                self.session.stand_up(player_id)
+                await RoomSeat.objects.filter(room=self.room, user=item.user).adelete()
+            elif player_id not in self.session.leaving:
+                # They play the hand out; _between_hands stands them up when it ends.
+                await self._set_leaving(player_id, True)
         except (Reject, TableError) as error:
             item.future.set_exception(Reject(error.code, str(error)))
         else:
+            if left_now:
+                await self._seat_updated(seat)
+            item.future.set_result(left_now)
+
+    async def _stay(self, player_id: str) -> dict[str, Any]:
+        self._refuse_if_suspended()
+        if player_id not in self.session.seats.values():
+            raise Reject("not_seated")
+        if player_id in self.session.leaving:
+            await self._set_leaving(player_id, False)
+            await self._maybe_count_down()  # they count for a new hand again
+        return self._occupant(self._seat_of(player_id))
+
+    async def _set_leaving(self, player_id: str, leaving: bool) -> None:
+        """In the database first: a restart before the hand ends must not forget it."""
+        await RoomSeat.objects.filter(room=self.room, user_id=int(player_id)).aupdate(
+            leaving=leaving
+        )
+        if leaving:
+            self.session.leaving.add(player_id)
+        else:
+            self.session.leaving.discard(player_id)
+        await self._seat_updated(self._seat_of(player_id))
+
+    async def _stand_up_leaving(self) -> None:
+        """No hand running any more: whoever asked to leave during it stands up now. Their chips
+        stay in the room, as with any stand up."""
+        for player_id in sorted(self.session.leaving, key=self._seat_of):
+            seat = self._seat_of(player_id)
+            try:
+                await RoomSeat.objects.filter(room=self.room, user_id=int(player_id)).adelete()
+            except Exception:
+                # Still seated and still leaving, so never dealt in: the next hand's end, or
+                # their next DELETE (in no hand now: at once), frees the seat.
+                log.exception("room %s: freeing the seat of %s failed", self.room.pk, player_id)
+                continue
+            self.session.stand_up(player_id)
             await self._seat_updated(seat)
-            item.future.set_result(None)
 
     # ---- owner actions (B7) ------------------------------------------------------------------
 
@@ -1071,6 +1135,7 @@ class TableActor:
             "stack": self.session.stacks.get(player_id, 0),
             "sitting_out": player_id in self.session.sitting_out,
             "connected": self._connected(player_id),
+            "leaving": player_id in self.session.leaving,
         }
 
     def _turn_info(self) -> dict[str, Any] | None:
@@ -1227,8 +1292,12 @@ def _asked(player_id: str, kind: str, payload: dict[str, Any]) -> tuple:
     return (player_id, kind, json.dumps(payload, sort_keys=True))
 
 
-def _seconds(override: float | None, real: float) -> float:
-    return real if override is None else override
+def _seconds(override: float | None, setting: str, real: float) -> float:
+    """A test's override, else the E2E server's setting (config/settings.py), else the real time."""
+    if override is not None:
+        return override
+    configured = getattr(settings, setting, None)
+    return real if configured is None else configured
 
 
 def _illegal_action_code(error: IllegalAction) -> str:
@@ -1325,6 +1394,8 @@ async def _recover(room_id: int) -> TableActor:
         names[str(seat.user_id)] = seat.user.username
         if seat.sitting_out:
             session.sitting_out.add(str(seat.user_id))
+        if seat.leaving:  # freed when the hand ends, or by _run if it is over already
+            session.leaving.add(str(seat.user_id))
     async for entry in LedgerEntry.objects.filter(room=room).select_related("hand"):
         session.ledger.append(
             EngineLedgerEntry(

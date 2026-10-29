@@ -415,6 +415,7 @@ class MockTable:
             "stack": self.session.stacks.get(player_id, 0),
             "sitting_out": player_id in self.session.sitting_out,
             "connected": self._connected(player_id),
+            "leaving": player_id in self.session.leaving,  # no REST here: always false
         }
 
     def _turn_info(self) -> dict[str, Any] | None:

@@ -435,12 +435,57 @@ paths:
       operationId: leaveSeat
       summary: Rời ghế (dự kiến B4)
       description: |
-        Không được rời khi còn trong ván đang chạy (`player_in_hand`); hãy sit-out qua WebSocket
-        rồi rời sau. Chip vẫn thuộc phòng, vào lại vẫn còn. Cả bàn nhận `seat.updated`.
+        Không ở trong ván đang chạy (giữa hai ván, hoặc không được chia ván này: ngồi xuống sau khi
+        chia, đang nghỉ, hết chip): rời ngay (204), cả bàn nhận `seat.updated` với `occupant: null`.
+
+        Đang ở trong ván đang chạy (kể cả đã fold): chơi tiếp tới hết ván (202). Ghế giữ nguyên,
+        `leaving: true`, cả bàn nhận `seat.updated`. Hết ván, ngay sau `hand.completed` và trước khi
+        đếm ngược hay chia ván sau, server cho đứng dậy: cả bàn nhận `seat.updated` với
+        `occupant: null`. Người đang chờ rời không được chia ván mới và không tính vào "đủ 2 người".
+        Gọi lại khi đang chờ: vẫn 202, không đổi gì. Huỷ: `POST .../seats/me/stay/`. Server khởi
+        động lại, hay ván bị admin huỷ (`void_hand`), vẫn giữ và làm như vậy.
+
+        Chip vẫn thuộc phòng, vào lại vẫn còn. Lỗi (409): `not_seated`, `room_suspended`.
       x-phase: B4
       responses:
+        "202":
+          description: Đang trong ván đang chạy, sẽ rời khi ván xong
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeavingAfterHand"
         "204":
           description: Đã rời ghế
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/rooms/{room_id}/seats/me/stay/:
+    parameters:
+      - $ref: "#/components/parameters/RoomId"
+    post:
+      tags: [seats]
+      operationId: stayInSeat
+      summary: Ở lại, huỷ rời ghế sau ván
+      description: |
+        Huỷ `DELETE .../seats/me/` đã gọi trong ván: `leaving: false`, cả bàn nhận `seat.updated`,
+        người đó ngồi tiếp và được chia các ván sau như thường. Không đang chờ rời thì không đổi gì,
+        vẫn 200. Không có body. Lỗi (409): `not_seated` (không ngồi ở phòng này, kể cả khi ván đã
+        xong và ghế đã được trả), `room_suspended`.
+      x-phase: B4
+      responses:
+        "200":
+          description: Ghế sau khi huỷ
+          content:
+            application/json:
+              schema:
+                $ref: "./schema/common.schema.json#/$defs/SeatOccupant"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -1266,6 +1311,14 @@ components:
         seat:
           $ref: "./schema/common.schema.json#/$defs/SeatNumber"
       required: [seat]
+      additionalProperties: false
+    LeavingAfterHand:
+      type: object
+      description: Trả lời 202 của `leaveSeat` (người gọi đang trong ván đang chạy, rời khi ván xong).
+      properties:
+        leaving:
+          const: true
+      required: [leaving]
       additionalProperties: false
     TableSnapshot:
       type: object

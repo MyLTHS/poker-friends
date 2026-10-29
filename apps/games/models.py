@@ -124,6 +124,9 @@ class RoomSeat(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="room_seats")
     seat = models.PositiveSmallIntegerField()
     sitting_out = models.BooleanField(default=False)
+    # Asked to leave during a hand they are in: the row goes when that hand ends. Stored so a
+    # restart before then does not forget it.
+    leaving = models.BooleanField(default=False)
 
     class Meta:
         constraints = [

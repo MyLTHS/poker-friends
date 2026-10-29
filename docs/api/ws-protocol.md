@@ -260,9 +260,9 @@ Ví dụ đầy đủ: [giữa hai ván](fixtures/server/valid/table.snapshot.be
              "running": true, "next_hand_at": null},
     "you": {"player_id": "1", "seat": 1},
     "seats": [
-      {"seat": 1, "player_id": "1", "display_name": "Lym", "stack": 1000, "sitting_out": false, "connected": true},
-      {"seat": 3, "player_id": "2", "display_name": "An", "stack": 1000, "sitting_out": false, "connected": true},
-      {"seat": 5, "player_id": "3", "display_name": "Bình", "stack": 1000, "sitting_out": false, "connected": true}
+      {"seat": 1, "player_id": "1", "display_name": "Lym", "stack": 1000, "sitting_out": false, "connected": true, "leaving": false},
+      {"seat": 3, "player_id": "2", "display_name": "An", "stack": 1000, "sitting_out": false, "connected": true, "leaving": false},
+      {"seat": 5, "player_id": "3", "display_name": "Bình", "stack": 1000, "sitting_out": false, "connected": true, "leaving": false}
     ],
     "hand": null, "turn": null
   }}
@@ -406,19 +406,30 @@ không đổi); ai kết nối lại sau đó xem trong lịch sử ván (`shown
 ### `seat.updated` (sự kiện)
 
 Một ghế thay đổi: có người ngồi (qua REST; chưa có chip thì đã kèm `starting_stack` của phòng),
-rời ghế, sit-out, quay lại, được cấp chip hoặc tự mua thêm (`rebuy`), mất/có kết nối. `occupant` là trạng thái mới của ghế, `null` nếu ghế trống.
+rời ghế (hoặc xin rời sau ván, huỷ xin rời), sit-out, quay lại, được cấp chip hoặc tự mua thêm
+(`rebuy`), mất/có kết nối. `occupant` là trạng thái mới của ghế, `null` nếu ghế trống.
 
 ```json
 {
   "protocol_version": 1, "type": "seat.updated", "room_id": 1, "hand_id": null,
   "version": 26, "server_time": "2026-10-27T14:03:05.120Z",
   "payload": {"seat": 3, "occupant": {"seat": 3, "player_id": "2", "display_name": "An",
-              "stack": 945, "sitting_out": true, "connected": true}}
+              "stack": 945, "sitting_out": true, "connected": true, "leaving": false}}
 }
 ```
 
 Sit-out có hiệu lực **từ ván sau**: nếu đang trong ván, người đó vẫn phải chơi tiếp (hoặc hết giờ
 thì bị check/fold như thường). Người sit-out vẫn phải trả thưởng 7-2 (#27).
+
+**Rời ghế giữa ván** (`DELETE /api/rooms/{id}/seats/me/`, nút "Rời phòng" / "Đứng dậy xem"). Không
+ở trong ván đang chạy thì rời ngay. Đang ở trong ván (kể cả đã fold) thì chơi tiếp tới hết ván: REST
+trả 202, ghế có `leaving: true` ([ví dụ](fixtures/server/valid/seat.updated.leaving.json)). Hết ván,
+ngay sau `hand.completed` và trước khi đếm ngược hay chia ván sau, server cho người đó đứng dậy:
+`seat.updated` với `occupant: null`; chip vẫn thuộc phòng, họ ở lại xem như người xem nếu còn kết
+nối. Người đang chờ rời không bao giờ được chia ván mới và không tính vào "đủ 2 người".
+`POST /api/rooms/{id}/seats/me/stay/` huỷ (`leaving: false`). `leaving` được lưu trong DB: server
+khởi động lại giữa ván vẫn nhớ; ván bị admin huỷ (`void_hand`) hay được khôi phục cho xong sau khi
+khởi động lại cũng trả ghế như ván xong bình thường.
 
 ### `command.ack` (trả lời riêng)
 

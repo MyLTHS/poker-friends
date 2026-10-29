@@ -68,6 +68,9 @@ class TableSession:
         self._shuffle = shuffle
         self.seats: dict[int, str] = {}
         self.sitting_out: set[str] = set()
+        # Asked to stand up during a hand they are in: still seated until it ends (the table
+        # stands them up then), but never dealt into another hand.
+        self.leaving: set[str] = set()
         self.ledger: list[LedgerEntry] = []
         self.history: list[dict[str, Any]] = []
         self.current_hand: HandEngine | None = None
@@ -122,6 +125,7 @@ class TableSession:
         seat = self._seat_of(player_id)
         del self.seats[seat]
         self.sitting_out.discard(player_id)
+        self.leaving.discard(player_id)
 
     def sit_out(self, player_id: str) -> None:
         self._seat_of(player_id)
@@ -143,12 +147,14 @@ class TableSession:
     # ---- hands -------------------------------------------------------------------------
 
     def _eligible(self) -> list[Seat]:
-        """Who would be dealt in now: seated, not sitting out, with chips."""
+        """Who would be dealt in now: seated, not sitting out or leaving, with chips."""
         stacks = self.stacks
         return [
             Seat(seat=seat, player_id=player, stack=stacks.get(player, 0))
             for seat, player in sorted(self.seats.items())
-            if player not in self.sitting_out and stacks.get(player, 0) > 0
+            if player not in self.sitting_out
+            and player not in self.leaving
+            and stacks.get(player, 0) > 0
         ]
 
     def can_start_hand(self) -> bool:

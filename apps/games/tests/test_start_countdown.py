@@ -300,3 +300,21 @@ class TestHandPauseSetting:
         run_async(body)
         room.refresh_from_db()
         assert room.hand_pause_seconds == 15
+
+
+def test_e2e_settings_shorten_the_countdown_and_the_pause(settings):
+    """The E2E server's knobs (config/settings.py) stand in for the real times; a test's own
+    override still wins."""
+    from apps.games.actor import _seconds
+
+    settings.TABLE_START_COUNTDOWN_SECONDS = None
+    assert _seconds(None, "TABLE_START_COUNTDOWN_SECONDS", 10) == 10
+    settings.TABLE_START_COUNTDOWN_SECONDS = 1.0
+    assert _seconds(None, "TABLE_START_COUNTDOWN_SECONDS", 10) == 1.0
+    assert _seconds(0, "TABLE_START_COUNTDOWN_SECONDS", 10) == 0
+
+
+def test_the_e2e_server_makes_rooms_that_deal_without_start(settings):
+    settings.ROOMS_START_RUNNING = True
+    detail = post(logged_in(make_user("an")), "/api/rooms/", ROOM).json()
+    assert detail["room"]["running"] is True

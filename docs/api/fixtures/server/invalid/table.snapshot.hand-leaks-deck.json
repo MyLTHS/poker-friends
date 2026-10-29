@@ -37,7 +37,8 @@
           "display_name": "Lym",
           "stack": 1000,
           "sitting_out": false,
-          "connected": true
+          "connected": true,
+          "leaving": false
         },
         {
           "seat": 3,
@@ -45,7 +46,8 @@
           "display_name": "An",
           "stack": 1000,
           "sitting_out": false,
-          "connected": false
+          "connected": false,
+          "leaving": false
         },
         {
           "seat": 5,
@@ -53,7 +55,8 @@
           "display_name": "Bình",
           "stack": 1000,
           "sitting_out": false,
-          "connected": true
+          "connected": true,
+          "leaving": false
         }
       ],
       "hand": {
