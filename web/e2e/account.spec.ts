@@ -41,12 +41,11 @@ async function logIn(page: Page, email: string, password: string) {
 test.describe("account flows (the email links where there still are some)", () => {
   test("a guest with chips upgrades and keeps them, then logs in again with the new account", async ({ page }) => {
     await playAsGuest(page);
-    // The guest opens a table, sits and is granted chips: the upgrade must carry them over.
-    const guest = await api(page, "GET", "/api/auth/me/");
-    const created = await api(page, "POST", "/api/rooms/", { name: "Bàn của khách", small_blind: 1, big_blind: 2 });
+    // The guest opens a table and sits, which brings its starting stack: the upgrade must carry
+    // those chips over.
+    const created = await api(page, "POST", "/api/rooms/", { name: "Bàn của khách", small_blind: 1, big_blind: 2, starting_stack: 750 });
     const roomId = created.room.room_id;
     await api(page, "POST", `/api/rooms/${roomId}/seats/`, { seat: 1 });
-    await api(page, "POST", `/api/rooms/${roomId}/chips/`, { player_id: String(guest.id), amount: 750 });
     await page.reload();
     await expect(page.getByRole("heading", { name: "Trở thành thành viên" })).toBeVisible();
     await expect(page.getByRole("list", { name: "Chip của bạn ở các phòng" })).toContainText(/Bàn của khách\s*750/);

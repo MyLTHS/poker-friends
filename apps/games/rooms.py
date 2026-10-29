@@ -19,7 +19,16 @@ from apps.accounts.views import client_ip
 
 from . import actor as actor_module
 from .accounts import player_for_request
-from .models import Hand, OwnerAction, Room, RoomBan, RoomMember, RoomSeat, User
+from .models import (
+    MAX_STARTING_STACK,
+    Hand,
+    OwnerAction,
+    Room,
+    RoomBan,
+    RoomMember,
+    RoomSeat,
+    User,
+)
 
 ROOMS_PER_USER = RateLimit("rooms-user", limit=10, window=60 * 60)
 # Commands over WebSocket, per player (consumers.py): far above what a person clicks.
@@ -44,6 +53,7 @@ STATUS = {
     "already_seated": 409,
     "not_seated": 409,
     "player_in_hand": 409,
+    "has_chips": 409,
     "room_closed": 409,
     "negative_balance": 409,
     "room_suspended": 409,
@@ -89,6 +99,7 @@ SETTING_RULES = {
     "big_blind": (int, 2, None),
     "think_time_seconds": (int, 5, 120),
     "seven_deuce_bonus": (int, 0, None),
+    "starting_stack": (int, 1, MAX_STARTING_STACK),
     "is_private": (bool, None, None),
 }
 
@@ -164,6 +175,7 @@ def room_info(room: Room) -> dict[str, Any]:
         "big_blind": room.big_blind,
         "think_time_seconds": room.think_time_seconds,
         "seven_deuce_bonus": room.seven_deuce_bonus,
+        "starting_stack": room.starting_stack,
     }
 
 

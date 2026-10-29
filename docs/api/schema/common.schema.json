@@ -343,6 +343,11 @@
         },
         "seven_deuce_bonus": {
           "$ref": "#/$defs/Chips"
+        },
+        "starting_stack": {
+          "description": "Chips a player gets on sitting down with none in this room, and again on a rebuy once busted.",
+          "type": "integer",
+          "minimum": 1
         }
       },
       "required": [
@@ -353,7 +358,8 @@
         "small_blind",
         "big_blind",
         "think_time_seconds",
-        "seven_deuce_bonus"
+        "seven_deuce_bonus",
+        "starting_stack"
       ],
       "additionalProperties": false
     },

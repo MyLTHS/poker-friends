@@ -1,6 +1,6 @@
 // C5: the whole evening in two browsers. Every step a player takes goes through the pages: the
 // owner creates a private room, sends the invite link, a friend with no account opens it; both
-// sit, the owner grants chips from the panel on the table itself, one hand is played to the end
+// sit (the chips come with the seats, no owner needed), one hand is played to the end
 // with the C key, and the history lists that hand with its replay. REST is only used to make the
 // owner a guest and to read the result for checking.
 
@@ -16,7 +16,7 @@ async function guestPage(page: Page, name: string) {
   await api(page, "POST", "/api/auth/guest/", { username: name });
 }
 
-test("private room → invite link → friend joins → both sit → chips from the table → one hand → history", async ({ browser }) => {
+test("private room → invite link → friend joins → both sit with chips → one hand → history", async ({ browser }) => {
   test.setTimeout(240_000);
   const ownerCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const owner = await ownerCtx.newPage();
@@ -29,6 +29,9 @@ test("private room → invite link → friend joins → both sit → chips from 
   await expect(owner).toHaveURL(/\/rooms\/new$/);
   await owner.getByLabel("Tên phòng").fill("Tối thứ Sáu");
   await owner.getByRole("radio", { name: "2", exact: true }).click();
+  // The hand deals the moment the friend sits (the seats come with chips): 60 s to act leaves
+  // time to walk from the room page to the table.
+  await owner.getByRole("radio", { name: "60", exact: true }).click();
   await owner.getByRole("radio", { name: /Riêng/ }).click();
   await owner.getByRole("button", { name: "Tạo phòng & lấy link mời" }).click();
   await expect(owner).toHaveURL(/\/rooms\/\d+$/);
@@ -48,21 +51,13 @@ test("private room → invite link → friend joins → both sit → chips from 
   await friend.getByRole("button", { name: "Ngồi đây" }).first().click();
   await expect(friend.getByText("Đã ngồi ghế 2")).toBeVisible();
 
-  // 3. Both open the table; the owner grants chips from the crown on the table.
+  // 3. Both open the table. Each seat came with the room's starting stack (100 big blinds), so
+  // nobody waits for the owner.
   await owner.getByRole("link", { name: /Về bàn|Vào bàn/ }).first().click();
   await expect(owner).toHaveURL(new RegExp(`/rooms/${roomId}/table$`));
   await friend.goto(`/rooms/${roomId}/table`);
-  for (const p of [owner, friend]) await expect(p.locator("[data-hand=none]")).toBeVisible();
-  await owner.getByRole("button", { name: "Bảng chủ phòng" }).click();
-  const sheet = owner.getByRole("dialog", { name: /Bảng chủ phòng/ });
-  for (const seat of ["Ghế 1", "Ghế 2"]) {
-    const row = sheet.getByRole("listitem").filter({ hasText: seat });
-    await row.getByRole("button", { name: "Cấp/trừ" }).click();
-    await row.getByRole("button", { name: "Cấp 500" }).click();
-    await expect(row.locator(".op-stack")).toHaveText("500");
-  }
-  await owner.keyboard.press("Escape");
-  await expect(sheet).toBeHidden();
+  const room = await api(owner, "GET", `/api/rooms/${roomId}/`);
+  expect(room.room.starting_stack).toBe(100 * room.room.big_blind);
 
   // 4. The hand deals; whoever is to act checks or calls with the C key until it is over. Each
   // press must reach the server as exactly one check/call of that player (not a timeout).

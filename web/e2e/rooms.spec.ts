@@ -1,5 +1,6 @@
 // C4: the room screens on the real server. Lan opens a table from the lobby, Bình (a new visitor,
-// not logged in) opens the invite link, sits down, and Lan grants chips from the owner's panel.
+// not logged in) opens the invite link, sits down (with the room's starting stack), and Lan grants
+// more chips from the owner's panel.
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
@@ -60,7 +61,8 @@ test("lobby → create a room → invite link → a new visitor joins and sits; 
   await binh.getByRole("button", { name: "Ngồi đây" }).first().click();
   await expect(binh.getByText("Đã ngồi ghế 1")).toBeVisible();
 
-  // The owner's panel: grant Bình 500 chips.
+  // Bình sat down with the starting stack (100 big blinds of the form's 10/20: 2.000); the owner's
+  // panel grants 500 more.
   await an.reload();
   await an.getByRole("button", { name: "Bảng chủ phòng" }).click();
   const sheet = an.getByRole("dialog", { name: /Bảng chủ phòng/ });
@@ -68,9 +70,9 @@ test("lobby → create a room → invite link → a new visitor joins and sits; 
   await row.getByRole("button", { name: "Cấp/trừ" }).click();
   await row.getByRole("button", { name: "Cấp 500" }).click();
   await expect(an.getByText(/Đã cấp 500 chip cho/)).toBeVisible();
-  await expect(row.locator(".op-stack")).toHaveText("500");
+  await expect(row.locator(".op-stack")).toHaveText("2.500");
   const seats = await api(an, "GET", `/api/rooms/${roomId}/snapshot/`);
-  expect(seats.table.seats[0].stack).toBe(500);
+  expect(seats.table.seats[0].stack).toBe(2500);
 
   // At the table, "Mời bạn" gives the owner the same invite link. Bình is not the owner of this
   // private room, so the server keeps the link from them and the sheet says to ask Lan.
@@ -107,9 +109,11 @@ test("a wrong invite link says so and leads back to the lobby", async ({ browser
 
 test("the owner seated with no chips grants them to themselves from the bar", async ({ browser }) => {
   const owner = await newGuest(browser, "Minh");
-  const room = await api(owner, "POST", "/api/rooms/", { name: "Bàn E2E tự cấp", small_blind: 10, big_blind: 20 });
+  const room = await api(owner, "POST", "/api/rooms/", { name: "Bàn E2E tự cấp", small_blind: 10, big_blind: 20, starting_stack: 800 });
   const roomId = room.room.room_id;
-  await api(owner, "POST", `/api/rooms/${roomId}/seats/`, { seat: 1 });
+  const seated = await api(owner, "POST", `/api/rooms/${roomId}/seats/`, { seat: 1 });
+  expect(seated.stack).toBe(800); // the chips come with the seat
+  await api(owner, "POST", `/api/rooms/${roomId}/chips/`, { player_id: seated.player_id, amount: -800 }); // all gone
   await owner.goto(`/rooms/${roomId}/table`);
   await owner.getByRole("button", { name: "Cấp chip cho mình" }).click();
   const row = owner.getByRole("dialog", { name: /Bảng chủ phòng/ }).getByRole("listitem").filter({ hasText: /Ghế 1/ });
