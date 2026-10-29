@@ -14,7 +14,8 @@
       "small_blind": 10,
       "big_blind": 20,
       "think_time_seconds": 30,
-      "seven_deuce_bonus": 50
+      "seven_deuce_bonus": 50,
+      "starting_stack": 1000
     }
   }
 }

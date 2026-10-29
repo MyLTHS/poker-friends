@@ -44,6 +44,7 @@ STATUS = {
     "already_seated": 409,
     "not_seated": 409,
     "player_in_hand": 409,
+    "has_chips": 409,
     "room_closed": 409,
     "negative_balance": 409,
     "room_suspended": 409,
@@ -89,6 +90,8 @@ SETTING_RULES = {
     "big_blind": (int, 2, None),
     "think_time_seconds": (int, 5, 120),
     "seven_deuce_bonus": (int, 0, None),
+    # Capped so that a table of rebuys stays far below what a ledger amount can hold.
+    "starting_stack": (int, 1, 10_000_000),
     "is_private": (bool, None, None),
 }
 
@@ -164,6 +167,7 @@ def room_info(room: Room) -> dict[str, Any]:
         "big_blind": room.big_blind,
         "think_time_seconds": room.think_time_seconds,
         "seven_deuce_bonus": room.seven_deuce_bonus,
+        "starting_stack": room.starting_stack,
     }
 
 

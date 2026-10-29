@@ -21,6 +21,7 @@ CONFLICT_CODES = {
     "seat_taken",
     "not_seated",
     "player_in_hand",
+    "has_chips",
     "room_closed",
     "room_suspended",
 }
@@ -106,6 +107,23 @@ async def leave_seat(request: HttpRequest, room_id: int) -> JsonResponse:
     except actor_module.Reject as reject:
         return _error(reject.code, str(reject), _status_for(reject.code))
     return JsonResponse(None, status=204, safe=False)
+
+
+async def rebuy(request: HttpRequest, room_id: int) -> JsonResponse:
+    """A seated player with no chips left takes the room's starting stack again (no owner)."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    found = await _player_in_room(request, room_id)
+    if isinstance(found, JsonResponse):
+        return found
+    _, user = found
+    act = await actor_module.get_actor(room_id)
+    try:
+        balance = await act.rebuy(str(user.pk))
+    except actor_module.Reject as reject:
+        return _error(reject.code, str(reject), _status_for(reject.code))
+    # Only from zero, so the grant is the whole new stack (GrantChipsResult in the API).
+    return JsonResponse({"player_id": str(user.pk), "amount": balance, "balance": balance})
 
 
 @ensure_csrf_cookie  # the first GET hands out the csrftoken the POST/DELETE calls must echo

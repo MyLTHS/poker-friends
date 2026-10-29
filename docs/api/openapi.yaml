@@ -69,9 +69,10 @@ paths:
       operationId: createRoom
       summary: Tạo phòng
       description: |
-        Người gọi (kể cả khách) thành chủ phòng. Phòng mới ở trạng thái `open`, chưa ai ngồi, chưa ai
-        có chip: chủ phòng cấp chip bằng `grantChips` sau khi người chơi vào ghế. Phòng private chỉ
-        người có link mời (`invite_token`) mới thấy. Giới hạn 10 phòng/giờ mỗi người.
+        Người gọi (kể cả khách) thành chủ phòng. Phòng mới ở trạng thái `open`, chưa ai ngồi. Ai vào
+        ghế mà chưa có chip trong phòng thì nhận ngay `starting_stack` (không cần chủ phòng); hết chip
+        thì tự mua thêm bằng `rebuy`. Chủ phòng vẫn cấp thêm hoặc trừ bớt bằng `grantChips`. Phòng
+        private chỉ người có link mời (`invite_token`) mới thấy. Giới hạn 10 phòng/giờ mỗi người.
       x-phase: B7
       requestBody:
         required: true
@@ -86,6 +87,7 @@ paths:
               big_blind: 10
               think_time_seconds: 20
               seven_deuce_bonus: 50
+              starting_stack: 1000
               is_private: true
       responses:
         "201":
@@ -165,6 +167,7 @@ paths:
         Chỉ chủ phòng (`forbidden` với người khác). Đang có ván thì ván đó giữ cấu hình cũ: thay đổi
         nằm trong `pending` và có hiệu lực từ ván sau; cả bàn nhận `room.updated` lúc đó. Không có ván
         thì có hiệu lực ngay. `small_blind` phải nhỏ hơn `big_blind` (tính cả giá trị đang có).
+        `starting_stack` mới chỉ dùng cho những lần vào ghế và mua thêm sau đó; chip đang có giữ nguyên.
       x-phase: B7
       requestBody:
         required: true
@@ -325,7 +328,9 @@ paths:
       operationId: takeSeat
       summary: Vào ghế (dự kiến B4)
       description: |
-        Người gọi ngồi vào một ghế trống. Được dealt từ ván kế tiếp nếu có chip trong phòng.
+        Người gọi ngồi vào một ghế trống. Chưa có chip trong phòng (lần đầu, hoặc rời ghế lúc hết chip)
+        thì nhận ngay `starting_stack` của phòng (một bút toán `grant`, `stack` trong kết quả đã tính);
+        còn chip thì giữ nguyên, không cấp thêm. Được chia bài từ ván kế tiếp.
         Cả bàn nhận `seat.updated` qua WebSocket. Phòng private cần quyền xem (`room_not_found`);
         người đã bị kick nhận `kicked`; phòng đã đóng nhận `room_closed`; phòng tạm dừng nhận
         `room_suspended`. Chưa đăng nhập thì server tạo khách và đăng nhập luôn (tối đa 20 khách/giờ
@@ -372,6 +377,37 @@ paths:
       responses:
         "204":
           description: Đã rời ghế
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/rooms/{room_id}/rebuy/:
+    parameters:
+      - $ref: "#/components/parameters/RoomId"
+    post:
+      tags: [seats]
+      operationId: rebuy
+      summary: Mua thêm chip khi đã hết
+      description: |
+        Người đang ngồi ghế mà hết chip tự lấy lại `starting_stack` của phòng, không cần chủ phòng.
+        Ghi một bút toán `grant` (bảng lời/lỗ tính nó như chip được cấp). Cả bàn nhận `seat.updated`
+        với `stack` mới; đủ hai người có chip thì ván mới bắt đầu. Không có body. Lỗi (409):
+        `not_seated` (chưa ngồi ghế), `player_in_hand` (đang trong ván chạy), `has_chips` (còn chip),
+        `room_closed` (phòng đã đóng hoặc sắp đóng), `room_suspended`.
+      x-phase: B7
+      responses:
+        "200":
+          description: Đã mua thêm; `amount` và `balance` đều bằng `starting_stack` của phòng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrantChipsResult"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -972,6 +1008,11 @@ components:
           minimum: 0
           default: 0
           description: Thưởng luật 7-2 (#27); 0 là tắt.
+        starting_stack:
+          type: integer
+          minimum: 1
+          maximum: 10000000
+          description: Chip mỗi người nhận khi vào ghế lần đầu và khi mua thêm. Bỏ trống thì 100 × `big_blind`.
         is_private:
           type: boolean
           default: false
@@ -1052,6 +1093,10 @@ components:
         seven_deuce_bonus:
           type: integer
           minimum: 0
+        starting_stack:
+          type: integer
+          minimum: 1
+          maximum: 10000000
       additionalProperties: false
     JoinRoomRequest:
       type: object
@@ -1460,6 +1505,7 @@ components:
             - already_seated
             - not_seated
             - player_in_hand
+            - has_chips
             - rate_limited
             - invalid_credentials
             - email_not_verified
@@ -1513,7 +1559,7 @@ components:
           schema:
             $ref: "#/components/schemas/ApiError"
     Conflict:
-      description: Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`, `room_suspended`)
+      description: Trạng thái không cho phép (`seat_taken`, `already_seated`, `not_seated`, `player_in_hand`, `has_chips`, `room_closed`, `email_taken`, `username_taken`, `not_guest`, `negative_balance`, `hand_voided`, `room_suspended`)
       content:
         application/json:
           schema:

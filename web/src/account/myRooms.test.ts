@@ -17,6 +17,7 @@ const room = (room_id: number, name: string, owner_name: string | null = null): 
     big_blind: 10,
     think_time_seconds: 30,
     seven_deuce_bonus: 0,
+    starting_stack: 1000,
   },
   is_private: false,
   owner_name,

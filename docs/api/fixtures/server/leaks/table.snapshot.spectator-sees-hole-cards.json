@@ -15,7 +15,8 @@
         "small_blind": 5,
         "big_blind": 10,
         "think_time_seconds": 20,
-        "seven_deuce_bonus": 50
+        "seven_deuce_bonus": 50,
+        "starting_stack": 1000
       },
       "you": {
         "player_id": "4",
