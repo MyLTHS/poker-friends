@@ -19,6 +19,7 @@ from typing import Any
 from channels.db import database_sync_to_async
 from channels.exceptions import ChannelFull
 from channels.layers import get_channel_layer
+from django.conf import settings
 from django.db import IntegrityError
 from django.utils import timezone
 
@@ -618,7 +619,11 @@ class TableActor:
         Start, a second player sat down or got chips, someone came back): deal in
         START_COUNTDOWN_SECONDS. Never shortens a countdown or a pause already running."""
         if self._next_hand_at is None and self._ready_to_deal():
-            await self._schedule_deal(_seconds(self.start_countdown, START_COUNTDOWN_SECONDS))
+            await self._schedule_deal(
+                _seconds(
+                    self.start_countdown, "TABLE_START_COUNTDOWN_SECONDS", START_COUNTDOWN_SECONDS
+                )
+            )
 
     async def _schedule_deal(self, seconds: float) -> None:
         self._cancel_deal()
@@ -654,7 +659,13 @@ class TableActor:
         if not self.room.running:
             await self._set_running(True)
             if self._ready_to_deal():
-                await self._schedule_deal(_seconds(self.start_countdown, START_COUNTDOWN_SECONDS))
+                await self._schedule_deal(
+                    _seconds(
+                        self.start_countdown,
+                        "TABLE_START_COUNTDOWN_SECONDS",
+                        START_COUNTDOWN_SECONDS,
+                    )
+                )
             else:
                 await self._room_updated()  # running, waiting for players (or the hand to end)
         return self._room_info()
@@ -800,7 +811,11 @@ class TableActor:
         if not pause:
             await self._maybe_count_down()
         elif self.room.running and not self.closed and not self.closing:
-            await self._schedule_deal(_seconds(self.next_hand_delay, self.room.hand_pause_seconds))
+            await self._schedule_deal(
+                _seconds(
+                    self.next_hand_delay, "TABLE_HAND_PAUSE_SECONDS", self.room.hand_pause_seconds
+                )
+            )
 
     # ---- seats (REST) ----------------------------------------------------------------------
 
@@ -1277,8 +1292,12 @@ def _asked(player_id: str, kind: str, payload: dict[str, Any]) -> tuple:
     return (player_id, kind, json.dumps(payload, sort_keys=True))
 
 
-def _seconds(override: float | None, real: float) -> float:
-    return real if override is None else override
+def _seconds(override: float | None, setting: str, real: float) -> float:
+    """A test's override, else the E2E server's setting (config/settings.py), else the real time."""
+    if override is not None:
+        return override
+    configured = getattr(settings, setting, None)
+    return real if configured is None else configured
 
 
 def _illegal_action_code(error: IllegalAction) -> str:

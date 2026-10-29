@@ -11,6 +11,7 @@ import secrets
 from typing import Any
 
 from asgiref.sync import sync_to_async
+from django.conf import settings as django_settings
 from django.db.models import Count, Exists, OuterRef, Q
 from django.http import HttpRequest, JsonResponse
 
@@ -279,7 +280,11 @@ async def _create(request: HttpRequest) -> JsonResponse:
         return error("validation_error", "Invalid body.", exc.fields)
     except RateLimited as exc:
         return rate_limited(exc)
-    room = await Room.objects.acreate(owner=user, invite_token=new_invite_token(), **settings)
+    # Only the E2E server makes rooms that deal at once (settings.ROOMS_START_RUNNING).
+    running = django_settings.ROOMS_START_RUNNING
+    room = await Room.objects.acreate(
+        owner=user, invite_token=new_invite_token(), running=running, **settings
+    )
     await RoomMember.objects.acreate(room=room, user=user)
     room = await Room.objects.select_related("owner").aget(pk=room.pk)
     return JsonResponse(room_detail(room, user), status=201)
