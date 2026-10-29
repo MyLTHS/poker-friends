@@ -4316,9 +4316,8 @@
   /* watching without a seat: said once, at the top of the felt */
   .d1 .watch-pill {
     position: absolute;
-    left: 50%;
+    left: 18px;
     top: 14px;
-    translate: -50% 0;
     z-index: 6;
     display: inline-flex;
     align-items: center;
@@ -4337,6 +4336,7 @@
     color: var(--brass-2);
   }
   .d1 .stage-mobile .watch-pill {
+    left: 8px;
     top: 6px;
     padding: 4px 10px;
     font-size: var(--fs-xs);
