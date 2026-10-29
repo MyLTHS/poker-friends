@@ -315,7 +315,8 @@ paths:
         có người đang xem bàn và có từ 2 người chơi được (có chip, không nghỉ), bàn đếm ngược 10
         giây (`next_hand_at`) rồi chia. Sau đó các ván tự nối tiếp, mỗi lần nghỉ
         `hand_pause_seconds`. Chưa đủ người thì chờ: ai làm đủ người (ngồi, có chip, quay lại) là
-        đếm 10 giây. Cả bàn nhận `room.updated`. Đang chạy rồi thì không đổi gì, trả nguyên trạng.
+        đếm 10 giây. Cả bàn nhận `room.updated`. Đang chạy rồi thì giữ nguyên (không rút ngắn đồng
+        hồ đang đếm); nếu bàn đang đứng (không ván, không đếm, đủ người) thì đếm lại 10 giây.
         Phòng đã đóng hoặc sắp đóng: `room_closed`; tạm dừng vì lỗi: `room_suspended`.
       x-phase: B7
       responses:

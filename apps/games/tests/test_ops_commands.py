@@ -60,6 +60,16 @@ class TestSimulateHands:
             call_command("simulate_hands", hands=0, stdout=StringIO())
 
 
+class TestSoak:
+    def test_refuses_a_hand_pause_no_room_can_have(self):
+        # Checked before anything else: the room's own check (6 to 20 s) would end in an
+        # IntegrityError.
+        for wrong in (5, 21):
+            with pytest.raises(CommandError, match="--hand-pause"):
+                call_command("soak", hand_pause=wrong, stdout=StringIO())
+        assert not Room.objects.exists()
+
+
 class TestCheckLedgerPasses:
     def test_clean_rooms_pass_and_are_reported(self):
         first = simulated_room(hands=30, players=3, seven_deuce_bonus=20, seed=1)

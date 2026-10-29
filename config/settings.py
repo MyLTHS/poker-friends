@@ -4,10 +4,12 @@ Everything that differs between environments comes from environment variables
 (see .env.example). Defaults are for local development only.
 """
 
+import math
 import os
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -17,8 +19,17 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 
 def env_float(name: str) -> float | None:
+    """Seconds from the environment: a finite number, 0 or more. None when unset or empty."""
     value = os.environ.get(name, "").strip()
-    return float(value) if value else None
+    if not value:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        seconds = math.nan
+    if not math.isfinite(seconds) or seconds < 0:
+        raise ImproperlyConfigured(f"{name} must be a number of seconds, 0 or more (not {value!r})")
+    return seconds
 
 
 def env_list(name: str, default: str = "") -> list[str]:

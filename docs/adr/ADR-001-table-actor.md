@@ -195,11 +195,15 @@ trùng theo `(hand, command_id)`, khôi phục mục 4 và fail-stop mục 5. Nh
 - **Fail-stop chưa tự khôi phục** (mục 5.4): phòng giữ trạng thái tạm dừng tới khi process khởi
   động lại; lúc đó khôi phục chạy như mục 4. Nếu lệnh "độc" làm replay hỏng thì actor của phòng không
   dựng được và kết nối vào phòng đó thất bại, thay vì nhận snapshot `status: "suspended"`. Làm ở B5.
-- **Ván mới tự bắt đầu** khi không có ván, phòng không tạm dừng, có ít nhất 2 người đủ chip và có
-  ít nhất một kết nối (giống mock: không chia bài cho phòng trống). Giữa hai ván nghỉ
-  `TableActor.next_hand_delay` (4 giây).
+- **Chia ván mới** (từ 29/10/2026; trước đó bàn tự chia và nghỉ 4 giây giữa hai ván): chỉ khi chủ
+  phòng đã bấm Bắt đầu (`Room.running`, Tạm dừng thì thôi), không có ván, phòng không tạm dừng vì
+  lỗi, có ít nhất 2 người chơi được (có chip, không nghỉ, không chờ rời) và có ít nhất một kết nối
+  (giống mock: không chia bài cho phòng trống). Đủ điều kiện thì đếm ngược 10 giây
+  (`START_COUNTDOWN_SECONDS`) rồi chia; hết ván, còn đủ điều kiện thì nghỉ `room.hand_pause_seconds`
+  (6–20 giây) rồi chia ván sau, không đủ thì không hẹn gì. Chia mà ghi `Hand` lỗi thì đếm lại.
 - **Vào/rời ghế (REST) cũng đi qua hàng đợi** của phòng, để `seat.updated` có `version` đúng thứ tự
-  với lệnh WebSocket. Rời ghế xoá dòng `RoomSeat`; chip vẫn trong sổ của phòng.
+  với lệnh WebSocket. Rời ghế xoá dòng `RoomSeat`; chip vẫn trong sổ của phòng. Đang ở trong ván thì
+  rời ghế chờ hết ván (`RoomSeat.leaving`): vẫn chơi nốt, hết ván mới trả ghế.
 - **Danh tính tạm (trước B6):** mỗi Django session một user khách (`apps/games/accounts.py`),
   tạo ngay lần đầu gọi REST hoặc mở WebSocket. Hai tab cùng session là cùng người: dùng chung ghế,
   cùng nhận góc nhìn. `GET snapshot` phát cookie `csrftoken` cho các request POST/DELETE.

@@ -258,12 +258,14 @@ class TableActor:
         """Close the room; ``False`` when it closes only after the running hand."""
         return await self._call(self._close)
 
-    async def start(self) -> dict[str, Any]:
-        """The owner's Start: hands are dealt from now on. Returns the room info."""
+    async def start(self) -> tuple[bool, dict[str, Any]]:
+        """The owner's Start: hands are dealt from now on. Returns whether the room was paused
+        until now (False: nothing changed) and the room info."""
         return await self._call(self._start)
 
-    async def pause(self) -> dict[str, Any]:
-        """The owner's Pause: no new hand (a running one is played out). Returns the room info."""
+    async def pause(self) -> tuple[bool, dict[str, Any]]:
+        """The owner's Pause: no new hand (a running one is played out). Returns whether the
+        room was running until now (False: nothing changed) and the room info."""
         return await self._call(self._pause)
 
     async def _call(self, fn: Callable[[], Awaitable[Any]]) -> Any:
@@ -645,53 +647,52 @@ class TableActor:
         if item.epoch != self._deal_epoch:
             return  # paused, closed or rescheduled since: this timer is void
         self._next_hand_at, self._deal_timer = None, None
-        if self._ready_to_deal():
-            await self._deal()  # hand.started tells clients the countdown is over
-        else:
-            # Not enough players (or nobody watching) any more: no hand, no countdown. The next
-            # seat, chips or connection that makes one possible starts a new countdown.
+        if self._ready_to_deal() and await self._deal():
+            return  # hand.started tells clients the countdown is over
+        # No hand. Either not enough players (or nobody watching) any more: no countdown either,
+        # until a seat, chips or a connection makes one possible. Or the hand could not be
+        # recorded: a fresh countdown tries again rather than leave the table waiting for nothing.
+        await self._maybe_count_down()
+        if self._next_hand_at is None:
             await self._room_updated()
 
-    async def _start(self) -> dict[str, Any]:
+    async def _start(self) -> tuple[bool, dict[str, Any]]:
         self._refuse_if_suspended()
         if self.closed or self.closing:
             raise Reject("room_closed")
-        if not self.room.running:
+        started = not self.room.running
+        if started:
             await self._set_running(True)
-            if self._ready_to_deal():
-                await self._schedule_deal(
-                    _seconds(
-                        self.start_countdown,
-                        "TABLE_START_COUNTDOWN_SECONDS",
-                        START_COUNTDOWN_SECONDS,
-                    )
-                )
-            else:
-                await self._room_updated()  # running, waiting for players (or the hand to end)
-        return self._room_info()
+        # Never shortens a countdown or a pause already running. Running already, with a hand
+        # ready but nothing scheduled (the table got stuck): it counts down again.
+        await self._maybe_count_down()
+        if started and self._next_hand_at is None:
+            await self._room_updated()  # running, waiting for players (or the hand to end)
+        return started, self._room_info()
 
-    async def _pause(self) -> dict[str, Any]:
+    async def _pause(self) -> tuple[bool, dict[str, Any]]:
         self._refuse_if_suspended()
         if self.closed or self.closing:
             raise Reject("room_closed")
-        if self.room.running:
+        paused = self.room.running
+        if paused:
             await self._set_running(False)
             self._cancel_deal()  # a running hand is played out; nothing is dealt after it
             await self._room_updated()
-        return self._room_info()
+        return paused, self._room_info()
 
     async def _set_running(self, running: bool) -> None:
         await Room.objects.filter(pk=self.room.pk).aupdate(running=running)
         self.room.running = running
 
-    async def _deal(self) -> None:
-        """Deal the next hand (callers checked _ready_to_deal)."""
+    async def _deal(self) -> bool:
+        """Deal the next hand (callers checked _ready_to_deal). False when it could not be
+        recorded: nothing changed, the table is still between hands."""
         previous_button = self.session._button_seat
         try:
             engine = self.session.start_hand()
         except TableError:
-            await self._room_updated()  # cannot happen after _ready_to_deal; stay between hands
-            return
+            return False  # cannot happen after _ready_to_deal
         try:
             self.hand = await Hand.objects.acreate(
                 room=self.room,
@@ -701,10 +702,11 @@ class TableActor:
             )
         except Exception:
             # Nothing recorded, so undo the in-memory start and stay between hands.
+            log.exception("room %s: recording hand %s failed", self.room.pk, self.session.hand_no)
             self.session.current_hand = None
             self.session.hand_no -= 1
             self.session._button_seat = previous_button
-            raise
+            return False
         self._last_hand, self._shown = None, []  # too late to show the previous hand's cards
         await self._broadcast("hand.started", lambda viewer: {"hand": self._hand_view(viewer)})
         if engine.is_complete:
@@ -713,6 +715,7 @@ class TableActor:
             await self._complete_hand()
         else:
             await self._schedule_turn()
+        return True
 
     async def _after_action(self, action: Action, timeout: bool) -> None:
         engine = self.session.current_hand
@@ -795,10 +798,11 @@ class TableActor:
 
     async def _between_hands(self, pause: bool = True) -> None:
         """Players who asked to leave during the hand stand up and the owner's changes made
-        during it take effect, then the pause before the next hand while the room is running
-        (or, after a restart, a countdown when one can start). Until the pause is over nothing
-        else (a new connection, a seat) deals early: players get the whole pause to see the
-        result."""
+        during it take effect, then the pause before the next hand when one could be dealt
+        (_ready_to_deal: running, two players, someone watching), or after a restart a countdown.
+        Until the pause is over nothing else (a new connection, a seat) deals early: players get
+        the whole pause to see the result. With no hand possible nothing is scheduled
+        (next_hand_at stays null) until a seat, chips or a connection starts a countdown."""
         await self._stand_up_leaving()
         try:
             if self.pending:
@@ -810,7 +814,7 @@ class TableActor:
             log.exception("room %s: applying the owner's changes failed", self.room.pk)
         if not pause:
             await self._maybe_count_down()
-        elif self.room.running and not self.closed and not self.closing:
+        elif self._ready_to_deal():
             await self._schedule_deal(
                 _seconds(
                     self.next_hand_delay, "TABLE_HAND_PAUSE_SECONDS", self.room.hand_pause_seconds
@@ -835,8 +839,12 @@ class TableActor:
             if not 1 <= item.seat <= self.room.max_seats:
                 raise Reject("invalid_seat")
             try:
+                # A row left behind (a stand up whose delete failed) says nothing about this
+                # sitting down: a fresh seat, playing.
                 await RoomSeat.objects.aupdate_or_create(
-                    room=self.room, user=item.user, defaults={"seat": item.seat}
+                    room=self.room,
+                    user=item.user,
+                    defaults={"seat": item.seat, "sitting_out": False, "leaving": False},
                 )
             except IntegrityError as error:  # the database disagrees: someone has that seat
                 raise Reject("seat_taken") from error
@@ -862,8 +870,10 @@ class TableActor:
             seat = self._seat_of(player_id)
             left_now = not self.session._in_hand(player_id)
             if left_now:
-                self.session.stand_up(player_id)
+                # The row first, as in _stand_up_leaving: if the delete fails they are still
+                # seated, here as in the database, and can try again.
                 await RoomSeat.objects.filter(room=self.room, user=item.user).adelete()
+                self.session.stand_up(player_id)
             elif player_id not in self.session.leaving:
                 # They play the hand out; _between_hands stands them up when it ends.
                 await self._set_leaving(player_id, True)
@@ -1016,8 +1026,9 @@ class TableActor:
             raise Reject("player_in_hand")
         seat = self._seat_of(player_id) if player_id in self.session.seats.values() else None
         if seat is not None:
-            self.session.stand_up(player_id)
+            # the row first: a failed delete leaves the seat as it was, not freed in memory only
             await RoomSeat.objects.filter(room=self.room, user_id=user_id).adelete()
+            self.session.stand_up(player_id)
         await RoomBan.objects.aget_or_create(room=self.room, user_id=user_id)
         await RoomMember.objects.filter(room=self.room, user_id=user_id).adelete()
         # Drop their connections first so they get nothing more, then close them.
@@ -1293,10 +1304,11 @@ def _asked(player_id: str, kind: str, payload: dict[str, Any]) -> tuple:
 
 
 def _seconds(override: float | None, setting: str, real: float) -> float:
-    """A test's override, else the E2E server's setting (config/settings.py), else the real time."""
+    """A test's override, else the E2E server's setting (config/settings.py), else the real time.
+    No default for the setting: a misspelled name raises instead of quietly using the real time."""
     if override is not None:
         return override
-    configured = getattr(settings, setting, None)
+    configured = getattr(settings, setting)
     return real if configured is None else configured
 
 

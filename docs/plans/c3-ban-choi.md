@@ -101,7 +101,10 @@ Nguyên tắc (theo `docs/c2-chuyen-dong.md`):
 | Ngăn chat (điện thoại) / tab | bấm nút | trượt từ phải | `slow` 320 ms `out` (CSS) |
 | Overlay mất kết nối | `socket.closed` | scrim + thẻ | `base` 220 ms mờ dần (CSS) |
 
-Ngân sách thời gian: server chờ 4 giây giữa hai ván (`next_hand_delay` trong `apps/games/actor.py`).
+Ngân sách thời gian (sửa 29/10/2026; lúc viết kế hoạch server tự chia và chờ 4 giây giữa hai ván):
+chủ phòng bấm Bắt đầu thì bàn đếm ngược 10 giây rồi chia ván đầu; giữa hai ván server nghỉ
+`room.hand_pause_seconds` (6–20 giây, mặc định 10, chủ phòng chọn). Lúc ván sau được chia có trong
+`room.next_hand_at`. Ai rời ghế giữa ván thì chơi hết ván đó rồi mới đứng dậy.
 Chuỗi cuối ván ≈ gom 380 + lật 420 + 180·(số tay−1) + pot 560·(số pot) ≈ 1,5–2,5 s; 7-2 là 2,6 s
 chạy song song phần lật. `hand.started` tới khi còn chạy ⇒ `finish()` tất cả rồi mới chia.
 

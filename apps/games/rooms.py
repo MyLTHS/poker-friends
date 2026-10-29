@@ -394,12 +394,15 @@ async def _start_or_pause(request: HttpRequest, room_id: int, start: bool) -> Js
     owned = await _owned_room(request, room_id)
     if isinstance(owned, JsonResponse):
         return owned
-    room, _ = owned
+    room, user = owned
     live = await actor_module.get_actor(room.pk)
     try:
-        info = await (live.start() if start else live.pause())
+        changed, info = await (live.start() if start else live.pause())
     except actor_module.Reject as reject:
         return _reject_response(reject)
+    if changed:  # pressed again in the same state: nothing happened, nothing to log
+        kind = OwnerAction.Kind.START if start else OwnerAction.Kind.PAUSE
+        await log_action(room, user, kind, {})
     return JsonResponse(info)
 
 
