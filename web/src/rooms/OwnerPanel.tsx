@@ -29,6 +29,7 @@ import {
   pendingText,
   serverFieldErrors,
   SEVEN_CHOICES,
+  PAUSE_CHOICES,
   THINK_CHOICES,
   type EditableRules,
   type FieldErrors,
@@ -348,6 +349,7 @@ type RulesDraft = {
   small_blind: string;
   big_blind: string;
   think_time_seconds: number;
+  hand_pause_seconds: number;
   sevenOn: boolean;
   seven: string;
   starting: string;
@@ -363,6 +365,7 @@ const draftOf = (r: EditableRules): RulesDraft => ({
   small_blind: String(r.small_blind),
   big_blind: String(r.big_blind),
   think_time_seconds: r.think_time_seconds,
+  hand_pause_seconds: r.hand_pause_seconds,
   sevenOn: r.seven_deuce_bonus > 0,
   seven: String(r.seven_deuce_bonus || 50),
   starting: String(r.starting_stack),
@@ -394,6 +397,7 @@ function RulesForm({
     small_blind: detail.pending?.small_blind ?? room.small_blind,
     big_blind: detail.pending?.big_blind ?? room.big_blind,
     think_time_seconds: detail.pending?.think_time_seconds ?? room.think_time_seconds,
+    hand_pause_seconds: detail.pending?.hand_pause_seconds ?? room.hand_pause_seconds,
     seven_deuce_bonus: detail.pending?.seven_deuce_bonus ?? room.seven_deuce_bonus,
     starting_stack: detail.pending?.starting_stack ?? room.starting_stack,
     ante: detail.pending?.ante ?? room.ante,
@@ -410,6 +414,7 @@ function RulesForm({
     small_blind: toNumber(draft.small_blind),
     big_blind: toNumber(draft.big_blind),
     think_time_seconds: draft.think_time_seconds,
+    hand_pause_seconds: draft.hand_pause_seconds,
     seven_deuce_bonus: draft.sevenOn ? toNumber(draft.seven) : 0,
     starting_stack: toNumber(draft.starting),
     // an empty ante box is no ante
@@ -424,6 +429,7 @@ function RulesForm({
   const dirty = Object.keys(body).length > 0;
   const playing = room.status === "playing";
   const thinks = [...new Set([...THINK_CHOICES, start.think_time_seconds])].sort((a, b) => a - b);
+  const pauses = [...new Set([...PAUSE_CHOICES, start.hand_pause_seconds])].sort((a, b) => a - b);
   const blindChanged = edit.small_blind !== room.small_blind || edit.big_blind !== room.big_blind;
   const bombError = errors.bomb_pot_every ?? errors.bomb_pot_amount;
 
@@ -493,6 +499,19 @@ function RulesForm({
             disabled={disabled}
           />
           <span className="owner-hint is-desktop-only">Mỗi lượt, không có thời gian cộng</span>
+        </section>
+        <section className="owner-sec os-pause">
+          <h4 id="owner-pause">Nghỉ giữa ván</h4>
+          <Choices
+            labelledBy="owner-pause"
+            items={pauses.map((n) => ({ value: n, label: n, title: `${n} giây` }))}
+            value={draft.hand_pause_seconds}
+            onChange={(hand_pause_seconds) => set({ hand_pause_seconds })}
+            className="seg seg-fill"
+            itemClass="seg-item"
+            disabled={disabled}
+          />
+          <span className="owner-hint is-desktop-only">Giây để xem ai thắng trước khi chia ván mới</span>
         </section>
         <section className="owner-sec os-stack">
           <h4 id="owner-stack">Chip đầu vào</h4>

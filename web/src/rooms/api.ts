@@ -61,6 +61,8 @@ export function createRoomsApi(
     rebuy: (id: number) => request<Schemas["GrantChipsResult"]>("POST", room(id, "rebuy/")),
     kick: (id: number, playerId: string) => request<void>("POST", room(id, "kick/"), { player_id: playerId }),
     close: (id: number) => request<RoomDetail>("POST", room(id, "close/")),
+    start: (id: number) => request<Schemas["RoomInfo"]>("POST", room(id, "start/")),
+    pause: (id: number) => request<Schemas["RoomInfo"]>("POST", room(id, "pause/")),
     rotateInvite: (id: number) => request<RoomDetail>("POST", room(id, "invite/")),
     snapshot: (id: number) => request<TableSnapshot>("GET", room(id, "snapshot/")),
     takeSeat: (id: number, seat: number) => request<SeatOccupant>("POST", room(id, "seats/"), { seat }),

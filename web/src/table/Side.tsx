@@ -6,7 +6,7 @@
 // socket (chat.send → chat.message).
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ChartNoAxesColumn, ChevronLeft, Coffee, Crown, Eye, LogOut, Menu as MenuIcon, MessageCircle, MessageSquareText, ScrollText, Send, Settings, Smile, UserPlus, X } from "lucide-react";
+import { ChartNoAxesColumn, ChevronLeft, Coffee, Crown, Eye, LogOut, Menu as MenuIcon, MessageCircle, MessageSquareText, Pause, Play, ScrollText, Send, Settings, Smile, UserPlus, X } from "lucide-react";
 
 import type { ChatMessage, Spectator } from "@/api/protocol";
 import { Avatar, IconButton, Sheet, fmt } from "@/ui";
@@ -109,12 +109,14 @@ export type TableMenuItems = {
   /** seated: leave the seat and keep watching (`busy`: dealt into the running hand, which the
    *  server refuses until it ends, folded or not) */
   leave?: { onLeave: () => void; busy: boolean };
+  /** room owner: start dealing, or stop after the running hand */
+  control?: { running: boolean; busy: boolean; onToggle: () => void };
 };
 
 /** The table's menu: a narrow sheet of plain buttons. Picking one closes the menu first, so a
  *  dialog it opens (settings, owner's sheet…) gives the focus back to the ☰ button. */
 export function TableMenu({ open, onClose, items }: { open: boolean; onClose: () => void; items: TableMenuItems }) {
-  const { watchers, sit, onOwner, onLog, historyHref, onSettings, onFeedback, leave } = items;
+  const { watchers, sit, onOwner, onLog, historyHref, onSettings, onFeedback, leave, control } = items;
   const pick = (run: () => void) => () => {
     onClose();
     run();
@@ -136,6 +138,11 @@ export function TableMenu({ open, onClose, items }: { open: boolean; onClose: ()
         {sit && (
           <MenuItem icon={<Coffee size={18} strokeWidth={1.9} />} onClick={pick(sit.onToggle)} disabled={sit.disabled}>
             {sit.sittingOut ? "Quay lại bàn" : "Nghỉ ván sau"}
+          </MenuItem>
+        )}
+        {control && (
+          <MenuItem icon={control.running ? <Pause size={18} strokeWidth={1.9} /> : <Play size={18} strokeWidth={1.9} />} onClick={pick(control.onToggle)} disabled={control.busy}>
+            {control.running ? "Tạm dừng (hết ván này)" : "Bắt đầu chia bài"}
           </MenuItem>
         )}
         {onOwner && (

@@ -12,6 +12,7 @@ import { Avatar, ChipStack, Confetti, FlipCard, PlayingCard, fmt } from "@/ui";
 import { Countdown, LiveRing, type TurnClock } from "./clock";
 import { GEO, betPos, dealerPos, fitScale, spotPos, type Device, type Pt } from "./geometry";
 import { isPremiumStart, runoutText } from "./handName";
+import { compareCategory, liveHand } from "./liveHand";
 import { Rolling } from "./Rolling";
 import type { RunoutView, SeatView } from "./seatView";
 
@@ -274,7 +275,7 @@ function keepOpenHand(handId: number | null | undefined) {
 
 /** My own seat: big hole cards, wide plate. Desktop stacks cards over the plate; the phone puts
  *  the cards beside the plate (hint above it) at the bottom centre of the stage. */
-function MeSeat({ device, s, hint, clock, handId }: { device: Device; s: SeatView; hint?: ReactNode; clock?: TurnClock; handId?: number | null }) {
+function MeSeat({ device, s, hint, clock, handId, board }: { device: Device; s: SeatView; hint?: ReactNode; clock?: TurnClock; handId?: number | null; board: string[] }) {
   const p = spotPos(device, 1, true);
   const cards = s.cards ?? [];
   const d = device === "desktop";
@@ -295,6 +296,11 @@ function MeSeat({ device, s, hint, clock, handId }: { device: Device; s: SeatVie
   }, [open, turnUp]);
   const premium = open && real && handId != null && isPremiumStart(cards);
   const superb = premium && cards[0][0] === cards[1][0] && "AK".includes(cards[0][0]);
+  // What I hold right now, named on my cards while the hand runs ("Đôi J", "Thùng già A"); two
+  // pair or better lights up, a straight or better turns gold.
+  const live = open && real && handId != null && s.state !== "folded" ? liveHand(cards, board) : null;
+  const strength = live ? (compareCategory(live.category, "straight") >= 0 ? " is-strong" : compareCategory(live.category, "two_pair") >= 0 ? " is-good" : "") : "";
+  const label = s.hand ?? (premium && board.length === 0 ? `${superb ? "Bài siêu đẹp!" : "Bài đẹp!"}${live ? ` · ${live.name}` : ""}` : live?.name);
   return (
     <div className={`me me-${device} st-${s.state}`} style={at(p)} data-seat={s.seat} role="group" aria-label={`Ghế ${s.seat}: ${s.name} (bạn)`}>
       {s.delta && <span className={`delta delta-${s.delta.kind}`}>{s.delta.text}</span>}
@@ -310,8 +316,12 @@ function MeSeat({ device, s, hint, clock, handId }: { device: Device; s: SeatVie
           <span className="me-nocards">{s.state === "folded" ? "Đã bỏ bài" : "Chưa có bài"}</span>
         )}
         {!open && <span className="me-peek">Chạm để xem bài</span>}
-        {open && s.hand && <span className="me-hand">{s.hand}</span>}
-        {premium && !s.hand && <span className="me-hand me-premium">{superb ? "Bài siêu đẹp!" : "Bài đẹp!"}</span>}
+        {open && label && (
+          // keyed: a better hand pops in again
+          <span key={label} className={`me-hand${!s.hand && premium && board.length === 0 ? " me-premium" : ""}${s.hand ? "" : strength}`}>
+            {label}
+          </span>
+        )}
         {premium && <Confetti count={superb ? 30 : 18} small spread={superb ? 1.1 : 0.8} className="me-sparkle" />}
       </span>
       <span className="me-plate">
@@ -398,7 +408,7 @@ export function Stage({ device, seats, board, boardHi, runouts, rabbit, pot, pot
         .map((s) => (
           <SeatPod key={s.seat} device={device} s={s} cx={g.c.x} clock={s.state === "turn" ? clock : undefined} fx={fx} onSit={onSit} />
         ))}
-      {me && <MeSeat device={device} s={me} hint={meHint} clock={me.state === "turn" ? clock : undefined} handId={meHand} />}
+      {me && <MeSeat device={device} s={me} hint={meHint} clock={me.state === "turn" ? clock : undefined} handId={meHand} board={board} />}
       {children}
     </div>
   );

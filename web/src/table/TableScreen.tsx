@@ -10,14 +10,14 @@ import "./table.css";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bomb, Coins, Crown, Eye, Hourglass } from "lucide-react";
+import { Bomb, Coins, Crown, Eye, Hourglass, Play } from "lucide-react";
 
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
 import { FeedbackDialog } from "@/feedback/FeedbackDialog";
 import { Button, ButtonLink, CardText, D1Root, Sheet, Spinner, ToastProvider, fmt, signed } from "@/ui";
 
 import { IdleBar, PreActions, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
-import { Countdown, secondsLeft, useRecent, type TurnClock } from "./clock";
+import { Countdown, secondsLeft, useNow, useRecent, type TurnClock } from "./clock";
 import { useDevice } from "./device";
 import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
@@ -85,6 +85,9 @@ export type TableScreenProps = {
   replayHref?: (handId: number) => string;
   /** The room's win/loss page, linked from the top bar. */
   historyHref?: string;
+  /** Room owner: start dealing (a 10 s countdown, then hands follow one another) or stop after
+   *  the running hand. Each resolves with an error text, or null. */
+  control?: { onStart: () => Promise<string | null>; onPause: () => Promise<string | null> };
 };
 
 /** What the owner's sheet gets from the table. */
@@ -107,6 +110,7 @@ export function TableScreen({
   startWithInvite = false,
   replayHref,
   historyHref,
+  control,
 }: TableScreenProps) {
   const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
   const refusal = useAuthRefusal(retry.final && !!retry.auth);
@@ -115,6 +119,7 @@ export function TableScreen({
   const [seen, setSeen] = useState(0);
   const [seatError, setSeatError] = useState<string | null>(null);
   const [rebuying, setRebuying] = useState(false);
+  const [controlBusy, setControlBusy] = useState(false);
   // One sheet or dialog at a time: picking a menu item swaps the menu for what it opens.
   const [dialog, setDialog] = useState<"menu" | "log" | "owner" | "invite" | "settings" | "help" | "feedback" | null>(startWithInvite && invite ? "invite" : null);
   const sound = useTableSound();
@@ -243,6 +248,18 @@ export function TableScreen({
   const myClock = myTurn ? clock : undefined;
   const myFrozen = turn?.player_id === you.player_id ? frozenAt : undefined;
 
+  // Hands are dealt only once the owner pressed "Bắt đầu" (a server without it always deals); the
+  // next one comes at next_hand_at, read on our clock like the turn deadline.
+  const running = room.running !== false;
+  const nextAt = room.next_hand_at ? Date.parse(room.next_hand_at) - model.clockOffsetMs : null;
+  const toggleRunning = control
+    ? async () => {
+        setControlBusy(true);
+        setSeatError(await (running ? control.onPause() : control.onStart()));
+        setControlBusy(false);
+      }
+    : undefined;
+
   const handNo = hand?.hand_no;
   const blinds = `${fmt(room.small_blind)}/${fmt(room.big_blind)}`;
   // Between hands: the one about to be dealt is a bomb pot (by the room's rules as they stand).
@@ -270,6 +287,7 @@ export function TableScreen({
     onSettings: () => setDialog("settings"),
     onFeedback: () => setDialog("feedback"),
     leave: leave && { onLeave: leave, busy: !!hand && !hand.complete && hand.players.some((p) => p.player_id === you.player_id) },
+    control: toggleRunning && { running, busy: controlBusy || !online, onToggle: toggleRunning },
   };
   const menu = { open: dialog === "menu", onOpen: () => setDialog("menu") };
   const pre = canPreAct(model) && !celebration ? (
@@ -332,6 +350,17 @@ export function TableScreen({
       className={celebration ? "is-seven" : ""}
     >
       {layer}
+      {(!hand || (hand.complete && !running)) && !suspended && room.status !== "closed" && !celebration && (
+        <StartGate
+          compact={!!hand}
+          running={running}
+          nextAt={nextAt}
+          seated={table.seats.filter((s) => !s.sitting_out && s.stack > 0).length}
+          onStart={!running ? toggleRunning : undefined}
+          busy={controlBusy}
+          online={online}
+        />
+      )}
       {!isSeated && !celebration && (
         <div className="watch-pill" role="status">
           <Eye size={device === "desktop" ? 15 : 12} strokeWidth={2} aria-hidden />
@@ -429,7 +458,7 @@ export function TableScreen({
       panel = (
         <aside className="ppanel sd-panel">
           <SevenLedger device="mobile" award={celebration} seats={table.seats} />
-          <NextHand bomb={nextBomb} />
+          <NextHand bomb={nextBomb} at={nextAt} running={running} />
         </aside>
       );
     } else {
@@ -437,7 +466,7 @@ export function TableScreen({
         <aside className="ppanel idle-panel">
           <div className="ip-next">
             <span className="abar-eyebrow">{idle.eyebrow}</span>
-            {hand?.complete ? <NextHand bomb={nextBomb} /> : <span className="ip-status">{idle.status}</span>}
+            {hand?.complete ? <NextHand bomb={nextBomb} at={nextAt} running={running} /> : <span className="ip-status">{idle.status}</span>}
           </div>
           {idle.win && (
             <div className="ip-win">
@@ -559,7 +588,7 @@ export function TableScreen({
                 Xem lại ván
               </Link>
             )}
-            {hand?.complete && <NextHand bomb={nextBomb} />}
+            {hand?.complete && <NextHand bomb={nextBomb} at={nextAt} running={running} />}
           </>
         }
       />
@@ -624,12 +653,65 @@ export function TableScreen({
 
 /* ---------- pieces ---------- */
 
-function NextHand({ bomb = false }: { bomb?: boolean }) {
+function NextHand({ bomb = false, at = null, running = true }: { bomb?: boolean; at?: number | null; running?: boolean }) {
   return (
     <span className="next-hand">
       {bomb ? <Bomb size={15} strokeWidth={2} aria-hidden /> : <Hourglass size={15} strokeWidth={2} />}
-      {bomb ? "Ván sau là bomb pot…" : "Ván mới sắp bắt đầu…"}
+      {!running ? (
+        "Bàn đang tạm dừng"
+      ) : at ? (
+        <>
+          {bomb ? "Bomb pot sau " : "Ván mới sau "}
+          <Countdown deadline={at} />s
+        </>
+      ) : bomb ? (
+        "Ván sau là bomb pot…"
+      ) : (
+        "Ván mới sắp bắt đầu…"
+      )}
     </span>
+  );
+}
+
+/** Between hands with nothing dealt yet (or the owner paused): who starts it, or the countdown to
+ *  the first hand in big numbers. `compact` sits under a finished hand still on the felt. */
+function StartGate({ compact, running, nextAt, seated, onStart, busy, online }: { compact: boolean; running: boolean; nextAt: number | null; seated: number; onStart?: () => void; busy: boolean; online: boolean }) {
+  if (running && nextAt) return <BigCountdown at={nextAt} />;
+  if (running) {
+    return (
+      <div className="start-gate is-quiet" role="status">
+        <small>{seated < 2 ? "Cần ít nhất 2 người có chip để chia bài" : "Sắp chia bài…"}</small>
+      </div>
+    );
+  }
+  const few = seated < 2;
+  return (
+    <div className={`start-gate${compact ? " is-compact" : ""}`} role="status">
+      {!compact && <b className="sg-title">{onStart ? "Sẵn sàng chưa?" : "Chờ chủ phòng bắt đầu"}</b>}
+      {onStart ? (
+        <>
+          <Button kind="primary" size={compact ? "md" : "lg"} busy={busy} disabled={!online || few} icon={<Play size={18} strokeWidth={2.2} aria-hidden />} onClick={onStart}>
+            {compact ? "Tiếp tục chia" : "Bắt đầu"}
+          </Button>
+          <small>{few ? "Cần ít nhất 2 người ngồi (có chip) để bắt đầu" : compact ? "Bàn đang tạm dừng" : "Bấm để đếm ngược 10 giây rồi chia bài"}</small>
+        </>
+      ) : (
+        <small>{compact ? "Bàn đang tạm dừng — chờ chủ phòng" : "Chọn ghế, chủ phòng bấm “Bắt đầu” là chia bài"}</small>
+      )}
+    </div>
+  );
+}
+
+/** The first hand's countdown: each second pops in. */
+function BigCountdown({ at }: { at: number }) {
+  const n = secondsLeft(at, useNow(250));
+  return (
+    <div className="start-gate is-counting" role="timer" aria-live="polite" aria-label={`Chia bài sau ${n} giây`}>
+      <small>Chia bài sau</small>
+      <b key={n} className="sg-count">
+        {n}
+      </b>
+    </div>
   );
 }
 
@@ -725,8 +807,8 @@ function idleContent({
     const shownSub = lines?.detail && (winners.length === 1 && !runouts ? `với ${lines.detail}` : lines.detail);
     return {
       eyebrow: `Ván #${hand.hand_no} đã xong`,
-      status: nextBomb ? "Ván sau là bomb pot" : "Chờ ván mới",
-      center: nextBomb ? "Ván sau là bomb pot." : "Ván mới sắp bắt đầu.",
+      status: room.running === false ? "Bàn đang tạm dừng" : nextBomb ? "Ván sau là bomb pot" : "Chờ ván mới",
+      center: room.running === false ? "Bàn đang tạm dừng." : nextBomb ? "Ván sau là bomb pot." : "Ván mới sắp bắt đầu.",
       mine: net === null ? (me ? undefined : "Bạn đang xem") : `Bạn: ${mine ? `${mine} · ` : ""}${net > 0 ? `thắng ${signed(net)}` : net < 0 ? `thua ${fmt(net)}` : "hoà vốn"}`,
       win: celebration ? undefined : win,
       winSub: shownSub || (showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined),
@@ -741,7 +823,7 @@ function idleContent({
       ? "Đang nghỉ — mở Menu, bấm “Quay lại bàn”"
       : "Bạn đã ngồi — vào từ ván sau";
   if (!hand) {
-    const waiting = seated < 2 ? "Cần ít nhất 2 người ngồi để chia bài" : "Ván mới sắp bắt đầu";
+    const waiting = room.running === false ? "Chờ chủ phòng bấm Bắt đầu" : seated < 2 ? "Cần ít nhất 2 người ngồi để chia bài" : "Ván mới sắp bắt đầu";
     if (!me) return { eyebrow: "Bạn đang xem", status: waiting, center: "Bấm một ghế trống để ngồi." };
     return { eyebrow: noChips ? "Bạn đã ngồi" : sittingOut ? "Bạn đang nghỉ" : "Giữa hai ván", status: noChips ? seatedWait : waiting, center: noChips ? seatedWait : waiting + "." };
   }
