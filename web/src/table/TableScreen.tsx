@@ -116,6 +116,14 @@ export function TableScreen({
   const sound = useTableSound();
   const [keysOn, setKeysOn] = useKeysPref();
   const { table } = model;
+  // A seat error is about the moment it happened: a new hand clears it, so an old "Rời ghế" refusal
+  // never stands where "Mua thêm" should be.
+  const handKey = table?.hand?.hand_id ?? null;
+  const [errorHand, setErrorHand] = useState(handKey);
+  if (errorHand !== handKey) {
+    setErrorHand(handKey);
+    setSeatError(null);
+  }
   const closeDialog = useCallback(() => setDialog(null), []);
 
   // Keys that work any time on the desktop table: ? help, M sound (my turn's keys: ActionBar).
@@ -479,9 +487,13 @@ export function TableScreen({
                 từ thưởng 7-2
               </span>
             </span>
-          ) : rebuy && !seatError ? (
-            // before the winner's banner: busted, the next move is to buy back in
-            rebuyButton(false)
+          ) : rebuy ? (
+            // before the winner's banner: busted, the next move is to buy back in (a failed try
+            // says why beside the button, which stays to try again)
+            <span className="idle-rebuy">
+              {rebuyButton(false)}
+              {seatError && <span className="idle-msg is-quiet">{seatError}</span>}
+            </span>
           ) : idle.win ? (
             <span className="idle-msg">
               <Crown size={18} strokeWidth={2} />

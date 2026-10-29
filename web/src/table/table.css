@@ -3841,3 +3841,5 @@
     }
   }
 }
+
+.d1 .idle-rebuy { display: flex; align-items: center; gap: 12px; min-width: 0; }
