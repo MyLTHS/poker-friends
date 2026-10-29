@@ -11,3 +11,8 @@ db.sqlite3
 !.env.example
 web/
 backups/
+# Local-only folders: Claude worktrees (full repo copies, ~1 GB each) and editor/OS clutter.
+.claude/
+node_modules/
+.idea/
+**/.DS_Store
