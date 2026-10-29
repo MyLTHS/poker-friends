@@ -4189,3 +4189,156 @@
     white-space: nowrap;
   }
 }
+
+/* Motion pass 2: board cards turn over where they land, tags pop, all-in hits, the dealer button
+   slides, a win bursts, the clock warns, fine cards sparkle, idle chairs step back. */
+@layer components {
+  /* a board card still face down (TableFx adds .pc-back + .fx-back until it turns) */
+  .d1 .pc.fx-back > * {
+    visibility: hidden;
+  }
+
+  /* the dealer button travels to its new seat */
+  .d1 .dealer {
+    transition:
+      left 700ms var(--ease-d1-out),
+      top 700ms var(--ease-d1-out);
+  }
+
+  /* an action or a state change pops in at the seat */
+  .d1 .seat .tag {
+    animation: tbl-tag-pop 340ms var(--ease-d1-settle) both;
+  }
+  .d1 .seat .tag-allin {
+    animation: tbl-stamp 520ms var(--ease-d1-settle) both;
+    background: linear-gradient(180deg, #f4d896, #c99a4b);
+    color: #2a1608;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  /* all-in: one gold shock ring around the player */
+  .d1 .seat.st-all-in .seat-av::after,
+  .d1 .me.st-all-in .me-av::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 3px solid var(--brass-2);
+    pointer-events: none;
+    animation: tbl-shock 900ms var(--ease-d1-out) 2 both;
+  }
+  /* a player sitting down: the seat grows in */
+  .d1 .seat[data-seat] {
+    animation: tbl-seat-in 420ms var(--ease-d1-settle) both;
+  }
+
+  /* the last seconds of a turn: the ring pulses */
+  .d1 .timer-ring.is-low {
+    animation: tbl-low 600ms var(--ease-d1-standard) infinite alternate;
+  }
+
+  /* a win: a short gold burst where the pot lands */
+  .d1 .fx-burst {
+    position: absolute;
+    width: 0;
+    height: 0;
+  }
+
+  /* fine hole cards: sparkles around them */
+  .d1 .me-sparkle {
+    left: 50%;
+    top: 40%;
+    --dur-confetti: 1600ms;
+  }
+
+  /* a free seat for someone already seated: a faint chair, no call to sit */
+  .d1 .seat-empty.is-idle .chair {
+    border: 1px dashed rgba(236, 210, 148, 0.2);
+    background: none;
+    box-shadow: none;
+    scale: 0.6;
+  }
+
+  @keyframes tbl-tag-pop {
+    from {
+      opacity: 0;
+      scale: 0.55;
+    }
+  }
+  @keyframes tbl-stamp {
+    from {
+      opacity: 0;
+      scale: 2.1;
+      rotate: -8deg;
+    }
+    60% {
+      opacity: 1;
+      scale: 0.92;
+    }
+  }
+  @keyframes tbl-shock {
+    from {
+      opacity: 0.95;
+      scale: 0.9;
+    }
+    to {
+      opacity: 0;
+      scale: 1.7;
+    }
+  }
+  @keyframes tbl-seat-in {
+    from {
+      opacity: 0;
+      scale: 0.7;
+    }
+  }
+  @keyframes tbl-low {
+    to {
+      scale: 1.08;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .d1 .dealer {
+      transition: none;
+    }
+    .d1 .seat .tag,
+    .d1 .seat .tag-allin,
+    .d1 .seat[data-seat],
+    .d1 .timer-ring.is-low,
+    .d1 .seat.st-all-in .seat-av::after,
+    .d1 .me.st-all-in .me-av::after {
+      animation: none;
+    }
+  }
+}
+
+@layer components {
+  /* watching without a seat: said once, at the top of the felt */
+  .d1 .watch-pill {
+    position: absolute;
+    left: 50%;
+    top: 14px;
+    translate: -50% 0;
+    z-index: 6;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(8, 6, 4, 0.78);
+    border: 1px solid rgba(232, 207, 146, 0.45);
+    font: var(--w-body) var(--fs-sm) / 1.2 var(--text);
+    color: var(--ivory-2);
+    white-space: nowrap;
+    pointer-events: none;
+    animation: tbl-fade var(--dur-slow) var(--ease-d1-out) both;
+  }
+  .d1 .watch-pill b {
+    color: var(--brass-2);
+  }
+  .d1 .stage-mobile .watch-pill {
+    top: 6px;
+    padding: 4px 10px;
+    font-size: var(--fs-xs);
+  }
+}

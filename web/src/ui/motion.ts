@@ -21,6 +21,8 @@ export const DURATION = {
   collect: 850,
   /** a card turning over */
   flip: 650,
+  /** a board card turning over where it landed (a quick squeeze, not the 3D turn) */
+  boardFlip: 380,
   /** one breath of the "your turn" halo */
   turnPulse: 1600,
   /** the whole 7-2 moment before it settles into a banner */
@@ -48,6 +50,8 @@ export const STAGGER = {
   chips: 40,
   /** hands turning over at showdown, in showdown order */
   showdown: 800,
+  /** board cards turning over, one after the other */
+  boardFlip: 230,
 } as const;
 
 /** A short rest between two steps of one hand (bets gathered, then the board; hands shown, then

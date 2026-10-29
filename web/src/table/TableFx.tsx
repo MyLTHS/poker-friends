@@ -34,6 +34,10 @@ export type FxApi = {
 
 /** How long a full house or better holds the table before the pot moves. */
 export const BIG_HAND_MS = 1800;
+/** Board cards lie face down this long after landing, before they turn. */
+const BOARD_REST = 140;
+/** A win burst stays this long (its pieces fade within --dur-confetti). */
+const BURST_MS = 1500;
 
 /** Centre of an element in stage pixels. */
 function centre(el: Element, stage: Element, device: Device): Pt {
@@ -65,6 +69,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
   const [ghosts, setGhosts] = useState<Ghost[]>([]);
   const [unflipped, setUnflipped] = useState<Set<number>>(() => new Set());
   const [big, setBig] = useState<{ key: number; title: string } | null>(null);
+  const [bursts, setBursts] = useState<{ key: number; at: Pt }[]>([]);
   const played = useRef<number>(cues.at(-1)?.id ?? 0);
   const running = useRef(new Set<Animation>());
   const timers = useRef<{ id: ReturnType<typeof setTimeout>; run: () => void }[]>([]);
@@ -107,6 +112,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
     setGhosts([]);
     setUnflipped((u) => (u.size ? new Set() : u));
     setBig(null);
+    setBursts([]);
   }, []);
 
   useLayoutEffect(() => {
@@ -181,11 +187,22 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
           break;
         }
         case "board": {
+          // The new cards slide out face down, then turn over one after the other.
+          const n = cue.to - cue.from;
+          const turnAt = t + (n - 1) * STAGGER.deal + DURATION.deal + BOARD_REST;
           for (let i = cue.from; i < cue.to; i++) {
             const el = root.querySelector<HTMLElement>(`[data-board="${i}"]`);
-            if (el) track(play(el, arrive(el, g.pot, centre(el, root, device), { lift: 12, scale: 0.7, fade: true }), { duration: DURATION.deal, easing: EASE.out, delay: t + (i - cue.from) * STAGGER.deal }));
+            if (!el) continue;
+            const k = i - cue.from;
+            track(play(el, arrive(el, g.pot, centre(el, root, device), { lift: 12, scale: 0.7, fade: true }), { duration: DURATION.deal, easing: EASE.out, delay: t + k * STAGGER.deal }));
+            if (reduced) continue;
+            el.classList.add("pc-back", "fx-back");
+            const base = el.style.transform || "";
+            const flipAt = turnAt + k * STAGGER.boardFlip;
+            track(play(el, [{ transform: `${base} scaleX(1)` }, { transform: `${base} scaleX(0.04)`, offset: 0.5 }, { transform: `${base} scaleX(1)` }], { duration: DURATION.boardFlip, easing: EASE.standard, delay: flipAt }));
+            later(flipAt + DURATION.boardFlip / 2, () => el.classList.remove("pc-back", "fx-back"));
           }
-          t += (cue.to - cue.from - 1) * STAGGER.deal + DURATION.deal + BEAT;
+          t = reduced ? t + (n - 1) * STAGGER.deal + DURATION.deal + BEAT : turnAt + (n - 1) * STAGGER.boardFlip + DURATION.boardFlip + BEAT;
           break;
         }
         case "showdown": {
@@ -224,7 +241,16 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
             cue.pots.forEach((pot, i) => {
               for (const { seat, amount } of pot.winners) {
                 const at = placeOf(seat);
-                if (at) ghost({ kind: "pot", amount, from: g.pot, to: spotPos(device, at.spot, at.me), delay: t + i * (DURATION.collect + BEAT), duration: DURATION.collect, easing: EASE.out, lift: d ? 46 : 28, fadeOut: true, small: !d });
+                if (!at) continue;
+                const to = spotPos(device, at.spot, at.me);
+                const lands = t + i * (DURATION.collect + BEAT);
+                ghost({ kind: "pot", amount, from: g.pot, to, delay: lands, duration: DURATION.collect, easing: EASE.out, lift: d ? 46 : 28, fadeOut: true, small: !d });
+                // a little gold burst where the chips land (the main pot only)
+                if (i === 0) {
+                  const key = ++seq.current;
+                  later(lands + DURATION.collect * 0.8, () => setBursts((all) => [...all, { key, at: to }]));
+                  later(lands + DURATION.collect * 0.8 + BURST_MS, () => setBursts((all) => all.filter((b) => b.key !== key)));
+                }
               }
             });
             holdClass("fx-hold-result", end);
@@ -256,6 +282,11 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
       <div ref={layer} className="fx-layer" aria-hidden>
         {ghosts.map((gh) => (
           <GhostPiece key={gh.key} ghost={gh} onDone={done} track={track} />
+        ))}
+        {bursts.map((b) => (
+          <span key={b.key} className="fx-burst" style={{ left: b.at.x, top: b.at.y }}>
+            <Confetti count={20} small spread={0.7} />
+          </span>
         ))}
       </div>
       {big && (

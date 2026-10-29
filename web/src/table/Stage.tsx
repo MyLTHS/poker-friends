@@ -7,11 +7,12 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Crown, Moon, Plus, Timer, WifiOff } from "lucide-react";
 
-import { Avatar, ChipStack, FlipCard, PlayingCard, fmt } from "@/ui";
+import { Avatar, ChipStack, Confetti, FlipCard, PlayingCard, fmt } from "@/ui";
 
 import { Countdown, LiveRing, type TurnClock } from "./clock";
 import { GEO, betPos, dealerPos, fitScale, spotPos, type Device, type Pt } from "./geometry";
 import { isPremiumStart, runoutText } from "./handName";
+import { Rolling } from "./Rolling";
 import type { RunoutView, SeatView } from "./seatView";
 
 const at = (p: Pt, extra?: CSSProperties): CSSProperties => ({ left: p.x, top: p.y, ...extra });
@@ -115,7 +116,9 @@ export function Pot({ device, amount, label = "Pot" }: { device: Device; amount:
       <ChipStack amount={amount} cols={d ? 3 : 2} size={d ? 22 : 14} max={d ? 5 : 3} />
       <span className="pot-pill">
         <small>{label}</small>
-        <b>{fmt(amount)}</b>
+        <b>
+          <Rolling value={amount} />
+        </b>
       </span>
     </div>
   );
@@ -190,21 +193,17 @@ function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatV
   const d = device === "desktop";
   const avSize = d ? 56 : 36;
   if (s.state === "empty") {
-    const inner = (
-      <>
+    // Free seats invite a watcher to sit; for someone already seated they are just a faint chair.
+    return onSit ? (
+      <button type="button" className="seat seat-empty" style={at(p)} onClick={() => onSit(s.seat)} aria-label={`Ngồi vào ghế ${s.seat}`}>
         <span className="chair" style={{ width: avSize, height: avSize }}>
           <Plus size={d ? 18 : 14} strokeWidth={2} />
         </span>
         <span className="chair-label">Ngồi vào</span>
-      </>
-    );
-    return onSit ? (
-      <button type="button" className="seat seat-empty" style={at(p)} onClick={() => onSit(s.seat)} aria-label={`Ngồi vào ghế ${s.seat}`}>
-        {inner}
       </button>
     ) : (
       <div className="seat seat-empty is-idle" style={at(p)} aria-hidden>
-        {inner}
+        <span className="chair" style={{ width: avSize, height: avSize }} />
       </div>
     );
   }
@@ -241,9 +240,12 @@ function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatV
       </span>
       <span className="seat-plate">
         <b>{s.name}</b>
-        <span className="stack">{fmt(s.stack ?? 0)}</span>
+        <span className="stack">
+          <Rolling value={s.stack ?? 0} />
+        </span>
       </span>
-      <SeatTag s={s} device={device} clock={clock} />
+      {/* keyed: a new action or state pops in again */}
+      <SeatTag key={`${s.state}:${s.lastAction ?? ""}`} s={s} device={device} clock={clock} />
       {s.hand && <span className="seat-hand">{s.hand}</span>}
     </div>
   );
@@ -292,6 +294,7 @@ function MeSeat({ device, s, hint, clock, handId }: { device: Device; s: SeatVie
     return () => clearTimeout(timer);
   }, [open, turnUp]);
   const premium = open && real && handId != null && isPremiumStart(cards);
+  const superb = premium && cards[0][0] === cards[1][0] && "AK".includes(cards[0][0]);
   return (
     <div className={`me me-${device} st-${s.state}`} style={at(p)} data-seat={s.seat} role="group" aria-label={`Ghế ${s.seat}: ${s.name} (bạn)`}>
       {s.delta && <span className={`delta delta-${s.delta.kind}`}>{s.delta.text}</span>}
@@ -308,7 +311,8 @@ function MeSeat({ device, s, hint, clock, handId }: { device: Device; s: SeatVie
         )}
         {!open && <span className="me-peek">Chạm để xem bài</span>}
         {open && s.hand && <span className="me-hand">{s.hand}</span>}
-        {premium && !s.hand && <span className="me-hand me-premium">Bài đẹp!</span>}
+        {premium && !s.hand && <span className="me-hand me-premium">{superb ? "Bài siêu đẹp!" : "Bài đẹp!"}</span>}
+        {premium && <Confetti count={superb ? 30 : 18} small spread={superb ? 1.1 : 0.8} className="me-sparkle" />}
       </span>
       <span className="me-plate">
         <span className="me-av" data-av={s.seat}>
@@ -319,7 +323,9 @@ function MeSeat({ device, s, hint, clock, handId }: { device: Device; s: SeatVie
           <b>
             {s.name} <em>Bạn</em>
           </b>
-          <span className="stack">{fmt(s.stack ?? 0)}</span>
+          <span className="stack">
+            <Rolling value={s.stack ?? 0} />
+          </span>
         </span>
         {d && hint && <span className="me-hint">{hint}</span>}
       </span>

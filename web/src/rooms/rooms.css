@@ -2255,3 +2255,10 @@
     }
   }
 }
+
+@layer components {
+  /* "Xem" sits beside the card's main button */
+  .d1 .rc-foot .rc-watch {
+    margin-left: auto;
+  }
+}

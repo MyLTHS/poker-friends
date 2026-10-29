@@ -332,6 +332,15 @@ export function TableScreen({
       className={celebration ? "is-seven" : ""}
     >
       {layer}
+      {!isSeated && !celebration && (
+        <div className="watch-pill" role="status">
+          <Eye size={device === "desktop" ? 15 : 12} strokeWidth={2} aria-hidden />
+          <span>
+            <b>Bạn đang xem</b>
+            {onTakeSeat ? " · bấm ghế trống để vào chơi" : ""}
+          </span>
+        </div>
+      )}
       {hand?.complete && (winners.length > 0 || view.runouts) && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} handOf={handOf} runouts={view.runouts} />}
       {celebration && sevenSpot && (
         <SevenDeuceStage key={hand?.hand_id} device={device} award={celebration} seats={table.seats} spot={sevenSpot} pot={Math.max(0, (model.results?.find((r) => r.player_id === celebration.player_id)?.hand_net ?? 0))} quiet={model.celebrationQuiet} startedAt={model.celebrationAt} />

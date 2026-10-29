@@ -196,6 +196,11 @@ function RoomCard({ r, myName, index }: { r: LobbyRoom; myName: string | null; i
         </dl>
         <div className="rc-foot">
           <small>{cta.note}</small>
+          {!cta.watch && r.room.status !== "closed" && (
+            <ButtonLink kind="quiet" size="sm" href={href} icon={<Eye size={15} aria-hidden />} className="rc-watch" aria-label={`Vào xem: ${r.room.name}`}>
+              Xem
+            </ButtonLink>
+          )}
           <ButtonLink
             kind={cta.kind}
             size="sm"
