@@ -33,14 +33,15 @@ type Draft = RoomDraft;
 const startingText = (d: Draft) => startingStackText(d.starting, d.big_blind);
 
 /** The fields under "Thêm tuỳ chọn": an error there opens it. */
-const MORE: (keyof Rules)[] = ["max_seats", "think_time_seconds", "seven_deuce_bonus", "ante", "bomb_pot_every", "bomb_pot_amount", "is_private"];
+const MORE: (keyof Rules)[] = ["max_seats", "think_time_seconds", "seven_deuce_bonus", "ante", "bomb_pot_every", "bomb_pot_amount", "run_it_twice", "rabbit_hunt", "is_private"];
 
 const digits = (text: string) => text.replace(/[^\d]/g, "").slice(0, 9);
 
 /**
  * /rooms/new — open a table (D1 "create-room"), as short as Poker Now's: a name (already filled
- * in), the blinds, the chips each seat comes with (100 big blinds unless changed), "Tạo bàn". Seats, think time, the 7-2 bonus, ante, bomb pot and who sees the room wait under
- * "Thêm tuỳ chọn" with their defaults (7-2 bonus, ante and bomb pot off, public room). Then straight to the table, its "Mời bạn" sheet open.
+ * in), the blinds, the chips each seat comes with (100 big blinds unless changed), "Tạo bàn". Seats, think time, the 7-2 bonus, ante, bomb pot, run it twice, rabbit hunt
+ * and who sees the room wait under "Thêm tuỳ chọn" with their defaults (7-2 bonus, ante, bomb pot and run it twice off, rabbit
+ * hunt on, public room). Then straight to the table, its "Mời bạn" sheet open.
  */
 export function CreateRoomScreen() {
   const api = useMemo(() => createRoomsApi(), []);
@@ -398,6 +399,25 @@ function MoreFields({ draft, set, errors, phone }: FieldsProps) {
           className="vis-pick"
           itemClass="vis"
         />
+      </div>
+      {/* after "Ai thấy phòng này" (which pairs with the ante): the two switches share a row */}
+      <div className={`field seven-field f-twice${draft.run_it_twice ? "" : " is-off"}`}>
+        <span className="seven-head">
+          <span>
+            <b>Chạy 2 lần khi all-in</b>
+            <small>All-in trước river: chia phần bài còn lại 2 lần, mỗi lần ăn nửa pot.</small>
+          </span>
+          <Toggle on={draft.run_it_twice} onChange={(run_it_twice) => set({ run_it_twice })} label="Chạy 2 lần khi all-in" />
+        </span>
+      </div>
+      <div className={`field seven-field f-rabbit${draft.rabbit_hunt ? "" : " is-off"}`}>
+        <span className="seven-head">
+          <span>
+            <b>Xem bài chưa chia (rabbit hunt)</b>
+            <small>Ván xong sớm: lật mờ các lá chung lẽ ra sẽ ra, chỉ để xem.</small>
+          </span>
+          <Toggle on={draft.rabbit_hunt} onChange={(rabbit_hunt) => set({ rabbit_hunt })} label="Xem bài chưa chia (rabbit hunt)" />
+        </span>
       </div>
     </div>
   );

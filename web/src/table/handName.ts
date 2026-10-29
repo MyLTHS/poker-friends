@@ -5,8 +5,9 @@
 import type { HandCategory } from "@/api/protocol";
 import { fmt } from "@/ui/format";
 
-/** A ShowdownHand from the socket or from the REST replay (which types cards as a plain array). */
-export type ShownHand = { player_id: string; seat: number; category: HandCategory; cards: readonly string[] };
+/** A ShowdownHand from the socket or from the REST replay (which types cards as a plain array).
+ *  `board`: 1, or 2 for the second board of a hand run twice. */
+export type ShownHand = { player_id: string; seat: number; board?: number; category: HandCategory; cards: readonly string[] };
 
 const rank = (card: string) => (card[0] === "T" ? "10" : card[0]);
 
@@ -34,15 +35,23 @@ export function handName({ category, cards }: ShownHand): string {
   }
 }
 
-/** Seat number -> name of the hand shown there. */
+/** Seat number -> name of the hand shown there. A hand run twice names one per board: "Đôi A /
+ *  Sảnh tới 9" (one name when both boards make the same). */
 export function showdownBySeat(showdown: readonly ShownHand[] | null | undefined): Record<number, string> {
-  return Object.fromEntries((showdown ?? []).map((entry) => [entry.seat, handName(entry)]));
+  const names: Record<number, string[]> = {};
+  for (const entry of showdown ?? []) {
+    const name = handName(entry);
+    const list = (names[entry.seat] ??= []);
+    if (!list.includes(name)) list.push(name);
+  }
+  return Object.fromEntries(Object.entries(names).map(([seat, list]) => [seat, list.join(" / ")]));
 }
 
-/** Board positions that are part of a shown hand (the design lights them, dims the rest). */
-export function boardHighlights(showdown: readonly ShownHand[] | null | undefined, board: string[]): number[] {
-  const used = new Set((showdown ?? []).flatMap((entry) => entry.cards));
-  return board.flatMap((card, i) => (used.has(card) ? [i] : []));
+/** Board positions that are part of a shown hand (the design lights them, dims the rest). With
+ *  `board` (1 or 2), only the hands made on that board of a hand run twice. */
+export function boardHighlights(showdown: readonly ShownHand[] | null | undefined, cards: readonly string[], board?: number): number[] {
+  const used = new Set((showdown ?? []).filter((entry) => board === undefined || (entry.board ?? 1) === board).flatMap((entry) => entry.cards));
+  return cards.flatMap((card, i) => (used.has(card) ? [i] : []));
 }
 
 export type Winner = { name: string; amount: number; hand?: string };
@@ -54,4 +63,24 @@ export function winnerLines(winners: Winner[]): { title: string; detail?: string
     title: `${winners.map((w) => w.name).join(", ")} chia pot`,
     detail: winners.map((w) => `${w.name} +${fmt(w.amount)}${w.hand ? ` (${w.hand})` : ""}`).join(" · "),
   };
+}
+
+/** One board of a hand run twice, its winners named (`amount` unknown: see seatView's runouts). */
+export type RunoutWinners = { winners: { name: string; amount?: number }[] };
+
+/** "An +500" / "An +250, Bình +250": who one board of a hand run twice paid. */
+export function runoutText({ winners }: RunoutWinners): string {
+  return winners.map((w) => (w.amount === undefined ? w.name : `${w.name} +${fmt(w.amount)}`)).join(", ");
+}
+
+/** The result of a hand run twice: "Chạy 2 lần" + "Lần 1: An +500 · Lần 2: Bình +500", or
+ *  "An thắng cả 2 lần" when one player took both boards. */
+export function runoutLines(runouts: RunoutWinners[]): { title: string; detail: string } {
+  const names = runouts.map((r) => r.winners.map((w) => w.name).join(", "));
+  if (names[0] && runouts.every((r, i) => r.winners.length === 1 && names[i] === names[0])) {
+    const amounts = runouts.map((r) => r.winners[0].amount);
+    const each = amounts.every((a) => a !== undefined) ? ` (${amounts.map((a, i) => `lần ${i + 1} +${fmt(a!)}`).join(", ")})` : "";
+    return { title: "Chạy 2 lần", detail: `${names[0]} thắng cả 2 lần${each}` };
+  }
+  return { title: "Chạy 2 lần", detail: runouts.map((r, i) => `Lần ${i + 1}: ${runoutText(r) || "không ai"}`).join(" · ") };
 }

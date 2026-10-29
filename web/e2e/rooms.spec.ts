@@ -303,3 +303,159 @@ test("house rules: the create form sends an ante and a bomb pot every hand; the 
   await expect(owner.locator(".board [role=img]")).toHaveCount(0);
   expect((await api(owner, "GET", `/api/rooms/${roomId}/`)).room).toMatchObject({ ante: 2, bomb_pot_every: 0 });
 });
+
+test("house rules 2: run it twice on an all-in preflop, then rabbit cards after a fold and 'Ngửa bài' for the folder", async ({ browser }) => {
+  // unique names: every spec shares one database per run, and this one may run again on it
+  const run = Date.now().toString(36).slice(-4);
+  const owner = await newGuest(browser, `Tùng${run}`);
+  const ownerName = `Tùng${run}`;
+  const guestName = `Vy${run}`;
+
+  // The create form: "Chạy 2 lần khi all-in" (off) and the rabbit hunt (on) under "Thêm tuỳ chọn".
+  await owner.goto("/rooms/new");
+  await owner.getByLabel("Tên bàn").fill("Bàn E2E chạy 2 lần");
+  await owner.getByRole("textbox", { name: "Blind nhỏ", exact: true }).fill("5");
+  await owner.getByRole("textbox", { name: "Blind lớn", exact: true }).fill("10");
+  await owner.getByRole("textbox", { name: "Chip đầu vào" }).fill("1000");
+  await owner.getByText("Thêm tuỳ chọn").click();
+  const twice = owner.getByRole("switch", { name: "Chạy 2 lần khi all-in" });
+  const rabbit = owner.getByRole("switch", { name: "Xem bài chưa chia (rabbit hunt)" });
+  await expect(twice).toHaveAttribute("aria-checked", "false");
+  await expect(rabbit).toHaveAttribute("aria-checked", "true");
+  await twice.click();
+  await owner.getByRole("button", { name: "Tạo bàn" }).click();
+  await expect(owner).toHaveURL(/\/rooms\/\d+\/table/);
+  const roomId = Number(new URL(owner.url()).pathname.split("/")[2]);
+  const detail = await api(owner, "GET", `/api/rooms/${roomId}/`);
+  expect(detail.room).toMatchObject({ run_it_twice: true, rabbit_hunt: true, starting_stack: 1000 });
+  // the "Mời bạn" sheet opens with the new table: closed once it is there, or it covers the bar
+  await expect(owner.locator("dialog[open]")).toBeVisible();
+  await owner.keyboard.press("Escape");
+  await expect(owner.locator("dialog[open]")).toHaveCount(0);
+
+  const guest = await newGuest(browser, guestName);
+  if (detail.invite_token) await api(guest, "POST", "/api/rooms/join/", { invite_token: detail.invite_token });
+  await api(owner, "POST", `/api/rooms/${roomId}/seats/`, { seat: 1 });
+  await api(guest, "POST", `/api/rooms/${roomId}/seats/`, { seat: 2 });
+  await guest.goto(`/rooms/${roomId}/table`);
+  const pages = [owner, guest];
+  const other = (p: Page) => (p === owner ? guest : owner);
+  const ready = async (p: Page) => (await p.locator("[data-hand=live]").count()) > 0 && (await p.getByRole("region", { name: "Tới lượt bạn" }).locator(".act-call:enabled").count()) > 0;
+  const whoActs = async () => {
+    let actor: Page | null = null;
+    await expect
+      .poll(
+        async () => {
+          for (const p of pages) if (await ready(p)) actor = p;
+          return actor !== null;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    return actor! as Page;
+  };
+
+  // Hand #1: the first to act goes all in, the other calls. The board is dealt twice.
+  const first = await whoActs();
+  const bar = first.getByRole("region", { name: "Tới lượt bạn" });
+  await bar.locator(".preset", { hasText: "All-in" }).click();
+  await bar.locator(".act-raise").click();
+  const second = other(first);
+  await expect.poll(() => ready(second), { timeout: 20_000 }).toBe(true);
+  await second.getByRole("region", { name: "Tới lượt bạn" }).locator(".act-call").click();
+  for (const p of pages) {
+    await expect(p.locator("[data-hand=complete]")).toBeVisible();
+    const rows = p.locator(".board-twice .board-run");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0).locator(".board-run-cards [role=img]")).toHaveCount(5);
+    await expect(rows.nth(1).locator(".board-run-cards [role=img]")).toHaveCount(5);
+    await expect(rows.nth(0).locator(".board-run-label")).toHaveText("Lần 1");
+    await expect(rows.nth(1).locator(".board-run-label")).toHaveText("Lần 2");
+    await expect(p.locator(".win-banner")).toContainText("Chạy 2 lần");
+  }
+  // Each board paid half of the pot of 2.000; each stack is what its owner won on the two boards.
+  const hand1 = (await api(owner, "GET", `/api/rooms/${roomId}/hands/`)).hands[0];
+  const replay1 = await api(owner, "GET", `/api/hands/${hand1.hand_id}/replay/`);
+  type Paid = { player_id: string; seat: number; amount: number };
+  const runouts = replay1.runouts as { board: string[]; winners: Paid[] }[];
+  expect(runouts).toHaveLength(2);
+  for (const r of runouts) expect(r.board).toHaveLength(5);
+  const seats = (await api(owner, "GET", `/api/rooms/${roomId}/snapshot/`)).table.seats as { seat: number; player_id: string; stack: number }[];
+  expect(seats.reduce((sum, s) => sum + s.stack, 0)).toBe(2000);
+  const results = replay1.results as { player_id: string; hand_net: number }[];
+  for (const s of seats) expect(s.stack).toBe(1000 + results.find((r) => r.player_id === s.player_id)!.hand_net);
+  if (runouts.every((r) => r.winners.length)) {
+    for (const r of runouts) expect(r.winners.reduce((sum, w) => sum + w.amount, 0)).toBe(1000);
+    const won = (seat: number) => runouts.flatMap((r) => r.winners).filter((w) => w.seat === seat).reduce((sum, w) => sum + w.amount, 0);
+    for (const s of seats) expect(s.stack).toBe(won(s.seat));
+  } else {
+    // one player took both boards (the other mucked): the server names no board winners then
+    expect(seats.map((s) => s.stack).sort()).toEqual([0, 2000]);
+    const name = seats.find((s) => s.stack === 2000)!.seat === 1 ? ownerName : guestName;
+    for (const p of pages) await expect(p.locator(".board-run-win").first()).toHaveText(name);
+  }
+  const fmtChips = (n: number) => n.toLocaleString("de-DE");
+  await expect(owner.locator(".me .stack")).toHaveText(fmtChips(seats.find((s) => s.seat === 1)!.stack));
+  await expect(guest.locator(".me .stack")).toHaveText(fmtChips(seats.find((s) => s.seat === 2)!.stack));
+  // The log says so, board by board.
+  await owner.getByRole("button", { name: "Menu", exact: true }).click();
+  await owner.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Nhật ký ván" }).click();
+  const log = owner.getByRole("dialog", { name: "Nhật ký ván" });
+  await expect(log.getByText(/Chạy 2 lần · Lần 1/)).toBeVisible();
+  await expect(log.getByText(/Chạy 2 lần · Lần 2/)).toBeVisible();
+  await owner.keyboard.press("Escape");
+  // The replay draws both boards too.
+  const replayPage = await owner.context().newPage();
+  await replayPage.goto(`/hands/${hand1.hand_id}`);
+  await replayPage.getByRole("button", { name: "Tới kết quả" }).click();
+  await expect(replayPage.locator(".board-twice .board-run")).toHaveCount(2);
+  await replayPage.close();
+
+  // Whoever lost it all buys back in, so hand #2 deals.
+  for (const s of seats) if (s.stack === 0) await api(s.seat === 1 ? owner : guest, "POST", `/api/rooms/${roomId}/rebuy/`);
+  await expect.poll(async () => (await api(owner, "GET", `/api/rooms/${roomId}/snapshot/`)).table.hand?.hand_no, { timeout: 20_000 }).toBe(2);
+
+  // Hand #2: the player not to act sits out from the next hand (so no hand #3 comes), then the
+  // one to act folds preflop. No board was dealt: the rabbit hunt shows all five cards.
+  const folder = await whoActs();
+  const winner = other(folder);
+  const folderName = folder === owner ? ownerName : guestName;
+  await winner.getByRole("button", { name: "Menu", exact: true }).click();
+  await winner.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Nghỉ ván sau" }).click();
+  await expect.poll(async () => (await api(owner, "GET", `/api/rooms/${roomId}/snapshot/`)).table.seats.some((s: { sitting_out: boolean }) => s.sitting_out)).toBe(true);
+  const myCards = await folder.locator(".me-cards [role=img]").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+  expect(myCards).toHaveLength(2);
+  await folder.getByRole("region", { name: "Tới lượt bạn" }).locator(".act-fold").click();
+  for (const p of pages) {
+    await expect(p.locator("[data-hand=complete]")).toBeVisible();
+    await expect(p.locator(".board-rabbit .pc.is-rabbit")).toHaveCount(5);
+    await expect(p.locator(".board-rabbit")).toContainText("Bài chưa chia");
+    // won by folds: nobody's cards are up yet, both may show theirs
+    await expect(p.getByRole("button", { name: "Ngửa bài" })).toBeVisible();
+  }
+  await expect(winner.locator(".seat-shown")).toHaveCount(0);
+
+  // The folder shows: the other player sees those two cards face up, and the log says so.
+  await folder.getByRole("button", { name: "Ngửa bài" }).click();
+  await expect(folder.getByRole("button", { name: "Ngửa bài" })).toHaveCount(0);
+  const shown = winner.locator(".seat-shown .pc-flip-front");
+  await expect(shown).toHaveCount(2);
+  expect(await shown.evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")))).toEqual(myCards);
+  await expect(winner.getByRole("button", { name: "Ngửa bài" })).toBeVisible(); // the winner's are still down
+  await winner.getByRole("button", { name: "Menu", exact: true }).click();
+  await winner.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Nhật ký ván" }).click();
+  await expect(winner.getByRole("dialog", { name: "Nhật ký ván" }).getByText(`${folderName} ngửa bài`)).toBeVisible();
+  await expect(winner.getByRole("dialog", { name: "Nhật ký ván" }).getByText(/^Bài chưa chia:/)).toBeVisible();
+  await winner.keyboard.press("Escape");
+
+  // Kept with the hand: its replay has the rabbit cards and the shown cards.
+  const hand2 = (await api(owner, "GET", `/api/rooms/${roomId}/hands/`)).hands[0];
+  const replay2 = await api(winner, "GET", `/api/hands/${hand2.hand_id}/replay/`);
+  expect(replay2.rabbit_cards).toHaveLength(5);
+  expect(replay2.shown_cards).toHaveLength(1);
+  await winner.goto(`/hands/${hand2.hand_id}`);
+  await winner.getByRole("button", { name: "Tới kết quả" }).click();
+  await expect(winner.locator(".board-rabbit .pc.is-rabbit")).toHaveCount(5);
+  await expect(winner.locator(".seat-shown .pc-flip-front")).toHaveCount(2);
+  await expect(winner.getByText(`${folderName} ngửa bài sau ván.`)).toBeVisible();
+});

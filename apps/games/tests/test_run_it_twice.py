@@ -75,6 +75,22 @@ class TestRunItTwice:
             },
         ]
 
+    def test_one_player_taking_both_boards_is_named_on_each(self):
+        # PokerKit kills the losing hand and pushes the pot whole, with no board: still halved.
+        engine = heads_up(
+            run_it_twice=True,
+            holes={"A": "AsAh", "B": "7c2d"},
+            board="KdKc3s9h4d",
+            second_board="Qd5c6h8sTd",
+        )
+        engine.act(raise_to("A", 100))
+        engine.act(call("B"))
+        assert engine.is_complete and engine.ran_twice
+        assert [board["winners"] for board in engine.runouts()] == [
+            [{"player_id": "A", "seat": 2, "amount": 100}],
+            [{"player_id": "A", "seat": 2, "amount": 100}],
+        ]
+
     def test_the_showdown_names_hands_on_each_board(self):
         engine = three_all_in(
             holes={"A": "AsAh", "B": "KsKh", "C": "QsQh"},

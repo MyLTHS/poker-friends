@@ -219,14 +219,26 @@ class HandEngine:
         """For a hand run twice, each board and what it paid to whom; ``None`` otherwise."""
         if not self.is_complete or not self.ran_twice:
             return None
-        won: list[dict[str, int]] = [{} for _ in range(self._state.board_count)]
+        boards = self._state.board_count
+        won: list[dict[str, int]] = [{} for _ in range(boards)]
+
+        def pay(board: int, i: int, amount: int) -> None:
+            player = self.player_order[i]
+            won[board][player] = won[board].get(player, 0) + amount
+
         for operation in self._state.operations:
-            if isinstance(operation, ChipsPushing) and operation.board_index is not None:
-                paid = won[operation.board_index]
-                for i, amount in enumerate(operation.amounts):
-                    if amount:
-                        player = self.player_order[i]
-                        paid[player] = paid.get(player, 0) + amount
+            if not isinstance(operation, ChipsPushing):
+                continue
+            for i, amount in enumerate(operation.amounts):
+                if not amount:
+                    continue
+                if operation.board_index is not None:
+                    pay(operation.board_index, i, amount)
+                else:
+                    # A pot one player took on every board: PokerKit killed the other hands (they
+                    # lost on both) and pushed it whole. Halved like a split pot, odd chip first.
+                    for board in range(boards):
+                        pay(board, i, amount // boards + (1 if board < amount % boards else 0))
         return [
             {
                 "board": list(self.board(index)),

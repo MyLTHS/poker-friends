@@ -1671,6 +1671,10 @@
   .d1 .owner-two .os-seven {
     grid-column: 1 / -1;
   }
+  /* run it twice and rabbit hunt: a switch each, side by side */
+  .d1 .owner-two .os-flag {
+    grid-column: auto;
+  }
   .d1 .os-seven-row {
     display: flex;
     align-items: center;

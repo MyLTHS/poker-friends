@@ -10,7 +10,7 @@ import "./table.css";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bomb, Coins, Crown, Hourglass } from "lucide-react";
+import { Bomb, Coins, Crown, Eye, Hourglass } from "lucide-react";
 
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
 import { FeedbackDialog } from "@/feedback/FeedbackDialog";
@@ -22,10 +22,10 @@ import { useDevice } from "./device";
 import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
 import { ConnStrip, PausedCard, ReconnectCard } from "./Overlays";
-import { winnerLines } from "./handName";
+import { runoutLines, winnerLines } from "./handName";
 import { bombPotHand, isBombPot, stakesText } from "./houseRules";
-import { canPreAct, facingBet } from "./reducer";
-import { describeAction, raisePresets, tableView, type SeatView } from "./seatView";
+import { canPreAct, canShowCards, facingBet, shownHands } from "./reducer";
+import { describeAction, raisePresets, tableView, type RunoutView, type SeatView } from "./seatView";
 import { SevenDeuceStage, SevenLedger, SevenMedal } from "./SevenDeuce";
 import {
   ChatComposer,
@@ -176,9 +176,12 @@ export function TableScreen({
             showdown: model.showdown,
             myCards: model.myCards,
             bubbles,
+            runouts: model.runouts,
+            rabbit: model.rabbit,
+            shown: shownHands({ table, shown: model.shown }),
           })
         : null,
-    [table, model.lastActions, model.results, model.showdown, model.myCards, bubbles],
+    [table, model.lastActions, model.results, model.showdown, model.myCards, bubbles, model.runouts, model.rabbit, model.shown],
   );
   const placeOf = useCallback(
     (seat: number): SeatPlace | undefined => {
@@ -192,6 +195,7 @@ export function TableScreen({
   const dismissNotice = useCallback(() => dispatch({ type: "dismiss.notice" }), [dispatch]);
   const onAct = useCallback((kind: ActKind, amount?: number) => dispatch({ type: "act", kind, amount, commandId: newCommandId() }), [dispatch]);
   const say = useCallback((text: string) => dispatch({ type: "chat.send", text }), [dispatch]);
+  const showCards = useCallback(() => dispatch({ type: "show", commandId: newCommandId() }), [dispatch]);
 
   if (!table || !view) {
     return (
@@ -222,6 +226,8 @@ export function TableScreen({
   const sittingOut = !!occupant?.sitting_out;
   const isSeated = !!occupant;
   const pending = !!model.pending;
+  // "Ngửa bài": offered after the hand to whoever was dealt in and is still face down; busy while sent.
+  const showOffer = canShowCards(model) || !!model.showing;
   // Read by the E2E tests (web/e2e/table.spec.ts): which state the page shows.
   const probe = {
     "data-version": model.lastVersion ?? undefined,
@@ -305,6 +311,8 @@ export function TableScreen({
       seats={view.seats}
       board={view.board}
       boardHi={view.boardHi}
+      runouts={view.runouts}
+      rabbit={view.rabbit}
       pot={view.pot}
       mark={`${room.name} · ${blinds}`}
       badge={
@@ -323,7 +331,7 @@ export function TableScreen({
       className={celebration ? "is-seven" : ""}
     >
       {layer}
-      {hand?.complete && winners.length > 0 && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} handOf={handOf} />}
+      {hand?.complete && (winners.length > 0 || view.runouts) && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} handOf={handOf} runouts={view.runouts} />}
       {celebration && sevenSpot && (
         <SevenDeuceStage key={hand?.hand_id} device={device} award={celebration} seats={table.seats} spot={sevenSpot} pot={Math.max(0, (model.results?.find((r) => r.player_id === celebration.player_id)?.hand_net ?? 0))} quiet={model.celebrationQuiet} startedAt={model.celebrationAt} />
       )}
@@ -378,7 +386,7 @@ export function TableScreen({
     </p>
   );
 
-  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, canRebuy: !!onRebuy, nextBomb });
+  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, canRebuy: !!onRebuy, nextBomb, runouts: view.runouts });
   // Any seated player with no chips buys back in (the room's starting stack), owner included. Not
   // while their all-in is still being played; yes on a finished hand they lost it all in (the
   // table keeps that hand on screen until the next one, which may never come heads-up).
@@ -436,6 +444,11 @@ export function TableScreen({
           <Spectators device="mobile" spectators={model.spectators} />
           <div className="ip-actions">
             {rebuyButton(true)}
+            {showOffer && (
+              <Button kind="ghost" block busy={!!model.showing} disabled={!online} icon={<Eye size={16} strokeWidth={2} aria-hidden />} onClick={showCards}>
+                Ngửa bài
+              </Button>
+            )}
             {hand?.complete && replayHref && (
               <ButtonLink kind="ghost" block href={replayHref(hand.hand_id)}>
                 Xem lại ván
@@ -513,7 +526,7 @@ export function TableScreen({
           ) : idle.win ? (
             <span className="idle-msg">
               <Crown size={18} strokeWidth={2} />
-              <span>
+              <span title={`${idle.win} ${idle.winSub ?? ""}`.trim()}>
                 <b>{idle.win}</b> {idle.winSub}
               </span>
             </span>
@@ -525,6 +538,12 @@ export function TableScreen({
         }
         right={
           <>
+            {showOffer && (
+              <button type="button" className={`tbar-btn${model.showing ? " is-busy" : ""}`} disabled={!online || !!model.showing} aria-busy={!!model.showing || undefined} onClick={showCards}>
+                <Eye size={15} strokeWidth={2} aria-hidden />
+                Ngửa bài
+              </button>
+            )}
             {hand?.complete && replayHref && (
               <Link className="tbar-btn is-quiet" href={replayHref(hand.hand_id)}>
                 Xem lại ván
@@ -604,8 +623,21 @@ function NextHand({ bomb = false }: { bomb?: boolean }) {
   );
 }
 
-function WinnerBanner({ device, winners, nameOf, handOf }: { device: Device; winners: PlayerResult[]; nameOf: (id: string) => string; handOf: (id: string) => string | undefined }) {
-  const { title, detail } = winnerLines(winners.map((w) => ({ name: nameOf(w.player_id), amount: w.hand_net, hand: handOf(w.player_id) })));
+function WinnerBanner({
+  device,
+  winners,
+  nameOf,
+  handOf,
+  runouts,
+}: {
+  device: Device;
+  winners: PlayerResult[];
+  nameOf: (id: string) => string;
+  handOf: (id: string) => string | undefined;
+  runouts: RunoutView[] | null;
+}) {
+  // run twice: each board paid its half (the rows on the felt say who too)
+  const { title, detail } = runouts ? runoutLines(runouts) : winnerLines(winners.map((w) => ({ name: nameOf(w.player_id), amount: w.hand_net, hand: handOf(w.player_id) })));
   return (
     <div className={`win-banner win-${device}`} role="status">
       <span className="win-crown">
@@ -651,6 +683,7 @@ function idleContent({
   celebration,
   canRebuy,
   nextBomb,
+  runouts,
 }: {
   table: TableState;
   me: SeatView | undefined;
@@ -665,6 +698,8 @@ function idleContent({
   canRebuy: boolean;
   /** the hand about to be dealt is a bomb pot */
   nextBomb: boolean;
+  /** the completed hand was run twice: its two boards and who each paid */
+  runouts: RunoutView[] | null;
 }): Idle {
   const { hand, room } = table;
   const seated = table.seats.length;
@@ -675,9 +710,9 @@ function idleContent({
     const showdown = hand.players.filter((p) => p.in_hand && p.cards.length && p.cards.every((c) => c !== "??")).length > 1;
     const mine = myResult && handOf(myResult.player_id);
     // Each winner with their own hand: a split or side pot can be won with different hands.
-    const lines = winners.length ? winnerLines(winners.map((w) => ({ name: nameOf(w.player_id), amount: w.hand_net, hand: handOf(w.player_id) }))) : null;
+    const lines = runouts ? runoutLines(runouts) : winners.length ? winnerLines(winners.map((w) => ({ name: nameOf(w.player_id), amount: w.hand_net, hand: handOf(w.player_id) }))) : null;
     const win = lines?.title;
-    const shownSub = lines?.detail && (winners.length === 1 ? `với ${lines.detail}` : lines.detail);
+    const shownSub = lines?.detail && (winners.length === 1 && !runouts ? `với ${lines.detail}` : lines.detail);
     return {
       eyebrow: `Ván #${hand.hand_no} đã xong`,
       status: nextBomb ? "Ván sau là bomb pot" : "Chờ ván mới",
@@ -780,6 +815,34 @@ function LogList({ entries, seats, you }: { entries: LogEntry[]; seats: SeatOccu
             return (
               <li key={i} className="is-pay">
                 Thưởng 7-2: {e.payers} người × {fmt(e.bonus)} = +{fmt(e.total)} cho {name(e.seat)}
+              </li>
+            );
+          case "runout":
+            return (
+              <li key={i} className="is-street">
+                Chạy 2 lần · Lần {e.n}{" "}
+                {e.cards.map((c) => (
+                  <CardText key={c} card={c} />
+                ))}
+                {e.winners.length > 0 && <> — {e.winners.map((w) => (w.amount === undefined ? `${name(w.seat)} thắng` : `${name(w.seat)} ăn ${fmt(w.amount)}`)).join(", ")}</>}
+              </li>
+            );
+          case "rabbit":
+            return (
+              <li key={i} className="is-quiet">
+                Bài chưa chia:{" "}
+                {e.cards.map((c) => (
+                  <CardText key={c} card={c} />
+                ))}
+              </li>
+            );
+          case "reveal":
+            return (
+              <li key={i} className={e.seat === mySeat ? "is-me" : ""}>
+                {name(e.seat)} ngửa bài{" "}
+                {e.cards.map((c) => (
+                  <CardText key={c} card={c} />
+                ))}
               </li>
             );
           case "warn":

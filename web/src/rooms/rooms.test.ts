@@ -274,3 +274,20 @@ describe("qrModules", () => {
     expect(jsQR(pixels, size, size)?.data).toBe(link);
   });
 });
+
+describe("run it twice and rabbit hunt", () => {
+  it("start as the server's defaults (run twice off, rabbit hunt on) and are both sent", () => {
+    expect(DEFAULT_RULES).toMatchObject({ run_it_twice: false, rabbit_hunt: true });
+    expect(draftRules(NEW_ROOM_DRAFT, "Bàn")).toMatchObject({ run_it_twice: false, rabbit_hunt: true });
+    expect(draftRules({ ...NEW_ROOM_DRAFT, run_it_twice: true, rabbit_hunt: false }, "Bàn")).toMatchObject({ run_it_twice: true, rabbit_hunt: false });
+  });
+
+  it("the owner's form sends only the switch that changed, and the panel says it waits", () => {
+    const room = { ...info(), run_it_twice: false, rabbit_hunt: true };
+    expect(changedRules(room, { ...room, run_it_twice: true })).toEqual({ run_it_twice: true });
+    expect(changedRules(room, { ...room, rabbit_hunt: false })).toEqual({ rabbit_hunt: false });
+    expect(pendingText({ run_it_twice: true }, info())).toBe("Ván sau: chạy 2 lần khi all-in");
+    expect(pendingText({ run_it_twice: false, rabbit_hunt: false }, info())).toBe("Ván sau: tắt chạy 2 lần · tắt xem bài chưa chia");
+    expect(pendingText({ rabbit_hunt: true }, info())).toBe("Ván sau: bật xem bài chưa chia");
+  });
+});

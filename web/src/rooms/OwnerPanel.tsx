@@ -1,8 +1,8 @@
 "use client";
 
 // The owner's panel (D1 "owner-panel"): chips for each seated player, kick, the rules (blinds,
-// think time, starting stack, ante, 7-2 bonus, bomb pot; applied from the next hand while one is
-// running), the invite link and closing the room. A standalone component: the room page opens it
+// think time, starting stack, ante, 7-2 bonus, bomb pot, run it twice, rabbit hunt; applied from
+// the next hand while one is running), the invite link and closing the room. A standalone component: the room page opens it
 // in a side sheet, and the live table (C3) can mount <OwnerSheet> the same way.
 //
 // Needs a <ToastProvider> (from @/ui) above it, inside the .d1 root (RoomsShell has one; the
@@ -355,6 +355,8 @@ type RulesDraft = {
   bombOn: boolean;
   bombEvery: string;
   bombAmount: string;
+  run_it_twice: boolean;
+  rabbit_hunt: boolean;
 };
 
 const draftOf = (r: EditableRules): RulesDraft => ({
@@ -369,6 +371,8 @@ const draftOf = (r: EditableRules): RulesDraft => ({
   bombOn: r.bomb_pot_every > 0,
   bombEvery: String(r.bomb_pot_every || BOMB_EVERY_DEFAULT),
   bombAmount: String(r.bomb_pot_amount || defaultBombAmount(r.big_blind)),
+  run_it_twice: r.run_it_twice,
+  rabbit_hunt: r.rabbit_hunt,
 });
 const toNumber = (text: string) => (text.trim() === "" ? NaN : Number(text));
 const digitsOnly = (text: string) => text.replace(/[^\d]/g, "").slice(0, 9);
@@ -395,6 +399,8 @@ function RulesForm({
     ante: detail.pending?.ante ?? room.ante,
     bomb_pot_every: detail.pending?.bomb_pot_every ?? room.bomb_pot_every,
     bomb_pot_amount: detail.pending?.bomb_pot_amount ?? room.bomb_pot_amount,
+    run_it_twice: detail.pending?.run_it_twice ?? room.run_it_twice,
+    rabbit_hunt: detail.pending?.rabbit_hunt ?? room.rabbit_hunt,
   };
   const [draft, setDraft] = useState<RulesDraft>(() => draftOf(start));
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -411,6 +417,8 @@ function RulesForm({
     // switched on, 0 is not an answer; switched off, the amount stays as it was (not sent)
     bomb_pot_every: draft.bombOn ? toNumber(draft.bombEvery) || NaN : 0,
     bomb_pot_amount: draft.bombOn ? toNumber(draft.bombAmount) : start.bomb_pot_amount,
+    run_it_twice: draft.run_it_twice,
+    rabbit_hunt: draft.rabbit_hunt,
   };
   const body = changedRules(start, edit);
   const dirty = Object.keys(body).length > 0;
@@ -599,6 +607,21 @@ function RulesForm({
           ) : (
             draft.bombOn && <span className="owner-hint is-desktop-only">Cứ mấy ván một lần, mỗi người góp bao nhiêu · không blind, lật flop luôn</span>
           )}
+        </section>
+        {/* two switches side by side, laid out like the 7-2 bonus while it is off */}
+        <section className="owner-sec os-seven os-flag">
+          <h4 id="owner-twice">Chạy 2 lần</h4>
+          <span className="os-seven-row">
+            <Toggle on={draft.run_it_twice} label="Chạy 2 lần khi all-in" disabled={disabled} onChange={(run_it_twice) => set({ run_it_twice })} />
+          </span>
+          <span className="owner-hint is-desktop-only">All-in trước river: chia 2 lần, mỗi lần nửa pot</span>
+        </section>
+        <section className="owner-sec os-seven os-flag">
+          <h4 id="owner-rabbit">Bài chưa chia</h4>
+          <span className="os-seven-row">
+            <Toggle on={draft.rabbit_hunt} label="Xem bài chưa chia (rabbit hunt)" disabled={disabled} onChange={(rabbit_hunt) => set({ rabbit_hunt })} />
+          </span>
+          <span className="owner-hint is-desktop-only">Ván xong sớm: lật mờ các lá lẽ ra sẽ ra</span>
         </section>
       </div>
       {(dirty || failure) && (

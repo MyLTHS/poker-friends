@@ -6,7 +6,7 @@ import type { AppliedAction, ChatMessage, HandPlayer, HandView, LegalActions, Pl
 import { fmt, signed } from "@/ui/format";
 
 import { spotOf } from "./geometry";
-import { boardHighlights, showdownBySeat, type ShownHand } from "./handName";
+import { boardHighlights, showdownBySeat, type RunoutWinners, type ShownHand } from "./handName";
 
 export type SeatState = "turn" | "waiting" | "folded" | "all-in" | "sitting-out" | "disconnected" | "winner" | "empty";
 
@@ -22,7 +22,7 @@ export type SeatView = {
   bet?: number;
   /** Protocol cards; "??" are backs. Empty when not dealt in or folded. */
   cards?: string[];
-  /** Hole cards turned face up for everyone (showdown, 7-2). */
+  /** Hole cards turned face up for everyone (showdown, 7-2, shown after the hand). */
   shown?: boolean;
   isMe?: boolean;
   isButton?: boolean;
@@ -36,6 +36,15 @@ export type SeatView = {
   bubble?: string;
 };
 
+/** One board of a hand run twice as the stage draws it. */
+export type RunoutView = RunoutWinners & { cards: string[]; hi: number[] };
+
+/** The two boards of a run-twice result, from the socket (Runout) or the replay. */
+type RunoutLike = { board: readonly string[]; winners: readonly { player_id: string; seat: number; amount: number }[] };
+
+/** Two cards a player showed after the hand (cards.shown, or the replay's shown_cards). */
+type ShownLike = { player_id: string; seat: number; cards: readonly string[] };
+
 export type TableView = {
   seats: SeatView[];
   /** My seat number, null for a spectator. */
@@ -43,6 +52,10 @@ export type TableView = {
   board: string[];
   /** Board positions in a hand shown at the showdown (lit; the rest dimmed). */
   boardHi: number[];
+  /** A hand run twice: both boards (the first is `board`), each with its lit cards and winners. */
+  runouts: RunoutView[] | null;
+  /** Rabbit hunt: the cards the empty board slots would have got (display only). */
+  rabbit: string[];
   /** Chips in the middle (collected pots), bets in front of the seats excluded. */
   pot: number;
   /** Pot plus every bet on the table. */
@@ -110,6 +123,12 @@ export type ViewExtras = {
   /** My hole cards of the hand on the table: the completed hand drops a showdown loser's cards,
    *  but I saw mine, so they stay in front of me until the next hand. */
   myCards?: string[];
+  /** hand.completed runouts of the hand on the table (run twice): who each board paid. */
+  runouts?: readonly RunoutLike[] | null;
+  /** hand.completed rabbit_cards of the hand on the table. */
+  rabbit?: readonly string[];
+  /** Cards turned face up for the whole table after the hand (cards.shown), by seat. */
+  shown?: readonly ShownLike[];
 };
 
 export function tableView(table: TableState, extras: ViewExtras = {}): TableView {
@@ -152,6 +171,9 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
 
     let cards = player && player.in_hand ? player.cards : [];
     if (isMe && hand?.complete && !folded && cards.length === 0 && extras.myCards?.length) cards = extras.myCards;
+    // shown after the hand: face up for everyone, folded or not
+    const showed = hand?.complete && player ? extras.shown?.find((h) => h.seat === seat && h.player_id === occupant.player_id) : undefined;
+    if (showed) cards = [...showed.cards];
     const faceUp = cards.length > 0 && cards.every((c) => c !== "??");
     const last = extras.lastActions?.[seat];
     let lastAction: string | undefined;
@@ -185,12 +207,31 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
 
   const pot = (hand?.pots ?? []).reduce((sum, p) => sum + p.amount, 0);
   const bets = live ? hand.players.reduce((sum, p) => sum + p.bet, 0) : 0;
+  const board = hand?.board ?? [];
+  // Run twice: each board lights the hands of whoever it paid (its own winners, not the hand's).
+  const second = hand?.complete ? hand.second_board : null;
+  const nameOf = (playerId: string) => seats.find((s) => s.player_id === playerId)?.display_name ?? "?";
+  const runs = second ? [board, second] : null;
+  // The server sends a board without winners when one player took every board and the others
+  // mucked (the engine pays that as an uncontested pot): the hand's winners took it, amount unsaid.
+  const scooped = (results ? results.filter((r) => r.hand_net > 0).map((r) => r.player_id) : extras.winners) ?? [];
+  const runouts = runs?.map((cards, i): RunoutView => {
+    const paid = hand?.complete ? extras.runouts?.[i]?.winners : undefined;
+    const lit = paid?.length ? paid.map((w) => w.player_id) : winners;
+    return {
+      cards: [...cards],
+      hi: boardHighlights(showdown?.filter((h) => !lit || lit.includes(h.player_id)), cards, i + 1),
+      winners: paid?.length ? paid.map((w) => ({ name: nameOf(w.player_id), amount: w.amount })) : scooped.map((id) => ({ name: nameOf(id) })),
+    };
+  });
   return {
     seats: views,
     mySeat: you.seat,
-    board: hand?.board ?? [],
+    board,
     // Only the winners' hands light the board (a shown loser's hand would mislead).
-    boardHi: boardHighlights(showdown?.filter((h) => !winners || winners.includes(h.player_id)), hand?.board ?? []),
+    boardHi: runouts ? runouts[0].hi : boardHighlights(showdown?.filter((h) => !winners || winners.includes(h.player_id)), board),
+    runouts: runouts ?? null,
+    rabbit: hand?.complete && board.length < 5 ? (extras.rabbit ?? []).slice(0, 5 - board.length) : [],
     pot,
     potTotal: pot + bets,
     bets,

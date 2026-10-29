@@ -178,6 +178,127 @@
   .d1 .board .pc.is-lo {
     opacity: 0.5;
   }
+  /* rabbit hunt: the cards that would have come, greyed in the empty slots, named on their edge */
+  .d1 .board-rabbit {
+    position: relative;
+    display: flex;
+    gap: inherit;
+  }
+  .d1 .board .pc.is-rabbit {
+    opacity: 0.42;
+    filter: grayscale(0.8);
+  }
+  .d1 .rabbit-label {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translate(-50%, 50%);
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(10, 7, 5, 0.82);
+    border: 1px solid var(--hair);
+    font: var(--w-strong) var(--fs-xs)/1.2 var(--text);
+    letter-spacing: 0.04em;
+    color: var(--ivory-2);
+    white-space: nowrap;
+  }
+  .d1 .stage-mobile .rabbit-label {
+    padding: 1px 7px;
+  }
+  /* run it twice: one compact row per board, "Lần 1" / "Lần 2" before it, who it paid after it;
+     the rows share their columns so the two boards line up */
+  /* a little lower than one board: the winner's banner sits above it */
+  .d1 .board.board-twice {
+    transform: translate(-50%, calc(-50% + 16px));
+    display: grid;
+    grid-template-columns: auto auto auto;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  /* the phone: the cards stay where one board would be, the labels column to their left */
+  .d1 .stage-mobile .board.board-twice {
+    transform: translate(calc(-50% - 30px), calc(-50% + 10px));
+    gap: 4px 6px;
+  }
+  .d1 .board-run {
+    display: contents;
+  }
+  .d1 .board-run-cards {
+    display: flex;
+    gap: 6px;
+  }
+  .d1 .stage-mobile .board-run-cards {
+    gap: 3px;
+  }
+  .d1 .board-run-label {
+    justify-self: end;
+    font: var(--w-heavy) var(--fs-xs)/1 var(--text);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--brass-2);
+    white-space: nowrap;
+  }
+  /* a split board with long names ends in …; the banner and the side column say it all */
+  .d1 .board-run-win {
+    justify-self: start;
+    max-width: 190px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font: var(--w-strong) var(--fs-sm)/1.2 var(--text);
+    color: var(--ivory);
+    white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  }
+  /* the phone: who a board paid goes under its label, left of the cards (at the right it would
+     run under the seats and the dealer button) */
+  .d1 .stage-mobile .board.board-twice {
+    grid-template-columns: auto auto;
+    row-gap: 1px;
+  }
+  .d1 .stage-mobile .board-run-label {
+    align-self: end;
+  }
+  .d1 .board-run-win small {
+    font-size: inherit;
+  }
+  /* the phone has room for the names only: the amounts are in the column beside the table */
+  .d1 .stage-mobile .board-run-win small {
+    display: none;
+  }
+  .d1 .stage-mobile .board-run-win {
+    justify-self: end;
+    align-self: start;
+    max-width: 64px;
+    font-size: var(--fs-xs);
+  }
+  .d1 .stage-mobile .board-run:first-child .board-run-label {
+    grid-area: 1 / 1;
+  }
+  .d1 .stage-mobile .board-run:first-child .board-run-win {
+    grid-area: 2 / 1;
+  }
+  .d1 .stage-mobile .board-run:first-child .board-run-cards {
+    grid-area: 1 / 2 / 3 / 3;
+  }
+  .d1 .stage-mobile .board-run:last-child .board-run-label {
+    grid-area: 3 / 1;
+    padding-top: 3px;
+  }
+  .d1 .stage-mobile .board-run:last-child .board-run-win {
+    grid-area: 4 / 1;
+  }
+  .d1 .stage-mobile .board-run:last-child .board-run-cards {
+    grid-area: 3 / 2 / 5 / 3;
+    padding-top: 3px;
+  }
+  .d1 .board-twice .pc.is-hi {
+    transform: translateY(-3px);
+  }
+  /* the two rows (the rabbit label on the phone) reach the room name on the felt */
+  .d1 .stage.has-twice .felt-mark,
+  .d1 .stage-mobile.has-rabbit .felt-mark {
+    display: none;
+  }
   .d1 .pot {
     transform: translate(-50%, -50%);
     display: flex;
@@ -1199,6 +1320,9 @@
   .d1 .log li.is-pay {
     color: var(--brass-2);
   }
+  .d1 .log li.is-quiet {
+    color: var(--ivory-3);
+  }
   /* chat */
   .d1 .chat {
     display: flex;
@@ -1795,6 +1919,16 @@
   }
   .d1 .idle-msg > svg {
     color: var(--brass-2);
+  }
+  /* a long result (a split, a hand run twice) cuts short with … rather than run under the right side */
+  .d1 .idle-msg:not(.is-seven) {
+    max-width: 100%;
+  }
+  .d1 .idle-msg:not(.is-seven) > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   /* the plain message cuts short with … in a narrow window instead of running over its neighbours */
   .d1 .idle-msg.is-quiet {
