@@ -58,6 +58,15 @@ set_env() { # set_env KEY VALUE: replace the line KEY=... in .env.home, or add i
   chmod 600 "$ENV_FILE"
 }
 
+guests_back_on() { # a file made while guests were off: on again, once (a later false stays)
+  grep -q '^# Members only: no guests' "$ENV_FILE" || return 0
+  local tmp="$ENV_FILE.tmp"
+  awk '/^# Members only: no guests/ { print "# Guests welcome: friends type a name and play (chips come with the seat)."; next }
+    { print }' "$ENV_FILE" >"$tmp"
+  mv "$tmp" "$ENV_FILE"
+  set_env GUESTS_ALLOWED true
+}
+
 ensure_env() {
   if [ -f "$ENV_FILE" ]; then
     chmod 600 "$ENV_FILE" # also fixes a file left 0644 by an older version of this script
@@ -180,9 +189,9 @@ cmd_up() {
   mkdir -p "$STATE"
   ensure_env
   # Files made by older versions of this script: Redis is gone, the host list was one fixed
-  # link, email links followed FRONTEND_URL, and guests were off (members only).
+  # link, and email links followed FRONTEND_URL.
   set_env REDIS_URL ""
-  set_env GUESTS_ALLOWED true
+  guests_back_on
   set_env DJANGO_ALLOWED_HOSTS ".trycloudflare.com,localhost,127.0.0.1"
   set_env FRONTEND_URL_FROM_REQUEST true
   set_env FRONTEND_URL http://localhost

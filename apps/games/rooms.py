@@ -19,7 +19,16 @@ from apps.accounts.views import client_ip
 
 from . import actor as actor_module
 from .accounts import player_for_request
-from .models import Hand, OwnerAction, Room, RoomBan, RoomMember, RoomSeat, User
+from .models import (
+    MAX_STARTING_STACK,
+    Hand,
+    OwnerAction,
+    Room,
+    RoomBan,
+    RoomMember,
+    RoomSeat,
+    User,
+)
 
 ROOMS_PER_USER = RateLimit("rooms-user", limit=10, window=60 * 60)
 # Commands over WebSocket, per player (consumers.py): far above what a person clicks.
@@ -90,8 +99,7 @@ SETTING_RULES = {
     "big_blind": (int, 2, None),
     "think_time_seconds": (int, 5, 120),
     "seven_deuce_bonus": (int, 0, None),
-    # Capped so that a table of rebuys stays far below what a ledger amount can hold.
-    "starting_stack": (int, 1, 10_000_000),
+    "starting_stack": (int, 1, MAX_STARTING_STACK),
     "is_private": (bool, None, None),
 }
 

@@ -113,6 +113,8 @@ async def rebuy(request: HttpRequest, room_id: int) -> JsonResponse:
     """A seated player with no chips left takes the room's starting stack again (no owner)."""
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
+    if not (await request.auser()).is_authenticated:  # no guest made just to be told that
+        return _error("not_seated", "Sit down first.", 409)
     found = await _player_in_room(request, room_id)
     if isinstance(found, JsonResponse):
         return found

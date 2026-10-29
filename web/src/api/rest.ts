@@ -796,7 +796,8 @@ export interface components {
             /** @description `false` khi server chưa có `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`: ẩn nút Google. */
             google_enabled: boolean;
             /**
-             * @description `false` (chơi từ máy nhà, production): chỉ thành viên mới vào được: bất kỳ tài khoản
+             * @description `false` (`GUESTS_ALLOWED=false`, như mẫu production; chơi từ máy nhà để `true`: khách
+             *     gõ tên là chơi): chỉ thành viên mới vào được: bất kỳ tài khoản
              *     thật nào đã đăng nhập (không cần duyệt, không cần xác minh email). Ẩn nút khách. Mọi
              *     API ngoài `/api/auth/`: 401 `login_required` cho người chưa đăng nhập hay phiên khách
              *     cũ. WebSocket đóng với mã 4401.

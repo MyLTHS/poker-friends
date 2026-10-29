@@ -29,6 +29,9 @@ test("private room → invite link → friend joins → both sit with chips → 
   await expect(owner).toHaveURL(/\/rooms\/new$/);
   await owner.getByLabel("Tên phòng").fill("Tối thứ Sáu");
   await owner.getByRole("radio", { name: "2", exact: true }).click();
+  // The hand deals the moment the friend sits (the seats come with chips): 60 s to act leaves
+  // time to walk from the room page to the table.
+  await owner.getByRole("radio", { name: "60", exact: true }).click();
   await owner.getByRole("radio", { name: /Riêng/ }).click();
   await owner.getByRole("button", { name: "Tạo phòng & lấy link mời" }).click();
   await expect(owner).toHaveURL(/\/rooms\/\d+$/);

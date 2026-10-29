@@ -75,6 +75,9 @@ class TestStartingStack:
     def test_a_room_made_without_one_gets_100_big_blinds(self):
         assert make_room(big_blind=4).starting_stack == 400
 
+    def test_the_default_is_capped(self):
+        assert make_room(small_blind=1, big_blind=200_000).starting_stack == 10_000_000
+
     def test_the_owner_changes_it_between_hands(self):
         room, owner, a = owned_one_player()
 
@@ -301,6 +304,18 @@ class TestRebuy:
 
         run_async(body)
 
+    def test_someone_not_logged_in_gets_no_guest_made(self):
+        room = make_room()
+        before = User.objects.count()
+
+        async def body():
+            response = await apost(AsyncClient(), f"/api/rooms/{room.pk}/rebuy/")
+            assert response.status_code == 409
+            assert response.json()["code"] == "not_seated"
+
+        run_async(body)
+        assert User.objects.count() == before
+
     def test_only_post(self):
         room = make_room()
         a = make_user("alice")
@@ -321,6 +336,15 @@ class TestOlderRooms:
 
         room.refresh_from_db()
         assert room.starting_stack == 1000
+
+    def test_a_huge_big_blind_gets_the_cap(self):
+        room = make_room(small_blind=1, big_blind=50_000_000, starting_stack=7)
+
+        migration = importlib.import_module("apps.games.migrations.0016_room_starting_stack")
+        migration.fill_in_starting_stack(django_apps, None)
+
+        room.refresh_from_db()
+        assert room.starting_stack == 10_000_000
 
 
 class TestGuests:
