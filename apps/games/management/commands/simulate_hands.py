@@ -27,6 +27,9 @@ class Command(BaseCommand):
         parser.add_argument("--players", type=int, default=4)
         parser.add_argument("--chips", type=int, default=200)
         parser.add_argument("--seven-deuce-bonus", type=int, default=0)
+        parser.add_argument("--ante", type=int, default=0)
+        parser.add_argument("--bomb-pot-every", type=int, default=0)
+        parser.add_argument("--bomb-pot-amount", type=int, default=0)
         parser.add_argument("--seed", type=int, default=0)
         parser.add_argument(
             "--leave-unfinished",
@@ -47,12 +50,15 @@ class Command(BaseCommand):
                 small_blind=1,
                 big_blind=2,
                 seven_deuce_bonus=options["seven_deuce_bonus"],
+                ante=options["ante"],
+                bomb_pot_every=options["bomb_pot_every"],
+                bomb_pot_amount=options["bomb_pot_amount"],
             )
             session = TableSession(
                 room.small_blind,
                 room.big_blind,
                 shuffle=lambda: shuffled_deck(rng),
-                seven_deuce_bonus=room.seven_deuce_bonus,
+                **room.engine_rules(),
             )
             for seat in range(1, players + 1):
                 user = User.objects.create_user(username=f"sim-{room.pk}-{seat}", is_guest=True)

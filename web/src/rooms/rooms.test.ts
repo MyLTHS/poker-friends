@@ -33,6 +33,9 @@ const info = (over: Partial<RoomInfo> = {}): RoomInfo => ({
   think_time_seconds: 20,
   seven_deuce_bonus: 50,
   starting_stack: 2000,
+  ante: 0,
+  bomb_pot_every: 0,
+  bomb_pot_amount: 0,
   ...over,
 });
 const row = (over: Partial<Omit<LobbyRoom, "room">> & { room?: Partial<RoomInfo> } = {}): LobbyRoom => ({

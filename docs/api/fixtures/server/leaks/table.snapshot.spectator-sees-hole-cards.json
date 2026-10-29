@@ -16,7 +16,10 @@
         "big_blind": 10,
         "think_time_seconds": 20,
         "seven_deuce_bonus": 50,
-        "starting_stack": 1000
+        "starting_stack": 1000,
+        "ante": 0,
+        "bomb_pot_every": 0,
+        "bomb_pot_amount": 0
       },
       "you": {
         "player_id": "4",
@@ -54,6 +57,8 @@
         "button_seat": 1,
         "small_blind": 5,
         "big_blind": 10,
+        "ante": 0,
+        "bomb_pot": 0,
         "board": [
           "Ah",
           "8d",

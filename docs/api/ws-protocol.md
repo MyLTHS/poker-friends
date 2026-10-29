@@ -172,6 +172,13 @@ Các mã `not_your_turn`, `cannot_fold`, `cannot_check`, `nothing_to_call`, `can
 
 Mọi trường `hand` là `HandView` = `HandEngine.view_for(người nhận)` cộng thêm `hand_id`, `hand_no`.
 
+Luật bàn của ván nằm ngay trong `HandView` (cấu hình phòng có thể đổi giữa hai ván):
+- `ante`: mỗi người được chia bài bỏ trước blind, là tiền chết vào pot; thiếu thì all-in.
+- `bomb_pot` lớn hơn 0: ván bomb pot (cứ `room.bomb_pot_every` ván một lần, theo `hand_no`). Mọi
+  người được chia bài bỏ `bomb_pot` (thiếu thì all-in, không lấy ante), không có blind, không có
+  vòng cược trước flop: `hand.started` đã có 3 lá flop, người đầu tiên quyết định là người bên trái
+  nút. Không có `action.applied` nào trước flop.
+
 | Bài | Ai thấy |
 |---|---|
 | Bài tẩy của mình | Chỉ mình |
@@ -237,7 +244,7 @@ Ví dụ đầy đủ: [giữa hai ván](fixtures/server/valid/table.snapshot.be
   "payload": {"table": {
     "room": {"room_id": 1, "name": "Bàn bạn bè", "status": "playing", "max_seats": 9,
              "small_blind": 5, "big_blind": 10, "think_time_seconds": 20, "seven_deuce_bonus": 50,
-             "starting_stack": 1000},
+             "starting_stack": 1000, "ante": 0, "bomb_pot_every": 0, "bomb_pot_amount": 0},
     "you": {"player_id": "1", "seat": 1},
     "seats": [
       {"seat": 1, "player_id": "1", "display_name": "Lym", "stack": 1000, "sitting_out": false, "connected": true},
@@ -269,6 +276,7 @@ nếu vừa sang vòng. Client chỉ việc thay `hand` cũ bằng `hand` mới.
     "action": {"player_id": "1", "seat": 1, "kind": "raise", "amount": 30, "timeout": false},
     "hand": {
       "hand_id": 41, "hand_no": 1, "button_seat": 1, "small_blind": 5, "big_blind": 10,
+      "ante": 0, "bomb_pot": 0,
       "board": [], "pots": [],
       "players": [
         {"player_id": "1", "seat": 1, "stack": 970, "bet": 30, "in_hand": true, "cards": ["7h", "2c"]},
@@ -333,6 +341,7 @@ vẫn thấy `7h 2c` của Lym:
   "payload": {
     "hand": {
       "hand_id": 41, "hand_no": 1, "button_seat": 1, "small_blind": 5, "big_blind": 10,
+      "ante": 0, "bomb_pot": 0,
       "board": ["Ah", "8d", "Jc"], "pots": [{"amount": 0, "eligible": ["1"]}],
       "players": [
         {"player_id": "1", "seat": 1, "stack": 1035, "bet": 0, "in_hand": true, "cards": ["7h", "2c"]},
@@ -448,7 +457,8 @@ trong DB nên không mất khi server khởi động lại. Đóng phòng giữa
   "version": 31, "server_time": "2026-10-27T15:10:02.000Z",
   "payload": {"room": {"room_id": 1, "name": "Bàn bạn bè", "status": "open", "max_seats": 9,
               "small_blind": 10, "big_blind": 20, "think_time_seconds": 30,
-              "seven_deuce_bonus": 50, "starting_stack": 1000}}
+              "seven_deuce_bonus": 50, "starting_stack": 1000, "ante": 0,
+              "bomb_pot_every": 0, "bomb_pot_amount": 0}}
 }
 ```
 

@@ -205,6 +205,14 @@
           "type": "integer",
           "minimum": 1
         },
+        "ante": {
+          "description": "The ante of this hand, taken from everyone dealt in before the blinds; 0 in a bomb pot (bomb_pot replaces it).",
+          "$ref": "#/$defs/Chips"
+        },
+        "bomb_pot": {
+          "description": "Above 0 for a bomb pot: what everyone dealt in put in. Such a hand has no blinds and no betting before the flop: the first decision is on the flop, from the left of the button. 0 for a normal hand.",
+          "$ref": "#/$defs/Chips"
+        },
         "board": {
           "type": "array",
           "items": {
@@ -258,6 +266,8 @@
         "button_seat",
         "small_blind",
         "big_blind",
+        "ante",
+        "bomb_pot",
         "board",
         "pots",
         "players",
@@ -348,6 +358,19 @@
           "description": "Chips a player gets on sitting down with none in this room, and again on a rebuy once busted.",
           "type": "integer",
           "minimum": 1
+        },
+        "ante": {
+          "description": "Dead money every player dealt in puts in before the blinds (all of it if short); 0 = no ante.",
+          "$ref": "#/$defs/Chips"
+        },
+        "bomb_pot_every": {
+          "description": "Every bomb_pot_every-th hand of the room (by hand_no) is a bomb pot; 0 = never.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "bomb_pot_amount": {
+          "description": "What everyone dealt in puts in for a bomb pot; above 0 whenever bomb_pot_every is.",
+          "$ref": "#/$defs/Chips"
         }
       },
       "required": [
@@ -359,7 +382,10 @@
         "big_blind",
         "think_time_seconds",
         "seven_deuce_bonus",
-        "starting_stack"
+        "starting_stack",
+        "ante",
+        "bomb_pot_every",
+        "bomb_pot_amount"
       ],
       "additionalProperties": false
     },

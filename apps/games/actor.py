@@ -60,9 +60,10 @@ RECOVERY_GRACE_SECONDS = 10
 
 
 class Reject(Exception):
-    def __init__(self, code: str, message: str = ""):
+    def __init__(self, code: str, message: str = "", field: str | None = None):
         super().__init__(message or code)
         self.code = code
+        self.field = field  # the setting a validation_error is about
 
 
 class RoomSuspended(Exception):
@@ -149,8 +150,12 @@ ROOM_SETTINGS = (
     "think_time_seconds",
     "seven_deuce_bonus",
     "starting_stack",
+    "ante",
+    "bomb_pot_every",
+    "bomb_pot_amount",
 )
 KICKED_CLOSE_CODE = 4403
+BOMB_POT_NEEDS_AMOUNT = "bomb_pot_amount must be above 0 while bomb_pot_every is on"
 # A client that stopped reading (its channel is full) is dropped, then its socket is closed with
 # this code once the channel has room: the client reconnects and gets a fresh snapshot.
 RESYNC_CLOSE_CODE = 4408
@@ -780,7 +785,9 @@ class TableActor:
         current = {key: getattr(self.room, key) for key in ROOM_SETTINGS}
         merged = {**current, **self.pending, **changes}
         if merged["small_blind"] >= merged["big_blind"]:
-            raise Reject("validation_error", "small_blind must be below big_blind")
+            raise Reject("validation_error", "small_blind must be below big_blind", "small_blind")
+        if merged["bomb_pot_every"] > 0 and merged["bomb_pot_amount"] == 0:
+            raise Reject("validation_error", BOMB_POT_NEEDS_AMOUNT, "bomb_pot_amount")
         if self.hand is None:
             self.pending.update(changes)
             await self._apply_settings()
@@ -809,7 +816,8 @@ class TableActor:
         self.pending = {}
         self.session.small_blind = self.room.small_blind
         self.session.big_blind = self.room.big_blind
-        self.session.seven_deuce_bonus = self.room.seven_deuce_bonus
+        for key, value in self.room.engine_rules().items():
+            setattr(self.session, key, value)
         await self._room_updated()
 
     async def _kick(self, user_id: int) -> None:
@@ -917,6 +925,9 @@ class TableActor:
             "think_time_seconds": self.room.think_time_seconds,
             "seven_deuce_bonus": self.room.seven_deuce_bonus,
             "starting_stack": self.room.starting_stack,
+            "ante": self.room.ante,
+            "bomb_pot_every": self.room.bomb_pot_every,
+            "bomb_pot_amount": self.room.bomb_pot_amount,
         }
 
     def _occupant(self, seat: int) -> dict[str, Any] | None:
@@ -1172,7 +1183,7 @@ async def _recover(room_id: int) -> TableActor:
         room.big_blind,
         max_seats=room.max_seats,
         shuffle=shuffled_deck,
-        seven_deuce_bonus=room.seven_deuce_bonus,
+        **room.engine_rules(),
     )
     names: dict[str, str] = {}
     async for seat in RoomSeat.objects.filter(room=room).select_related("user"):
