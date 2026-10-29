@@ -78,8 +78,9 @@ TRUSTED_PROXIES=1
 DJANGO_ALLOWED_HOSTS=.trycloudflare.com,localhost,127.0.0.1
 FRONTEND_URL=http://localhost
 FRONTEND_URL_FROM_REQUEST=true
-# Members only: no guests. Friends sign up on the link and play at once.
-GUESTS_ALLOWED=false
+# Guests welcome: friends type a name on the link and play (chips come with the seat). An
+# account staff switch off in /admin stays out.
+GUESTS_ALLOWED=true
 POSTGRES_DB=poker
 POSTGRES_USER=poker
 POSTGRES_PASSWORD=$password
@@ -179,8 +180,9 @@ cmd_up() {
   mkdir -p "$STATE"
   ensure_env
   # Files made by older versions of this script: Redis is gone, the host list was one fixed
-  # link, and email links followed FRONTEND_URL.
+  # link, email links followed FRONTEND_URL, and guests were off (members only).
   set_env REDIS_URL ""
+  set_env GUESTS_ALLOWED true
   set_env DJANGO_ALLOWED_HOSTS ".trycloudflare.com,localhost,127.0.0.1"
   set_env FRONTEND_URL_FROM_REQUEST true
   set_env FRONTEND_URL http://localhost
