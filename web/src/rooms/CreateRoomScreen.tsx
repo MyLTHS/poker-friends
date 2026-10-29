@@ -14,70 +14,33 @@ import { needsName, useMe, useOnline, usePhone } from "./hooks";
 import { NameGate } from "./NameGate";
 import { RoomsShell } from "./RoomsShell";
 import {
+  bombAmountText,
   checkRules,
-  DEFAULT_RULES,
+  draftRules,
+  NEW_ROOM_DRAFT,
   SEAT_CHOICES,
   serverFieldErrors,
   SEVEN_CHOICES,
   startingStackText,
   THINK_CHOICES,
   type FieldErrors,
+  type RoomDraft,
   type Rules,
 } from "./rules";
 
-/** The form keeps what the player typed (an empty box stays empty); `rules()` reads it. `name`
- *  null: not touched yet, the box shows "Bàn của <tên>"; `starting` null: not touched yet, the box
- *  follows the big blind (100 of them, like the server's default). */
-type Draft = {
-  name: string | null;
-  small_blind: string;
-  big_blind: string;
-  starting: string | null;
-  max_seats: number;
-  think_time_seconds: number;
-  sevenOn: boolean;
-  seven: string;
-  is_private: boolean;
-};
-
-const DRAFT: Draft = {
-  name: null,
-  small_blind: String(DEFAULT_RULES.small_blind),
-  big_blind: String(DEFAULT_RULES.big_blind),
-  starting: null,
-  max_seats: DEFAULT_RULES.max_seats,
-  think_time_seconds: DEFAULT_RULES.think_time_seconds,
-  sevenOn: true,
-  seven: String(DEFAULT_RULES.seven_deuce_bonus),
-  is_private: DEFAULT_RULES.is_private,
-};
-
-const num = (text: string) => (text.trim() === "" ? NaN : Number(text));
+type Draft = RoomDraft;
 
 const startingText = (d: Draft) => startingStackText(d.starting, d.big_blind);
 
-function rules(d: Draft, name: string): Rules {
-  return {
-    name,
-    small_blind: num(d.small_blind),
-    big_blind: num(d.big_blind),
-    max_seats: d.max_seats,
-    think_time_seconds: d.think_time_seconds,
-    seven_deuce_bonus: d.sevenOn ? num(d.seven) : 0,
-    starting_stack: num(startingText(d)),
-    is_private: d.is_private,
-  };
-}
-
 /** The fields under "Thêm tuỳ chọn": an error there opens it. */
-const MORE: (keyof Rules)[] = ["max_seats", "think_time_seconds", "seven_deuce_bonus", "is_private"];
+const MORE: (keyof Rules)[] = ["max_seats", "think_time_seconds", "seven_deuce_bonus", "ante", "bomb_pot_every", "bomb_pot_amount", "is_private"];
 
 const digits = (text: string) => text.replace(/[^\d]/g, "").slice(0, 9);
 
 /**
  * /rooms/new — open a table (D1 "create-room"), as short as Poker Now's: a name (already filled
- * in), the blinds, the chips each seat comes with (100 big blinds unless changed), "Tạo bàn". Seats, think time, the 7-2 bonus and who sees the room wait under
- * "Thêm tuỳ chọn" with their defaults. Then straight to the table, its "Mời bạn" sheet open.
+ * in), the blinds, the chips each seat comes with (100 big blinds unless changed), "Tạo bàn". Seats, think time, the 7-2 bonus, ante, bomb pot and who sees the room wait under
+ * "Thêm tuỳ chọn" with their defaults (7-2 bonus, ante and bomb pot off, public room). Then straight to the table, its "Mời bạn" sheet open.
  */
 export function CreateRoomScreen() {
   const api = useMemo(() => createRoomsApi(), []);
@@ -85,7 +48,7 @@ export function CreateRoomScreen() {
   const { me, guestsAllowed, whenReady, signedIn } = useMe();
   const phone = usePhone();
   const online = useOnline();
-  const [draft, setDraft] = useState<Draft>(DRAFT);
+  const [draft, setDraft] = useState<Draft>(NEW_ROOM_DRAFT);
   const [more, setMore] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [failure, setFailure] = useState<string | null>(null);
@@ -101,7 +64,7 @@ export function CreateRoomScreen() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const r = rules(draft, name);
+    const r = draftRules(draft, name);
     const found = checkRules(r);
     showErrors(found);
     setFailure(null);
@@ -344,6 +307,48 @@ function MoreFields({ draft, set, errors, phone }: FieldsProps) {
               onChange={(seven) => set({ seven })}
               className="quick-amts"
               itemClass="qa"
+            />
+          </span>
+        )}
+      </div>
+      <TextField
+        className="f-ante"
+        label="Ante"
+        labelNote="0 là tắt"
+        inputMode="numeric"
+        icon={<Chip denom={5} size={18} />}
+        trailing="chip / người"
+        value={draft.ante}
+        onChange={(e) => set({ ante: digits(e.target.value) })}
+        hint={phone ? undefined : "Mỗi ván ai cũng góp trước blind, vào pot."}
+        error={errors.ante}
+      />
+      <div className={`field seven-field span-2 f-bomb${draft.bombOn ? "" : " is-off"}`}>
+        <span className="seven-head">
+          <span>
+            <b id={`${id}-bomb`}>Bomb pot</b>
+            <small>Cứ vài ván, ai cũng góp một khoản: không blind, không cược trước flop, lật flop luôn.</small>
+          </span>
+          <Toggle on={draft.bombOn} onChange={(bombOn) => set({ bombOn })} label="Bật bomb pot" />
+        </span>
+        {draft.bombOn && (
+          <span className="seven-amount bomb-amounts" role="group" aria-labelledby={`${id}-bomb`}>
+            <TextField
+              label="Cứ mấy ván một lần"
+              inputMode="numeric"
+              trailing="ván"
+              value={draft.bombEvery}
+              onChange={(e) => set({ bombEvery: digits(e.target.value).slice(0, 4) })}
+              error={errors.bomb_pot_every}
+            />
+            <TextField
+              label="Mỗi người góp"
+              inputMode="numeric"
+              icon={<Chip denom={25} size={18} />}
+              trailing="chip / người"
+              value={bombAmountText(draft.bombAmount, draft.big_blind)}
+              onChange={(e) => set({ bombAmount: digits(e.target.value) })}
+              error={errors.bomb_pot_amount}
             />
           </span>
         )}

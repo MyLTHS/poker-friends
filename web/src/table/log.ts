@@ -9,7 +9,7 @@ import type { StateEvent } from "./reducer";
 import { blindSeats } from "./seatView";
 
 export type LogEntry =
-  | { kind: "hand"; handNo: number; button: number; sb: number; bb: number; small: number; big: number }
+  | { kind: "hand"; handNo: number; button: number; sb: number; bb: number; small: number; big: number; ante: number; bomb: number }
   | { kind: "action"; action: AppliedAction }
   | { kind: "street"; name: "Flop" | "Turn" | "River"; cards: string[] }
   | { kind: "show"; seat: number; cards: string[]; hand?: string }
@@ -35,7 +35,7 @@ export function logFor(prev: TableState, event: StateEvent): LogEntry[] {
     case "hand.started": {
       const hand = event.payload.hand;
       const { sb, bb } = blindSeats(hand);
-      return [{ kind: "hand", handNo: hand.hand_no, button: hand.button_seat, sb, bb, small: hand.small_blind, big: hand.big_blind }];
+      return [{ kind: "hand", handNo: hand.hand_no, button: hand.button_seat, sb, bb, small: hand.small_blind, big: hand.big_blind, ante: hand.ante, bomb: hand.bomb_pot }];
     }
     case "action.applied":
       return [{ kind: "action", action: event.payload.action }, ...streets(prev.hand?.board ?? [], event.payload.hand.board)];

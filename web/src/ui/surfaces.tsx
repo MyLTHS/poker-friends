@@ -132,12 +132,13 @@ export function Sheet({
   dismissible = true,
   title,
   aside,
+  className = "",
   children,
-}: DialogProps & { title: ReactNode; aside?: ReactNode; children: ReactNode }) {
+}: DialogProps & { title: ReactNode; aside?: ReactNode; /** e.g. a narrower sheet ("tmenu") */ className?: string; children: ReactNode }) {
   const dialog = useDialog(open, onClose, dismissible);
   const titleId = `${useId()}-title`;
   return (
-    <dialog className="sheet" aria-labelledby={titleId} {...dialog}>
+    <dialog className={`sheet ${className}`.trim()} aria-labelledby={titleId} {...dialog}>
       <div className="sheet-panel">
         <header className="sheet-head">
           <h2 id={titleId}>{title}</h2>

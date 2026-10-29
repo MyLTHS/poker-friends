@@ -87,9 +87,10 @@ test("a guest sends feedback from a room page and from the table, desktop and ph
   await expect(dialog).toBeHidden();
   expect(stored(idea)).toEqual({ kind: "idea", page: `/rooms/${id}/history`, room_id: id, user__username: `Gop${RUN}` });
 
-  // The table has no app bar: its settings open the dialog, and the table's room goes with it.
+  // The table has no app bar: its menu's settings open the dialog, and the table's room goes with it.
   await page.goto(`/rooms/${id}/table`);
-  await page.getByRole("button", { name: "Cài đặt bàn" }).click();
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await page.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Cài đặt" }).click();
   await page.getByRole("dialog", { name: "Cài đặt bàn" }).getByRole("button", { name: "Gửi phản hồi" }).click();
   await expect(page.getByRole("dialog", { name: "Cài đặt bàn" })).toBeHidden();
   await expect(dialog.getByLabel("Nội dung")).toBeFocused();
@@ -112,12 +113,18 @@ test("a guest sends feedback from a room page and from the table, desktop and ph
   await m.keyboard.press("Escape");
 
   await m.goto(`/rooms/${id}/table`);
-  await expect(m.getByRole("button", { name: "Thêm tuỳ chọn" })).toBeVisible();
+  await expect(m.getByRole("button", { name: "Menu", exact: true })).toBeVisible();
   await expect(m.getByRole("button", { name: "Gửi phản hồi" })).toHaveCount(0);
-  await m.getByRole("button", { name: "Thêm tuỳ chọn" }).click();
+  await m.getByRole("button", { name: "Menu", exact: true }).click();
+  await m.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Cài đặt" }).click();
   await m.getByRole("dialog", { name: "Cài đặt bàn" }).getByRole("button", { name: "Gửi phản hồi" }).click();
   await expect(mDialog.getByLabel("Nội dung")).toBeFocused();
   await expect(mDialog.getByRole("button", { name: "Gửi", exact: true })).toBeInViewport();
+  await m.keyboard.press("Escape");
+  // "Góp ý" in the menu opens the same dialog in one step.
+  await m.getByRole("button", { name: "Menu", exact: true }).click();
+  await m.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Góp ý" }).click();
+  await expect(mDialog.getByLabel("Nội dung")).toBeFocused();
   await mobile.close();
 });
 

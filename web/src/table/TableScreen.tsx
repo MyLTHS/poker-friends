@@ -1,26 +1,29 @@
 "use client";
 
 // The D1 table over one WebSocket (design screens-table.tsx / screens-social.tsx chat): desktop
-// 1440×900 = top bar, stage, action bar, side column; landscape phone 844×390 = stage with its bar,
-// right column, chat drawer. State is the reducer's (server truth); TableFx only animates it.
+// 1440×900 = top bar, stage, action bar, chat column; landscape phone 844×390 = stage with its bar,
+// right column, chat drawer. Kept as plain as a game night: the table, your cards, the actions and
+// the chat; the rest (sit out, owner, log, win/loss, settings, leave) waits in the ☰ menu.
+// State is the reducer's (server truth); TableFx only animates it.
 // `url` is the mock server's (`/table`) or Django's (`/rooms/<id>/table`); the protocol is the same.
 import "./table.css";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Coffee, Coins, Crown, Hourglass } from "lucide-react";
+import { Bomb, Coins, Crown, Hourglass } from "lucide-react";
 
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
 import { FeedbackDialog } from "@/feedback/FeedbackDialog";
-import { Button, ButtonLink, CardText, D1Root, Spinner, ToastProvider, fmt, signed } from "@/ui";
+import { Button, ButtonLink, CardText, D1Root, Sheet, Spinner, ToastProvider, fmt, signed } from "@/ui";
 
-import { IdleBar, PreAction, PreActions, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
+import { IdleBar, PreActions, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
 import { Countdown, secondsLeft, useRecent, type TurnClock } from "./clock";
 import { useDevice } from "./device";
 import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
 import { ConnStrip, PausedCard, ReconnectCard } from "./Overlays";
 import { winnerLines } from "./handName";
+import { bombPotHand, isBombPot, stakesText } from "./houseRules";
 import { canPreAct, facingBet } from "./reducer";
 import { describeAction, raisePresets, tableView, type SeatView } from "./seatView";
 import { SevenDeuceStage, SevenLedger, SevenMedal } from "./SevenDeuce";
@@ -34,10 +37,11 @@ import {
   PlayerList,
   SidePanel,
   Spectators,
+  TableMenu,
   TableTools,
   TableTopBar,
   WatchersBlock,
-  type SideTab,
+  type TableMenuItems,
 } from "./Side";
 import { FitStage, Stage } from "./Stage";
 import { useTableFx, type SeatPlace } from "./TableFx";
@@ -107,12 +111,12 @@ export function TableScreen({
   const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
   const refusal = useAuthRefusal(retry.final && !!retry.auth);
   const device = useDevice();
-  const [tab, setTab] = useState<SideTab>("chat");
   const [drawer, setDrawer] = useState(false);
   const [seen, setSeen] = useState(0);
   const [seatError, setSeatError] = useState<string | null>(null);
   const [rebuying, setRebuying] = useState(false);
-  const [dialog, setDialog] = useState<"owner" | "invite" | "settings" | "help" | "feedback" | null>(startWithInvite && invite ? "invite" : null);
+  // One sheet or dialog at a time: picking a menu item swaps the menu for what it opens.
+  const [dialog, setDialog] = useState<"menu" | "log" | "owner" | "invite" | "settings" | "help" | "feedback" | null>(startWithInvite && invite ? "invite" : null);
   const sound = useTableSound();
   const [keysOn, setKeysOn] = useKeysPref();
   const { table } = model;
@@ -154,13 +158,9 @@ export function TableScreen({
     };
   }, [model.status, loadChat, dispatch]);
 
-  // Unread chat: lines that came while the chat was not on screen.
-  const chatOpen = device === "desktop" ? tab === "chat" : drawer;
+  // Unread chat (phone): lines that came while the drawer was closed. The desktop column is always chat.
+  const chatOpen = device === "desktop" || drawer;
   const markRead = () => setSeen(model.chat.length);
-  const openTab = (next: SideTab) => {
-    if (tab === "chat" || next === "chat") markRead();
-    setTab(next);
-  };
   const openDrawer = (open: boolean) => {
     markRead();
     setDrawer(open);
@@ -239,6 +239,8 @@ export function TableScreen({
 
   const handNo = hand?.hand_no;
   const blinds = `${fmt(room.small_blind)}/${fmt(room.big_blind)}`;
+  // Between hands: the one about to be dealt is a bomb pot (by the room's rules as they stand).
+  const nextBomb = !!hand?.complete && bombPotHand(room, hand.hand_no + 1);
   const winners = (model.results ?? []).filter((r) => r.hand_net > 0);
   const myResult = model.results?.find((r) => r.player_id === you.player_id);
   const nameOf = (playerId: string) => table.seats.find((s) => s.player_id === playerId)?.display_name ?? "?";
@@ -251,13 +253,19 @@ export function TableScreen({
     if (!onTakeSeat) return;
     setSeatError(await onTakeSeat(seat));
   };
-  const leave = onLeaveSeat
-    ? {
-        label: "Rời ghế",
-        onLeave: async () => setSeatError(await onLeaveSeat()),
-      }
-    : undefined;
+  const leave = onLeaveSeat && isSeated ? async () => setSeatError(await onLeaveSeat()) : undefined;
   const toggleSit = () => dispatch({ type: "sit", out: !sittingOut, commandId: newCommandId() });
+  const menuItems: TableMenuItems = {
+    watchers: model.spectators.length,
+    sit: isSeated ? { sittingOut, disabled: !online, onToggle: toggleSit } : undefined,
+    onOwner: owner ? () => setDialog("owner") : undefined,
+    onLog: () => setDialog("log"),
+    historyHref,
+    onSettings: () => setDialog("settings"),
+    onFeedback: () => setDialog("feedback"),
+    leave: leave && { onLeave: leave, busy: !!hand && !hand.complete && hand.players.some((p) => p.player_id === you.player_id) },
+  };
+  const menu = { open: dialog === "menu", onOpen: () => setDialog("menu") };
   const pre = canPreAct(model) && !celebration ? (
     <PreActions device={device} choice={model.preAction?.kind ?? null} facingBet={facingBet(model)} disabled={!online} onChoose={(kind) => dispatch({ type: "pre.select", kind, commandId: newCommandId() })} />
   ) : null;
@@ -299,6 +307,14 @@ export function TableScreen({
       boardHi={view.boardHi}
       pot={view.pot}
       mark={`${room.name} · ${blinds}`}
+      badge={
+        isBombPot(hand) ? (
+          <>
+            <Bomb size={device === "desktop" ? 15 : 12} strokeWidth={2.2} aria-hidden />
+            Bomb pot
+          </>
+        ) : undefined
+      }
       clock={clock}
       meHint={meHint}
       showPot={!hand?.complete}
@@ -315,10 +331,20 @@ export function TableScreen({
     </Stage>
   );
 
-  // The owner's sheet, the settings and the key help sit over the table on both devices.
+  // The menu, the log, the owner's sheet, the settings and the key help sit over the table on both
+  // devices. The menu comes first: when an item swaps it for another dialog, it closes (focus back
+  // on ☰) before the next one opens, so that one gives the focus back to ☰ too.
   const inHand = (playerId: string) => !!hand && !hand.complete && hand.players.some((p) => p.player_id === playerId && p.in_hand);
   const dialogs = (
     <>
+      <TableMenu open={dialog === "menu"} onClose={closeDialog} items={menuItems} />
+      <Sheet open={dialog === "log"} onClose={closeDialog} title="Nhật ký ván">
+        {hand && !hand.complete && <HandFooter pot={view.potTotal} bets={view.bets} inHand={view.inHand} />}
+        {celebration && <SevenLedger device={device} award={celebration} seats={table.seats} />}
+        <LogList entries={model.log} seats={table.seats} you={you.player_id} />
+        <h3 className="log-sub">Người chơi</h3>
+        <PlayerList seats={view.seats} />
+      </Sheet>
       {owner?.({ open: dialog === "owner", onClose: closeDialog, seats: table.seats, inHand })}
       {invite?.({ open: dialog === "invite", onClose: closeDialog })}
       <SettingsModal
@@ -352,7 +378,7 @@ export function TableScreen({
     </p>
   );
 
-  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, canRebuy: !!onRebuy });
+  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, canRebuy: !!onRebuy, nextBomb });
   // Any seated player with no chips buys back in (the room's starting stack), owner included. Not
   // while their all-in is still being played; yes on a finished hand they lost it all in (the
   // table keeps that hand on screen until the next one, which may never come heads-up).
@@ -385,7 +411,7 @@ export function TableScreen({
       panel = (
         <aside className="ppanel sd-panel">
           <SevenLedger device="mobile" award={celebration} seats={table.seats} />
-          <NextHand />
+          <NextHand bomb={nextBomb} />
         </aside>
       );
     } else {
@@ -393,7 +419,7 @@ export function TableScreen({
         <aside className="ppanel idle-panel">
           <div className="ip-next">
             <span className="abar-eyebrow">{idle.eyebrow}</span>
-            {hand?.complete ? <NextHand /> : <span className="ip-status">{idle.status}</span>}
+            {hand?.complete ? <NextHand bomb={nextBomb} /> : <span className="ip-status">{idle.status}</span>}
           </div>
           {idle.win && (
             <div className="ip-win">
@@ -410,20 +436,10 @@ export function TableScreen({
           <Spectators device="mobile" spectators={model.spectators} />
           <div className="ip-actions">
             {rebuyButton(true)}
-            {isSeated && (
-              <Button kind="quiet" block icon={<Coffee size={16} />} onClick={toggleSit} aria-pressed={sittingOut} disabled={!online}>
-                {sittingOut ? "Quay lại chơi" : "Nghỉ ván sau"}
-              </Button>
-            )}
             {hand?.complete && replayHref && (
               <ButtonLink kind="ghost" block href={replayHref(hand.hand_id)}>
                 Xem lại ván
               </ButtonLink>
-            )}
-            {leave && isSeated && !hand?.complete && !myTurn && (
-              <Button kind="ghost" block onClick={leave.onLeave}>
-                {leave.label}
-              </Button>
             )}
           </div>
         </aside>
@@ -439,7 +455,7 @@ export function TableScreen({
           <MobileTableBar
             backHref={backHref}
             title={room.name}
-            sub={`Blind ${blinds}${handNo ? ` · Ván #${handNo}` : ""}`}
+            sub={`${stakesText(room)}${handNo ? ` · Ván #${handNo}` : ""}`}
             right={
               !online ? (
                 <span className="conn-strip conn-strip-m" role="status">
@@ -447,7 +463,7 @@ export function TableScreen({
                   Mất kết nối · đang thử lại
                 </span>
               ) : (
-                <MobileTools watchers={model.spectators.length} unread={unread} onChat={() => openDrawer(true)} owner={owner ? () => setDialog("owner") : undefined} onInvite={invite ? () => setDialog("invite") : undefined} historyHref={historyHref} onMore={() => setDialog("settings")} />
+                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} />
               )
             }
           />
@@ -509,13 +525,12 @@ export function TableScreen({
         }
         right={
           <>
-            {isSeated && <PreAction label="Nghỉ ván sau" on={sittingOut} onToggle={toggleSit} disabled={!online} />}
             {hand?.complete && replayHref && (
               <Link className="tbar-btn is-quiet" href={replayHref(hand.hand_id)}>
                 Xem lại ván
               </Link>
             )}
-            {hand?.complete && <NextHand />}
+            {hand?.complete && <NextHand bomb={nextBomb} />}
           </>
         }
       />
@@ -531,6 +546,12 @@ export function TableScreen({
         meta={
           <>
             <span>Blind {blinds}</span>
+            {room.ante > 0 && (
+              <>
+                <i />
+                <span>Ante {fmt(room.ante)}</span>
+              </>
+            )}
             {handNo && (
               <>
                 <i />
@@ -546,18 +567,7 @@ export function TableScreen({
           </>
         }
         right={
-          <TableTools
-            watchers={model.spectators.length}
-            sittingOut={sittingOut}
-            canSit={isSeated}
-            online={online}
-            onSitToggle={toggleSit}
-            owner={owner ? { open: dialog === "owner", onOpen: () => setDialog("owner") } : undefined}
-            onInvite={invite ? () => setDialog("invite") : undefined}
-            historyHref={historyHref}
-            onSettings={() => setDialog("settings")}
-            leave={isSeated ? leave : undefined}
-          />
+          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} />
         }
       />
       <div className={`table-area${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`} {...probe}>
@@ -569,25 +579,9 @@ export function TableScreen({
           <PausedCard device="desktop" handNo={handNo} frozenAt={myFrozen} onReload={reload} backHref={backHref} />
         </aside>
       ) : (
-        <SidePanel
-          tab={tab}
-          onTab={openTab}
-          counts={{ chat: tab === "chat" ? undefined : unread || undefined, players: view.seats.filter((s) => s.state !== "empty").length }}
-          footer={tab === "chat" ? <ChatComposer onSend={say} disabled={!online} /> : tab === "log" && hand && !hand.complete ? <HandFooter pot={view.potTotal} bets={view.bets} inHand={view.inHand} /> : undefined}
-        >
-          {tab === "chat" && (
-            <>
-              <WatchersBlock device="desktop" spectators={model.spectators} />
-              <ChatList messages={model.chat} me={you.player_id} spectators={model.spectators} />
-            </>
-          )}
-          {tab === "players" && <PlayerList seats={view.seats} />}
-          {tab === "log" && (
-            <>
-              {celebration && <SevenLedger device="desktop" award={celebration} seats={table.seats} />}
-              <LogList entries={model.log} seats={table.seats} you={you.player_id} />
-            </>
-          )}
+        <SidePanel footer={<ChatComposer onSend={say} disabled={!online} />}>
+          <WatchersBlock device="desktop" spectators={model.spectators} />
+          <ChatList messages={model.chat} me={you.player_id} spectators={model.spectators} />
         </SidePanel>
       )}
       {overlay}
@@ -601,11 +595,11 @@ export function TableScreen({
 
 /* ---------- pieces ---------- */
 
-function NextHand() {
+function NextHand({ bomb = false }: { bomb?: boolean }) {
   return (
     <span className="next-hand">
-      <Hourglass size={15} strokeWidth={2} />
-      Ván mới sắp bắt đầu…
+      {bomb ? <Bomb size={15} strokeWidth={2} aria-hidden /> : <Hourglass size={15} strokeWidth={2} />}
+      {bomb ? "Ván sau là bomb pot…" : "Ván mới sắp bắt đầu…"}
     </span>
   );
 }
@@ -656,6 +650,7 @@ function idleContent({
   clock,
   celebration,
   canRebuy,
+  nextBomb,
 }: {
   table: TableState;
   me: SeatView | undefined;
@@ -668,6 +663,8 @@ function idleContent({
   celebration: boolean;
   /** "Mua thêm" is offered (the live table; the mock server has none) */
   canRebuy: boolean;
+  /** the hand about to be dealt is a bomb pot */
+  nextBomb: boolean;
 }): Idle {
   const { hand, room } = table;
   const seated = table.seats.length;
@@ -683,8 +680,8 @@ function idleContent({
     const shownSub = lines?.detail && (winners.length === 1 ? `với ${lines.detail}` : lines.detail);
     return {
       eyebrow: `Ván #${hand.hand_no} đã xong`,
-      status: "Chờ ván mới",
-      center: "Ván mới sắp bắt đầu.",
+      status: nextBomb ? "Ván sau là bomb pot" : "Chờ ván mới",
+      center: nextBomb ? "Ván sau là bomb pot." : "Ván mới sắp bắt đầu.",
       mine: net === null ? (me ? undefined : "Bạn đang xem") : `Bạn: ${mine ? `${mine} · ` : ""}${net > 0 ? `thắng ${signed(net)}` : net < 0 ? `thua ${fmt(net)}` : "hoà vốn"}`,
       win: celebration ? undefined : win,
       winSub: shownSub || (showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined),
@@ -696,7 +693,7 @@ function idleContent({
   const seatedWait = noChips
     ? noChipsText(canRebuy)
     : sittingOut
-      ? "Đang nghỉ — bấm “Nghỉ ván sau” để quay lại"
+      ? "Đang nghỉ — mở Menu, bấm “Quay lại bàn”"
       : "Bạn đã ngồi — vào từ ván sau";
   if (!hand) {
     const waiting = seated < 2 ? "Cần ít nhất 2 người ngồi để chia bài" : "Ván mới sắp bắt đầu";
@@ -723,7 +720,7 @@ function idleContent({
   return { eyebrow: "Đang chờ", status: thinking, center: thinking };
 }
 
-/** The side panel log, names resolved now. */
+/** The hand log (menu → "Nhật ký ván"), names resolved now. */
 function LogList({ entries, seats, you }: { entries: LogEntry[]; seats: SeatOccupant[]; you: string }) {
   const name = (seat: number) => seats.find((s) => s.seat === seat)?.display_name ?? `Ghế ${seat}`;
   const mySeat = seats.find((s) => s.player_id === you)?.seat;
@@ -735,7 +732,15 @@ function LogList({ entries, seats, you }: { entries: LogEntry[]; seats: SeatOccu
           case "hand":
             return (
               <li key={i} className="is-street">
-                Ván #{e.handNo} · {name(e.button)} cầm nút · {name(e.sb)} blind nhỏ {fmt(e.small)} · {name(e.bb)} blind lớn {fmt(e.big)}
+                Ván #{e.handNo} · {name(e.button)} cầm nút ·{" "}
+                {e.bomb > 0 ? (
+                  <>Bomb pot: mỗi người góp {fmt(e.bomb)}</>
+                ) : (
+                  <>
+                    {e.ante > 0 && <>Ante {fmt(e.ante)} · </>}
+                    {name(e.sb)} blind nhỏ {fmt(e.small)} · {name(e.bb)} blind lớn {fmt(e.big)}
+                  </>
+                )}
               </li>
             );
           case "action":
