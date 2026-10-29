@@ -27,6 +27,14 @@ AUTOMATIONS = (
 RUN_IT_TWICE_AUTOMATIONS = tuple(a for a in AUTOMATIONS if a != Automation.RUNOUT_COUNT_SELECTION)
 
 HIDDEN_CARD = "??"
+# Config keys added after hands were first stored, with what a record without them means.
+RECORD_DEFAULTS: dict[str, Any] = {
+    "seven_deuce_bonus": 0,
+    "ante": 0,
+    "bomb_pot": 0,
+    "run_it_twice": False,
+    "rabbit_hunt": False,
+}
 SEVEN_DEUCE_RANKS = frozenset({"7", "2"})
 RANK_ORDER = "23456789TJQKA"
 
@@ -113,6 +121,13 @@ class IllegalAction(Exception):
     def __init__(self, code: str, message: str = ""):
         super().__init__(message or code)
         self.code = code
+
+
+def same_config(stored: dict[str, Any], recorded: dict[str, Any]) -> bool:
+    """Whether a stored hand config and a fresh ``HandEngine.record()`` describe the same hand.
+    A key the stored one lacks (written before that rule existed) counts as its default, so a
+    hand dealt before an upgrade and finished after it is still the same hand."""
+    return {**RECORD_DEFAULTS, **stored} == {**RECORD_DEFAULTS, **recorded}
 
 
 def deal_order(seats: tuple[Seat, ...], button_seat: int) -> list[str]:
@@ -514,13 +529,7 @@ class HandEngine:
                 small_blind=raw["small_blind"],
                 big_blind=raw["big_blind"],
                 deck=tuple(raw["deck"]),
-                # Records written before rule #27 changed have no bonus.
-                seven_deuce_bonus=raw.get("seven_deuce_bonus", 0),
-                # Records written before antes and bomb pots have neither.
-                ante=raw.get("ante", 0),
-                bomb_pot=raw.get("bomb_pot", 0),
-                run_it_twice=raw.get("run_it_twice", False),
-                rabbit_hunt=raw.get("rabbit_hunt", False),
+                **{key: raw.get(key, default) for key, default in RECORD_DEFAULTS.items()},
             )
         )
         for a in record["actions"]:

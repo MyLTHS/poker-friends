@@ -462,7 +462,7 @@ export interface Runout {
   }[];
 }
 /**
- * State event: a player of the hand hand_id showed their two cards to the whole table after it ended (command.show_cards). Kept with the hand's history.
+ * Notice (not a state event, version unchanged, not in a snapshot): a player of the hand hand_id showed their two cards to the whole table after it ended (command.show_cards). Kept with the hand's history (replay shown_cards).
  */
 export interface CardsShownMessage {
   protocol_version: ProtocolVersion;

@@ -56,7 +56,6 @@ STATE_EVENTS = frozenset(
         "action.applied",
         "turn.deadline",
         "hand.completed",
-        "cards.shown",
         "seat.updated",
         "room.suspended",
         "room.updated",

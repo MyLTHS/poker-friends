@@ -3,7 +3,7 @@
   "type": "cards.shown",
   "room_id": 1,
   "hand_id": 41,
-  "version": 26,
+  "version": 25,
   "server_time": "2026-10-27T14:03:53.200Z",
   "payload": {
     "player_id": "2",

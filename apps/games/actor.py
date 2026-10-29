@@ -395,7 +395,9 @@ class TableActor:
             "command.sit_in": self._sit_in,
             "command.show_cards": self._show_cards,
         }[kind]
-        result_version = self.version + 1  # the first state event this command would cause
+        # The first state event this command would cause; show_cards causes none, only the
+        # cards.shown notice, which carries the current version.
+        result_version = self.version if kind == "command.show_cards" else self.version + 1
         try:
             await handler(item.player_id, message)
         except Reject as reject:
@@ -445,6 +447,8 @@ class TableActor:
             # Durable, like HandCommand's unique (hand, command_id): _recover() seeds it from
             # the stored commands (kind + amount is the whole payload), with no result_version.
             return ("act", message.get("hand_id"), message["command_id"])
+        if kind == "command.show_cards":
+            return ("show", message["hand_id"], message["command_id"])
         # sit_out/sit_in: in-memory only per docs/api/ws-protocol.md mục 5; lost on restart.
         return (kind, message["command_id"])
 
@@ -497,7 +501,9 @@ class TableActor:
             log.exception("room %s: storing shown cards of hand %s failed", self.room.pk, hand_pk)
             raise Reject("internal_error", "Not saved; send it again.") from error
         self._shown.append(shown)
-        await self._broadcast("cards.shown", lambda viewer: shown, hand_id=hand_pk)
+        # A notice, not a state event: the hand is over, so nothing a snapshot shows changes.
+        for conn in list(self.connections):
+            await self._send(conn, "cards.shown", shown, hand_pk)
 
     async def _sit_in(self, player_id: str, message: dict[str, Any]) -> None:
         if player_id not in self.session.seats.values():
@@ -603,7 +609,12 @@ class TableActor:
             raise
         self._last_hand, self._shown = None, []  # too late to show the previous hand's cards
         await self._broadcast("hand.started", lambda viewer: {"hand": self._hand_view(viewer)})
-        await self._schedule_turn()
+        if engine.is_complete:
+            # Nobody can bet: all in on the antes or the bomb pot but one player, at most. The
+            # board was dealt to the end with the hand, which is settled at once.
+            await self._complete_hand()
+        else:
+            await self._schedule_turn()
 
     def _schedule_next_hand(self) -> None:
         # Until _StartHand arrives, nothing else (a new connection, a seat) starts the next hand

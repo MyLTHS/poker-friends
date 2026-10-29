@@ -66,9 +66,9 @@ Message **client gửi** có `protocol_version`, `type`, `room_id`, `payload`; l
 
 | Loại | Gồm | Gửi cho | `version` |
 |---|---|---|---|
-| **Sự kiện trạng thái** | `hand.started`, `action.applied`, `turn.deadline`, `hand.completed`, `cards.shown`, `seat.updated`, `room.suspended`, `room.updated` | Cả bàn (mỗi người một bản đã che bài theo góc nhìn của họ) | Tăng đúng **1** mỗi sự kiện |
+| **Sự kiện trạng thái** | `hand.started`, `action.applied`, `turn.deadline`, `hand.completed`, `seat.updated`, `room.suspended`, `room.updated` | Cả bàn (mỗi người một bản đã che bài theo góc nhìn của họ) | Tăng đúng **1** mỗi sự kiện |
 | **Trả lời riêng** | `table.snapshot`, `command.ack`, `command.rejected`, `protocol.error` | Chỉ người gửi lệnh / người kết nối | Không tăng; mang `version` hiện tại của phòng |
-| **Thông báo** (B8) | `chat.message`, `audience.updated` | Cả phòng | Không tăng; mang `version` hiện tại. Không phải trạng thái bàn: hụt một thông báo không cần resync |
+| **Thông báo** (B8) | `chat.message`, `audience.updated`, `cards.shown` | Cả phòng | Không tăng; mang `version` hiện tại. Không phải trạng thái bàn: hụt một thông báo không cần resync |
 
 Cùng một sự kiện trạng thái thì mọi người nhận cùng `version`, chỉ khác phần bài được che.
 
@@ -181,10 +181,12 @@ Luật bàn của ván nằm ngay trong `HandView` (cấu hình phòng có thể
   người được chia bài bỏ `bomb_pot` (thiếu thì all-in, không lấy ante), không có blind, không có
   vòng cược trước flop: `hand.started` đã có 3 lá flop, người đầu tiên quyết định là người bên trái
   nút. Không có `action.applied` nào trước flop.
+- Khi ante hoặc bomb pot làm mọi người (trừ nhiều nhất một người) all-in, không ai còn cược được:
+  `hand.started` đã là ván xong (`complete: true`, đủ 5 lá), `hand.completed` theo ngay sau.
 - `second_board`: ván chạy 2 lần (`room.run_it_twice`): cược đã khép, còn từ 2 người chưa bỏ, có
   người all-in và bài chung chưa đủ 5 lá thì phần còn lại được chia 2 lần. `board` là board 1,
   `second_board` là board 2 (đủ 5 lá; những lá đã có trước khi all-in nằm ở cả hai). `null` ở mọi
-  ván khác. Cả hai board chỉ xuất hiện khi ván đã xong (`hand.completed`).
+  ván khác. Board 2 chỉ xuất hiện khi ván đã xong (`complete: true`).
 
 | Bài | Ai thấy |
 |---|---|
@@ -253,7 +255,8 @@ Ví dụ đầy đủ: [giữa hai ván](fixtures/server/valid/table.snapshot.be
   "payload": {"table": {
     "room": {"room_id": 1, "name": "Bàn bạn bè", "status": "playing", "max_seats": 9,
              "small_blind": 5, "big_blind": 10, "think_time_seconds": 20, "seven_deuce_bonus": 50,
-             "starting_stack": 1000, "ante": 0, "bomb_pot_every": 0, "bomb_pot_amount": 0},
+             "starting_stack": 1000, "ante": 0, "bomb_pot_every": 0, "bomb_pot_amount": 0,
+             "run_it_twice": false, "rabbit_hunt": true},
     "you": {"player_id": "1", "seat": 1},
     "seats": [
       {"seat": 1, "player_id": "1", "display_name": "Lym", "stack": 1000, "sitting_out": false, "connected": true},
@@ -286,7 +289,7 @@ nếu vừa sang vòng. Client chỉ việc thay `hand` cũ bằng `hand` mới.
     "hand": {
       "hand_id": 41, "hand_no": 1, "button_seat": 1, "small_blind": 5, "big_blind": 10,
       "ante": 0, "bomb_pot": 0,
-      "board": [], "pots": [],
+      "board": [], "second_board": null, "pots": [],
       "players": [
         {"player_id": "1", "seat": 1, "stack": 970, "bet": 30, "in_hand": true, "cards": ["7h", "2c"]},
         {"player_id": "2", "seat": 3, "stack": 995, "bet": 5, "in_hand": true, "cards": ["??", "??"]},
@@ -361,7 +364,7 @@ vẫn thấy `7h 2c` của Lym:
     "hand": {
       "hand_id": 41, "hand_no": 1, "button_seat": 1, "small_blind": 5, "big_blind": 10,
       "ante": 0, "bomb_pot": 0,
-      "board": ["Ah", "8d", "Jc"], "pots": [{"amount": 0, "eligible": ["1"]}],
+      "board": ["Ah", "8d", "Jc"], "second_board": null, "pots": [{"amount": 0, "eligible": ["1"]}],
       "players": [
         {"player_id": "1", "seat": 1, "stack": 1035, "bet": 0, "in_hand": true, "cards": ["7h", "2c"]},
         {"player_id": "2", "seat": 3, "stack": 995, "bet": 0, "in_hand": false, "cards": []},
@@ -392,11 +395,12 @@ thưởng là `results[].stack` = 1135. Người còn ít chip hơn mức thư�
 (`payments[].amount` có thể nhỏ hơn `bonus`); người còn 0 chip không có trong `payments`.
 Ván thắng ở showdown: [ví dụ](fixtures/server/valid/hand.completed.showdown.json).
 
-### `cards.shown` (sự kiện)
+### `cards.shown` (thông báo)
 
 Một người của ván vừa xong ngửa 2 lá của mình cho cả bàn (`command.show_cards`). `hand_id` là ván
-đó. `payload`: `player_id`, `seat` (ghế ở ván đó), `cards` (2 lá). Lưu vào lịch sử ván
-(`shown_cards` của replay). Mỗi người ngửa một lần mỗi ván.
+đó. `payload`: `player_id`, `seat` (ghế ở ván đó), `cards` (2 lá). Mỗi người ngửa một lần mỗi ván.
+Là **thông báo**: không tăng `version`, không có trong `table.snapshot` (ván đã xong, trạng thái bàn
+không đổi); ai kết nối lại sau đó xem trong lịch sử ván (`shown_cards` của replay).
 
 ### `seat.updated` (sự kiện)
 
@@ -427,6 +431,8 @@ thì bị check/fold như thường). Người sit-out vẫn phải trả thư�
 ```
 
 `result_version` là `version` của sự kiện đầu tiên lệnh gây ra, để client ghép ack với sự kiện.
+`command.show_cards` không gây sự kiện trạng thái: `result_version` là `version` mà thông báo
+`cards.shown` của nó mang (version hiện tại của phòng).
 Ack và sự kiện có thể tới theo bất kỳ thứ tự nào; client không được dựa vào thứ tự giữa chúng.
 Lệnh vừa áp (`duplicate: false`) luôn có `result_version`; ack trùng sau khi server khởi động lại
 mang `result_version: null` ([ví dụ](fixtures/server/valid/command.ack.duplicate-after-restart.json)).
@@ -485,7 +491,8 @@ trong DB nên không mất khi server khởi động lại. Đóng phòng giữa
   "payload": {"room": {"room_id": 1, "name": "Bàn bạn bè", "status": "open", "max_seats": 9,
               "small_blind": 10, "big_blind": 20, "think_time_seconds": 30,
               "seven_deuce_bonus": 50, "starting_stack": 1000, "ante": 0,
-              "bomb_pot_every": 0, "bomb_pot_amount": 0}}
+              "bomb_pot_every": 0, "bomb_pot_amount": 0, "run_it_twice": false,
+              "rabbit_hunt": true}}
 }
 ```
 

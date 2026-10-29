@@ -212,7 +212,7 @@ async def send_show(conn, room, hand_id, command_id="show-cards-1"):
     )
 
 
-async def fold_first(conns: dict, room, started: dict) -> str:
+async def fold_first(conns: dict, room, started: dict, command_id="fold-first-1") -> str:
     """Whoever acts first folds; returns their player id."""
     first = started["payload"]["hand"]["actor"]
     await conns[first].send_json_to(
@@ -221,7 +221,7 @@ async def fold_first(conns: dict, room, started: dict) -> str:
             "type": "command.act",
             "room_id": room.pk,
             "hand_id": started["hand_id"],
-            "command_id": "fold-first-1",
+            "command_id": command_id,
             "payload": {"kind": "fold", "amount": None},
         }
     )
@@ -244,7 +244,10 @@ class TestAtTheTable:
             assert completed["payload"]["runouts"] is None
             await send_show(conns[folder], room, started["hand_id"])
             mine = await drain(conns[folder])
-            assert by_type(mine, "command.ack")
+            [ack], [notice] = by_type(mine, "command.ack"), by_type(mine, "cards.shown")
+            # A notice: the room's version stays where hand.completed left it.
+            assert notice["version"] == completed["version"]
+            assert ack["payload"]["result_version"] == notice["version"]
             shown = by_type(await drain(spectator), "cards.shown")[-1]
             assert shown["hand_id"] == started["hand_id"]
             assert shown["payload"]["player_id"] == folder
@@ -311,6 +314,27 @@ class TestAtTheTable:
             assert failed["payload"]["code"] == "internal_error"
             monkeypatch.setattr(QuerySet, "aupdate", real_aupdate)
             await send_show(conns[folder], room, started["hand_id"])  # same command_id
+            assert by_type(await drain(conns[folder]), "cards.shown")
+
+        run_async(body)
+
+    def test_the_same_command_id_shows_again_in_a_later_hand(self):
+        room, a, b = heads_up_room()
+
+        async def body():
+            conns = {str(a.pk): await connect(room, a), str(b.pk): await connect(room, b)}
+            started, _ = await started_hand(*conns.values())
+            folder = await fold_first(conns, room, started)
+            await drain(conns[folder])
+            await send_show(conns[folder], room, started["hand_id"])
+            assert by_type(await drain(conns[folder]), "cards.shown")
+            table = await actor_module.get_actor(room.pk)
+            table._queue.put_nowait(actor_module._StartHand())  # skip the pause
+            second, _ = await started_hand(*conns.values())
+            assert second["hand_id"] != started["hand_id"]
+            folder = await fold_first(conns, room, second, command_id="fold-second-1")
+            await drain(conns[folder])
+            await send_show(conns[folder], room, second["hand_id"])  # the same command_id
             assert by_type(await drain(conns[folder]), "cards.shown")
 
         run_async(body)

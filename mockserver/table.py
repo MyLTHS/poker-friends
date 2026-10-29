@@ -180,7 +180,9 @@ class MockTable:
             "command.sit_in": self._sit_in,
             "command.show_cards": self._show_cards,
         }[message["type"]]
-        result_version = self.version + 1  # the first state event the command causes
+        # The first state event the command causes; show_cards only sends a notice.
+        show = message["type"] == "command.show_cards"
+        result_version = self.version if show else self.version + 1
         try:
             out = handler(player_id, message)
         except Reject as reject:
@@ -227,7 +229,8 @@ class MockTable:
             raise Reject(error.code, str(error)) from None
         shown = {"player_id": player_id, "seat": hand.seat_of(player_id), "cards": cards}
         self._shown.append(shown)
-        return self._broadcast("cards.shown", lambda viewer: shown, hand_id=hand_id)
+        # A notice: the room's version stays the same.
+        return [self._send(conn, "cards.shown", shown, hand_id) for conn in self.connections]
 
     def _sit_in(self, player_id: str, message: dict[str, Any]) -> list[Outbound]:
         if player_id not in self.session.seats.values():
@@ -270,6 +273,8 @@ class MockTable:
         }
         self._last_hand, self._shown = None, []
         out = self._broadcast("hand.started", lambda viewer: {"hand": self._hand_view(viewer)})
+        if self.session.current_hand.is_complete:  # all in on the antes or the bomb pot
+            return out + self._complete_hand()
         return out + self._turn()
 
     def _bot_action(self, hand: HandEngine, player_id: str) -> Action:
