@@ -240,6 +240,10 @@ export interface SeatOccupant {
   stack: Chips;
   sitting_out: boolean;
   connected: boolean;
+  /**
+   * The player asked to leave (DELETE seats/me/) during a hand they are in: they play it out, are dealt no new hand, and the seat is freed (occupant null) when it ends, before any countdown. POST seats/me/stay/ takes it back.
+   */
+  leaving: boolean;
 }
 /**
  * The hand as one receiver may see it: HandEngine.view_for(receiver) plus hand_id and hand_no. Spectators get view_for(None).

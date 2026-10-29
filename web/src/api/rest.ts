@@ -277,10 +277,44 @@ export interface paths {
         post?: never;
         /**
          * Rời ghế (dự kiến B4)
-         * @description Không được rời khi còn trong ván đang chạy (`player_in_hand`); hãy sit-out qua WebSocket
-         *     rồi rời sau. Chip vẫn thuộc phòng, vào lại vẫn còn. Cả bàn nhận `seat.updated`.
+         * @description Không ở trong ván đang chạy (giữa hai ván, hoặc không được chia ván này: ngồi xuống sau khi
+         *     chia, đang nghỉ, hết chip): rời ngay (204), cả bàn nhận `seat.updated` với `occupant: null`.
+         *
+         *     Đang ở trong ván đang chạy (kể cả đã fold): chơi tiếp tới hết ván (202). Ghế giữ nguyên,
+         *     `leaving: true`, cả bàn nhận `seat.updated`. Hết ván, ngay sau `hand.completed` và trước khi
+         *     đếm ngược hay chia ván sau, server cho đứng dậy: cả bàn nhận `seat.updated` với
+         *     `occupant: null`. Người đang chờ rời không được chia ván mới và không tính vào "đủ 2 người".
+         *     Gọi lại khi đang chờ: vẫn 202, không đổi gì. Huỷ: `POST .../seats/me/stay/`. Server khởi
+         *     động lại, hay ván bị admin huỷ (`void_hand`), vẫn giữ và làm như vậy.
+         *
+         *     Chip vẫn thuộc phòng, vào lại vẫn còn. Lỗi (409): `not_seated`, `room_suspended`.
          */
         delete: operations["leaveSeat"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/seats/me/stay/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ở lại, huỷ rời ghế sau ván
+         * @description Huỷ `DELETE .../seats/me/` đã gọi trong ván: `leaving: false`, cả bàn nhận `seat.updated`,
+         *     người đó ngồi tiếp và được chia các ván sau như thường. Không đang chờ rời thì không đổi gì,
+         *     vẫn 200. Không có body. Lỗi (409): `not_seated` (không ngồi ở phòng này, kể cả khi ván đã
+         *     xong và ghế đã được trả), `room_suspended`.
+         */
+        post: operations["stayInSeat"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -883,6 +917,11 @@ export interface components {
         TakeSeatRequest: {
             seat: components["schemas"]["SeatNumber"];
         };
+        /** @description Trả lời 202 của `leaveSeat` (người gọi đang trong ván đang chạy, rời khi ván xong). */
+        LeavingAfterHand: {
+            /** @constant */
+            leaving: true;
+        };
         /** @description Cùng nội dung với `payload.table` và `version` của `table.snapshot` trên WebSocket. */
         TableSnapshot: {
             version: components["schemas"]["Version"];
@@ -1133,6 +1172,8 @@ export interface components {
             stack: components["schemas"]["Chips"];
             sitting_out: boolean;
             connected: boolean;
+            /** @description The player asked to leave (DELETE seats/me/) during a hand they are in: they play it out, are dealt no new hand, and the seat is freed (occupant null) when it ends, before any countdown. POST seats/me/stay/ takes it back. */
+            leaving: boolean;
         };
         /**
          * Version
@@ -1751,12 +1792,48 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Đang trong ván đang chạy, sẽ rời khi ván xong */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeavingAfterHand"];
+                };
+            };
             /** @description Đã rời ghế */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    stayInSeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ghế sau khi huỷ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeatOccupant"];
+                };
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];

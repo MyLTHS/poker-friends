@@ -318,6 +318,10 @@
         },
         "connected": {
           "type": "boolean"
+        },
+        "leaving": {
+          "description": "The player asked to leave (DELETE seats/me/) during a hand they are in: they play it out, are dealt no new hand, and the seat is freed (occupant null) when it ends, before any countdown. POST seats/me/stay/ takes it back.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -326,7 +330,8 @@
         "display_name",
         "stack",
         "sitting_out",
-        "connected"
+        "connected",
+        "leaving"
       ],
       "additionalProperties": false
     },
