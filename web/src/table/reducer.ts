@@ -7,17 +7,21 @@ import type {
   ChatMessage,
   ActionAppliedMessage,
   AppliedAction,
+  CardsShownMessage,
   ClientMessage,
   HandCompletedMessage,
   HandStartedMessage,
+  HandView,
   PlayerResult,
   RejectCode,
   RoomSuspendedMessage,
   RoomUpdatedMessage,
+  Runout,
   SeatUpdatedMessage,
   ServerMessage,
   SevenDeuceAward,
   ShowdownHand,
+  ShownCards,
   Spectator,
   TableState,
   TurnDeadlineMessage,
@@ -80,6 +84,15 @@ export type TableModel = {
   results: PlayerResult[] | null;
   /** Made hands named at the showdown of the completed hand (hand.completed), until the next one. */
   showdown: ShowdownHand[] | null;
+  /** Both boards of the completed hand when it was run twice, with what each paid. */
+  runouts: Runout[] | null;
+  /** Rabbit hunt: the board cards the completed hand would have dealt next (display only). */
+  rabbit: string[];
+  /** Whose cards of the completed hand the whole table sees: turned at the showdown, a revealed
+   *  7-2, or shown afterwards (cards.shown). Gone when the next hand starts. */
+  shown: { handId: number; hands: ShownCards[] } | null;
+  /** My command.show_cards on its way (until the next hand, or its refusal). */
+  showing: { commandId: string; handId: number } | null;
   celebration: SevenDeuceAward | null;
   /** server_time minus local time when the message arrived. */
   clockOffsetMs: number;
@@ -123,7 +136,8 @@ export type TableAction =
   | { type: "dismiss.notice" }
   | { type: "chat.history"; messages: ChatMessage[] }
   | { type: "chat.send"; text: string }
-  | { type: "sit"; out: boolean; commandId: string };
+  | { type: "sit"; out: boolean; commandId: string }
+  | { type: "show"; commandId: string };
 
 export const initialModel = (): TableModel => ({
   status: "connecting",
@@ -134,6 +148,10 @@ export const initialModel = (): TableModel => ({
   lastAction: null,
   results: null,
   showdown: null,
+  runouts: null,
+  rabbit: [],
+  shown: null,
+  showing: null,
   celebration: null,
   clockOffsetMs: 0,
   pending: null,
@@ -164,6 +182,14 @@ const REJECT_TEXT: Partial<Record<RejectCode, string>> = {
   not_seated: "Bạn không ngồi ở bàn này.",
   room_suspended: "Bàn đang tạm dừng.",
   rate_limited: "Bấm chậm lại một chút.",
+  hand_in_progress: "Ván chưa xong, đợi xong ván rồi hãy ngửa bài.",
+  not_in_hand: "Bạn không được chia bài ở ván đó.",
+  already_shown: "Cả bàn đã thấy bài của bạn rồi.",
+};
+
+/** command.show_cards refused: stale_hand there means the next hand already started. */
+const SHOW_REJECT_TEXT: Partial<Record<RejectCode, string>> = {
+  stale_hand: "Ván mới đã bắt đầu, không ngửa bài ván trước được nữa.",
 };
 
 function notice(model: TableModel, text: string): Notice {
@@ -181,6 +207,8 @@ export function reduce(model: TableModel, action: TableAction): TableModel {
         status: "reconnecting",
         outbox: [],
         pending: model.pending && { ...model.pending, sentAt: null },
+        // not resent: "Ngửa bài" comes back, a second press is answered (shown, or already_shown)
+        showing: null,
       };
     case "server": {
       const next = firePreAction(onServer({ ...model, clockOffsetMs: Date.parse(action.message.server_time) - action.receivedAt }, action.message));
@@ -239,7 +267,38 @@ export function reduce(model: TableModel, action: TableAction): TableModel {
       };
       return { ...model, outbox: [...model.outbox, message] };
     }
+    case "show": {
+      if (!canShowCards(model)) return model;
+      if (model.status !== "open") return { ...model, notice: notice(model, "Mất kết nối — thử lại khi đã nối lại.") };
+      const handId = model.table!.hand!.hand_id;
+      const message: ClientMessage = {
+        protocol_version: 1,
+        type: "command.show_cards",
+        room_id: model.table!.room.room_id,
+        hand_id: handId,
+        command_id: action.commandId,
+        payload: {},
+      };
+      return { ...model, showing: { commandId: action.commandId, handId }, outbox: [...model.outbox, message] };
+    }
   }
+}
+
+/** The completed hand's shown cards (null when they belong to another hand). */
+export function shownHands(model: Pick<TableModel, "table" | "shown">): ShownCards[] {
+  const hand = model.table?.hand;
+  return hand && model.shown?.handId === hand.hand_id ? model.shown.hands : [];
+}
+
+/** "Ngửa bài": the hand on the table is over, I was dealt into it (folded too), the table does not
+ *  see my cards yet, and no show of mine is on its way. The server still decides (command.rejected). */
+export function canShowCards(model: TableModel): boolean {
+  const table = model.table;
+  const hand = table?.hand;
+  if (!table || !hand || !hand.complete || table.room.status === "suspended" || model.showing) return false;
+  const me = table.you.player_id;
+  if (!hand.players.some((p) => p.player_id === me)) return false;
+  return !shownHands(model).some((h) => h.player_id === me);
 }
 
 /** Whether "Chọn trước" applies now: I hold cards and chips in a running hand, and it is not my turn. */
@@ -311,6 +370,11 @@ function onServer(model: TableModel, message: ServerMessage): TableModel {
       if (model.pending?.message.command_id !== message.payload.command_id) return model; // e.g. a duplicate ack
       return { ...model, pending: null };
     case "command.rejected": {
+      if (model.showing?.commandId === message.payload.command_id) {
+        const code = message.payload.code;
+        const text = SHOW_REJECT_TEXT[code] ?? REJECT_TEXT[code] ?? "Server không nhận lệnh này.";
+        return { ...model, showing: null, notice: notice(model, text) };
+      }
       if (model.pending?.message.command_id !== message.payload.command_id) return model;
       const text = REJECT_TEXT[message.payload.code] ?? "Server không nhận lệnh này.";
       return { ...model, pending: null, notice: notice(model, text) };
@@ -321,10 +385,27 @@ function onServer(model: TableModel, message: ServerMessage): TableModel {
       return { ...model, chat: mergeChat(model.chat, [message.payload.message]) };
     case "audience.updated":
       return { ...model, spectators: message.payload.spectators };
+    case "cards.shown":
+      return onCardsShown(model, message);
     default:
       if (STATE_EVENTS.has(message.type)) return onStateEvent(model, message as StateEvent);
       return model;
   }
+}
+
+/** A player of the last hand showed their cards (a notice, no version): face up until the next hand. */
+function onCardsShown(model: TableModel, message: CardsShownMessage): TableModel {
+  const shown = message.payload;
+  const before = model.shown?.handId === message.hand_id ? model.shown.hands : [];
+  if (before.some((h) => h.player_id === shown.player_id)) return model;
+  const mine = shown.player_id === model.table?.you.player_id;
+  const entry: LogEntry = { kind: "reveal", seat: shown.seat, cards: shown.cards };
+  return {
+    ...model,
+    shown: { handId: message.hand_id, hands: [...before, shown] },
+    showing: mine ? null : model.showing,
+    log: model.table ? [...model.log, entry].slice(-LOG_KEPT) : model.log,
+  };
 }
 
 function onSnapshot(model: TableModel, table: TableState, version: number): TableModel {
@@ -339,6 +420,8 @@ function onSnapshot(model: TableModel, table: TableState, version: number): Tabl
     fxEpoch: model.fxEpoch + 1,
     lastActions: sameHand ? model.lastActions : {},
     myCards: myCards(table, sameHand ? model.myCards : []),
+    // what hand.completed said belongs to that hand only
+    ...(sameHand ? {} : { runouts: null, rabbit: [], shown: null, showing: null }),
   };
   const buffered = model.buffered.filter((e) => e.version > version).sort((a, b) => a.version - b.version);
   next = { ...next, buffered: [] };
@@ -394,6 +477,18 @@ function applyEvent(model: TableModel, event: StateEvent, quiet: boolean): Table
   return { ...next, fx: [...model.fx, ...cues].slice(-FX_KEPT), celebrationQuiet: false };
 }
 
+/** Cards the whole table sees once the hand is over: each hand named at the showdown, and a 7-2
+ *  turned over, after what cards.shown already brought (`early`). */
+function faceUpAtEnd(hand: HandView, showdown: ShowdownHand[], seven: SevenDeuceAward | null, early: ShownCards[]): ShownCards[] {
+  const out: ShownCards[] = [...early];
+  for (const row of showdown) {
+    const cards = hand.players.find((p) => p.seat === row.seat)?.cards ?? [];
+    if (!out.some((h) => h.seat === row.seat) && cards.length === 2) out.push({ player_id: row.player_id, seat: row.seat, cards: [cards[0], cards[1]] });
+  }
+  if (seven && !out.some((h) => h.seat === seven.seat)) out.push({ player_id: seven.player_id, seat: seven.seat, cards: [seven.cards[0], seven.cards[1]] });
+  return out;
+}
+
 /** My visible hole cards in the table's hand, or what was kept so far. */
 function myCards(table: TableState | null, kept: string[]): string[] {
   const mine = table?.hand?.players.find((p) => p.player_id === table.you.player_id)?.cards ?? [];
@@ -410,6 +505,10 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
         lastAction: null,
         results: null,
         showdown: null,
+        runouts: null,
+        rabbit: [],
+        shown: null,
+        showing: null,
         lastActions: {},
         celebration: null,
       };
@@ -430,7 +529,7 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
     case "turn.deadline":
       return { ...model, table: { ...table, turn: event.payload.turn } };
     case "hand.completed": {
-      const { hand, results, seven_deuce, showdown } = event.payload;
+      const { hand, results, seven_deuce, showdown, runouts, rabbit_cards } = event.payload;
       const seats = table.seats.map((seat) => {
         const result = results.find((r) => r.player_id === seat.player_id);
         return result ? { ...seat, stack: result.stack } : seat;
@@ -440,6 +539,9 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
         table: { ...table, hand, turn: null, seats },
         results,
         showdown,
+        runouts: runouts ?? null,
+        rabbit: rabbit_cards ?? [],
+        shown: { handId: hand.hand_id, hands: faceUpAtEnd(hand, showdown, seven_deuce, shownHands(model)) },
         celebration: seven_deuce ?? model.celebration,
         pending: null,
       };

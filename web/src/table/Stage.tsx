@@ -11,7 +11,8 @@ import { Avatar, ChipStack, FlipCard, PlayingCard, fmt } from "@/ui";
 
 import { Countdown, LiveRing, type TurnClock } from "./clock";
 import { GEO, betPos, dealerPos, fitScale, spotPos, type Device, type Pt } from "./geometry";
-import type { SeatView } from "./seatView";
+import { runoutText } from "./handName";
+import type { RunoutView, SeatView } from "./seatView";
 
 const at = (p: Pt, extra?: CSSProperties): CSSProperties => ({ left: p.x, top: p.y, ...extra });
 
@@ -46,17 +47,63 @@ export function FitStage({ device, className = "", children }: { device: Device;
 
 /* ---------- pieces on the felt ---------- */
 
-export function Board({ device, cards, hi = [], hidden = 0 }: { device: Device; cards: string[]; hi?: number[]; hidden?: number }) {
+/** Five board places: the cards dealt (lit / dimmed at a showdown), then empty slots, or the rabbit
+ *  hunt's cards greyed in them. `mark`: data-board on the cards, for the dealing animation. */
+function BoardCards({ cards, w, hi, hidden, rabbit = [], mark }: { cards: string[]; w: number; hi: number[]; hidden: number; rabbit?: string[]; mark: boolean }) {
+  const dealt = cards.length - hidden;
+  const slots = Array.from({ length: 5 }, (_, i) =>
+    cards[i] && i < dealt ? (
+      <PlayingCard key={`${i}-${cards[i]}`} data-board={mark ? i : undefined} card={cards[i]} w={w} className={hi.length ? (hi.includes(i) ? "is-hi" : "is-lo") : ""} />
+    ) : cards[i] || !rabbit[i - cards.length] ? (
+      <span key={i} className="board-slot" style={{ width: w, height: Math.round(w * 1.4) }} />
+    ) : null,
+  );
+  if (!rabbit.length || hidden) return <>{slots}</>;
+  return (
+    <>
+      {slots}
+      <span className="board-rabbit" role="group" aria-label="Bài chưa chia">
+        {rabbit.map((card, i) => (
+          <PlayingCard key={`r${i}-${card}`} card={card} w={w} className="is-rabbit" />
+        ))}
+        <small className="rabbit-label" aria-hidden>
+          Bài chưa chia
+        </small>
+      </span>
+    </>
+  );
+}
+
+export function Board({ device, cards, hi = [], hidden = 0, runouts, rabbit }: { device: Device; cards: string[]; hi?: number[]; hidden?: number; runouts?: RunoutView[] | null; rabbit?: string[] }) {
   const g = GEO[device];
+  if (runouts?.length) {
+    // Run twice: one compact row per board, "Lần 1" / "Lần 2", who it paid at the end of the row.
+    const w = Math.round(g.cardW * (device === "desktop" ? 0.7 : 0.66));
+    return (
+      <div className="board board-twice" style={at(g.board)} role="group" aria-label="Bài chung, chạy 2 lần">
+        {runouts.map((run, i) => (
+          <div key={i} className="board-run" role="group" aria-label={`Lần ${i + 1}`}>
+            <span className="board-run-label">Lần {i + 1}</span>
+            <span className="board-run-cards">
+              <BoardCards cards={run.cards} w={w} hi={run.hi} hidden={hidden} mark={i === 0} />
+            </span>
+            <span className="board-run-win" title={runoutText(run)}>
+              {run.winners.map((w, j) => (
+                <span key={j}>
+                  {j > 0 && ", "}
+                  {w.name}
+                  {w.amount !== undefined && <small> +{fmt(w.amount)}</small>}
+                </span>
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="board" style={at(g.board)} role="group" aria-label="Bài chung">
-      {Array.from({ length: 5 }, (_, i) =>
-        cards[i] && i < cards.length - hidden ? (
-          <PlayingCard key={`${i}-${cards[i]}`} data-board={i} card={cards[i]} w={g.cardW} className={hi.length ? (hi.includes(i) ? "is-hi" : "is-lo") : ""} />
-        ) : (
-          <span key={i} className="board-slot" style={{ width: g.cardW, height: Math.round(g.cardW * 1.4) }} />
-        ),
-      )}
+      <BoardCards cards={cards} w={g.cardW} hi={hi} hidden={hidden} rabbit={rabbit} mark />
     </div>
   );
 }
@@ -245,6 +292,10 @@ export type StageProps = {
   board: string[];
   /** Board positions lit at a showdown (the others are dimmed). */
   boardHi?: number[];
+  /** A hand run twice: its two boards (drawn instead of `board`). */
+  runouts?: RunoutView[] | null;
+  /** Rabbit hunt: greyed cards in the empty board slots. */
+  rabbit?: string[];
   pot: number;
   potLabel?: string;
   mark: string;
@@ -261,12 +312,12 @@ export type StageProps = {
   className?: string;
 };
 
-export function Stage({ device, seats, board, boardHi, pot, potLabel, mark, badge, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, children, className = "" }: StageProps) {
+export function Stage({ device, seats, board, boardHi, runouts, rabbit, pot, potLabel, mark, badge, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, children, className = "" }: StageProps) {
   const g = GEO[device];
   const me = seats.find((s) => s.isMe);
   const button = seats.find((s) => s.isButton);
   return (
-    <div className={`stage stage-${device} ${className}`} style={{ width: g.w, height: g.h }}>
+    <div className={`stage stage-${device}${runouts?.length ? " has-twice" : ""}${rabbit?.length ? " has-rabbit" : ""} ${className}`} style={{ width: g.w, height: g.h }}>
       <div className="table-glow" style={{ left: g.oval.l - 60, top: g.oval.t - 50, width: g.oval.w + 120, height: g.oval.h + 100 }} />
       <div className="rail" style={{ left: g.oval.l, top: g.oval.t, width: g.oval.w, height: g.oval.h }}>
         <div className="felt">
@@ -283,7 +334,7 @@ export function Stage({ device, seats, board, boardHi, pot, potLabel, mark, badg
         </div>
       )}
       {showPot && pot > 0 && <Pot device={device} amount={pot} label={potLabel} />}
-      <Board device={device} cards={board} hi={boardHi} hidden={boardHidden} />
+      <Board device={device} cards={board} hi={boardHi} hidden={boardHidden} runouts={runouts} rabbit={rabbit} />
       {seats.filter((s) => (s.bet ?? 0) > 0).map((s) => <Bet key={s.seat} device={device} s={s} />)}
       {button && (
         <span className="dealer" style={at(dealerPos(device, button.spot, button.isMe))} aria-label="Nút dealer">

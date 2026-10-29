@@ -3,7 +3,8 @@
 // /hands/<id>: step through a finished hand as the caller saw it (design screens-social.tsx
 // Replay). The same D1 stage as the live table; stepping forward one step plays that step's
 // animation (cues.ts), any jump shows the step at once. Only the caller's own cards are face up,
-// other hands stay down unless the hand went to showdown.
+// other hands stay down unless the hand went to showdown or were shown after it (shown_cards).
+// The result step also draws both boards of a hand run twice and the rabbit hunt's cards.
 import "@/table/table.css";
 
 import Link from "next/link";
@@ -16,7 +17,7 @@ import type { AppliedAction, HandView, TableState } from "@/api/protocol";
 import { cuesFor, type Cue } from "@/table/cues";
 import { useDevice } from "@/table/device";
 import type { Device } from "@/table/geometry";
-import { showdownBySeat } from "@/table/handName";
+import { runoutLines, showdownBySeat } from "@/table/handName";
 import { describeAction, tableView } from "@/table/seatView";
 import { MobileTableBar, TableTopBar } from "@/table/Side";
 import { FitStage, Stage } from "@/table/Stage";
@@ -192,6 +193,9 @@ export function ReplayScreen({ handId }: { handId: number }) {
             lastActions: actionsAt(stepsOf(replay), step),
             showdown: replay.showdown,
             winners: replay.results.filter((r) => r.hand_net >= 0).map((r) => r.player_id), // a split pot nets 0
+            runouts: replay.runouts,
+            rabbit: replay.rabbit_cards,
+            shown: replay.shown_cards,
           }) : null),
     [table, replay, step],
   );
@@ -228,7 +232,8 @@ export function ReplayScreen({ handId }: { handId: number }) {
   const time = new Date(replay.completed_at);
   const at = Number.isNaN(time.getTime()) ? "" : `${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`;
   const myResult = replay.results.find((r) => r.player_id === me);
-  const shown = replay.steps[last].hand.players.filter((p) => p.player_id !== me && p.cards.length && p.cards.every((c) => c !== "??")).length > 0;
+  const shown = replay.shown_cards.some((h) => h.player_id !== me) || replay.steps[last].hand.players.filter((p) => p.player_id !== me && p.cards.length && p.cards.every((c) => c !== "??")).length > 0;
+  const showers = replay.shown_cards.map((h) => names[h.player_id] ?? `Ghế ${h.seat}`);
   const labels = streetLabels(replay);
 
   const stage = (
@@ -237,6 +242,8 @@ export function ReplayScreen({ handId }: { handId: number }) {
       seats={view.seats}
       board={view.board}
       boardHi={view.boardHi}
+      runouts={view.runouts}
+      rabbit={view.rabbit}
       pot={view.pot}
       mark={`${roomName || "Ván"} · ${fmt(table.room.small_blind)}/${fmt(table.room.big_blind)}`}
       showPot={!table.hand?.complete}
@@ -376,6 +383,7 @@ export function ReplayScreen({ handId }: { handId: number }) {
                 );
               })}
             </span>
+            {showers.length > 0 && <small>{showers.join(", ")} ngửa bài sau ván.</small>}
             {!shown && <small>Không có showdown nên bài người khác vẫn úp trong bản xem lại.</small>}
           </div>
         </div>
@@ -385,6 +393,15 @@ export function ReplayScreen({ handId }: { handId: number }) {
 }
 
 function resultLine(replay: HandReplay, names: Record<string, string>): string {
+  if (replay.runouts) {
+    // run twice: who each board paid (the nets may cancel out)
+    // a board without winners: one player took them all (the others mucked)
+    const scooped = replay.results.filter((r) => r.hand_net > 0).map((r) => ({ name: r.display_name }));
+    const { title, detail } = runoutLines(
+      replay.runouts.map((r) => ({ winners: r.winners.length ? r.winners.map((w) => ({ name: names[w.player_id] ?? `Ghế ${w.seat}`, amount: w.amount })) : scooped })),
+    );
+    return `${title} · ${detail}`;
+  }
   const winners = replay.results.filter((r) => r.hand_net > 0);
   if (winners.length === 0) return "Hoà";
   const seven = replay.seven_deuce_winner ? ` · thưởng 7-2 cho ${names[replay.seven_deuce_winner]}` : "";

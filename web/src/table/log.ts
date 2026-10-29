@@ -4,7 +4,7 @@
 
 import type { AppliedAction, TableState } from "@/api/protocol";
 
-import { handName } from "./handName";
+import { showdownBySeat } from "./handName";
 import type { StateEvent } from "./reducer";
 import { blindSeats } from "./seatView";
 
@@ -16,6 +16,12 @@ export type LogEntry =
   | { kind: "muck"; seat: number }
   | { kind: "win"; seat: number; amount: number }
   | { kind: "seven"; seat: number; total: number; bonus: number; payers: number }
+  /** The hand was run twice: board `n` (1 or 2) and who it paid (no amount: took every board). */
+  | { kind: "runout"; n: number; cards: string[]; winners: { seat: number; amount?: number }[] }
+  /** Rabbit hunt: the board cards that would have come (no chips moved). */
+  | { kind: "rabbit"; cards: string[] }
+  /** Cards shown after the hand (cards.shown). */
+  | { kind: "reveal"; seat: number; cards: string[] }
   | { kind: "warn"; text: string };
 
 export const LOG_KEPT = 80;
@@ -37,15 +43,26 @@ export function logFor(prev: TableState, event: StateEvent): LogEntry[] {
       const { sb, bb } = blindSeats(hand);
       return [{ kind: "hand", handNo: hand.hand_no, button: hand.button_seat, sb, bb, small: hand.small_blind, big: hand.big_blind, ante: hand.ante, bomb: hand.bomb_pot }];
     }
-    case "action.applied":
-      return [{ kind: "action", action: event.payload.action }, ...streets(prev.hand?.board ?? [], event.payload.hand.board)];
+    case "action.applied": {
+      // A hand run twice is dealt out at once: hand.completed logs both boards whole (runout).
+      const twice = !!event.payload.hand.second_board;
+      return [{ kind: "action", action: event.payload.action }, ...(twice ? [] : streets(prev.hand?.board ?? [], event.payload.hand.board))];
+    }
     case "hand.completed": {
-      const { hand, results, seven_deuce, showdown } = event.payload;
-      const out: LogEntry[] = streets(prev.hand?.board ?? [], hand.board);
-      // The server names every hand still face up after a showdown; whoever else reached it mucked.
+      const { hand, results, seven_deuce, showdown, runouts, rabbit_cards } = event.payload;
+      // Run twice: two whole boards, each with who it paid, instead of the streets. A board comes
+      // without winners when one player took them all (the others mucked): the hand's winners.
+      const scooped = results.filter((r) => r.hand_net > 0).map((r) => ({ seat: r.seat }));
+      const out: LogEntry[] = runouts
+        ? runouts.map((r, i) => ({ kind: "runout", n: i + 1, cards: [...r.board], winners: r.winners.length ? r.winners.map((w) => ({ seat: w.seat, amount: w.amount })) : scooped }))
+        : streets(prev.hand?.board ?? [], hand.board);
+      // The server names every hand still face up after a showdown (once per board when run
+      // twice); whoever else reached it mucked.
+      const names = showdownBySeat(showdown);
       for (const entry of showdown) {
+        if (out.some((e) => e.kind === "show" && e.seat === entry.seat)) continue;
         const cards = hand.players.find((p) => p.seat === entry.seat)?.cards ?? [];
-        out.push({ kind: "show", seat: entry.seat, cards, hand: handName(entry) });
+        out.push({ kind: "show", seat: entry.seat, cards, hand: names[entry.seat] });
       }
       if (showdown.length) {
         for (const p of prev.hand?.players ?? []) {
@@ -57,6 +74,7 @@ export function logFor(prev: TableState, event: StateEvent): LogEntry[] {
         out.push({ kind: "show", seat: seven_deuce.seat, cards: seven_deuce.cards });
         out.push({ kind: "seven", seat: seven_deuce.seat, total: seven_deuce.total, bonus: seven_deuce.bonus, payers: seven_deuce.payments.length });
       }
+      if (rabbit_cards?.length) out.push({ kind: "rabbit", cards: rabbit_cards });
       return out;
     }
     case "seat.updated": {

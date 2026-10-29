@@ -1,4 +1,5 @@
-// A room's rules (blinds, starting stack, seats, think time, 7-2 bonus, ante, bomb pot, visibility):
+// A room's rules (blinds, starting stack, seats, think time, 7-2 bonus, ante, bomb pot, run it
+// twice, rabbit hunt, visibility):
 // the create form, its preview, the owner's "change the rules" form, and the server's field errors
 // in Vietnamese.
 
@@ -25,6 +26,11 @@ export type Rules = {
    *  betting); 0 = never */
   bomb_pot_every: number;
   bomb_pot_amount: number;
+  /** all in before the river: the rest of the board is dealt twice, each board takes half of
+   *  every pot */
+  run_it_twice: boolean;
+  /** a hand over before the river shows the board cards that would have come */
+  rabbit_hunt: boolean;
   is_private: boolean;
 };
 
@@ -65,7 +71,8 @@ export const THINK_CHOICES = [15, 20, 30, 45, 60];
 export const SEVEN_CHOICES = [25, 50, 100];
 
 /** What a new room gets unless changed: 10/20, 2.000 chips each, 9 seats, 20 s, no 7-2 bonus,
- *  no ante, no bomb pot, public (shown in the lobby). */
+ *  no ante, no bomb pot, not run twice, rabbit hunt on (as the server), public (shown in the
+ *  lobby). */
 export const DEFAULT_RULES: Rules = {
   name: "",
   small_blind: 10,
@@ -77,6 +84,8 @@ export const DEFAULT_RULES: Rules = {
   ante: 0,
   bomb_pot_every: 0,
   bomb_pot_amount: 0,
+  run_it_twice: false,
+  rabbit_hunt: true,
   is_private: false,
 };
 
@@ -103,6 +112,8 @@ export type RoomDraft = {
   bombOn: boolean;
   bombEvery: string;
   bombAmount: string | null;
+  run_it_twice: boolean;
+  rabbit_hunt: boolean;
   is_private: boolean;
 };
 
@@ -121,6 +132,8 @@ export const NEW_ROOM_DRAFT: RoomDraft = {
   bombOn: DEFAULT_RULES.bomb_pot_every > 0,
   bombEvery: String(DEFAULT_RULES.bomb_pot_every || BOMB_EVERY_DEFAULT),
   bombAmount: null,
+  run_it_twice: DEFAULT_RULES.run_it_twice,
+  rabbit_hunt: DEFAULT_RULES.rabbit_hunt,
   is_private: DEFAULT_RULES.is_private,
 };
 
@@ -141,6 +154,8 @@ export function draftRules(draft: RoomDraft, name: string): Rules {
     // switched on, 0 ("never") is not an answer: checkRules asks for 1 to 1.000
     bomb_pot_every: draft.bombOn ? num(draft.bombEvery) || NaN : 0,
     bomb_pot_amount: draft.bombOn ? num(bombAmountText(draft.bombAmount, draft.big_blind)) : 0,
+    run_it_twice: draft.run_it_twice,
+    rabbit_hunt: draft.rabbit_hunt,
     is_private: draft.is_private,
   };
 }
@@ -219,15 +234,26 @@ export function rulesSummary(r: Rules): [string, string][] {
   ];
 }
 
-export const ruleKeys = ["small_blind", "big_blind", "think_time_seconds", "seven_deuce_bonus", "starting_stack", "ante", "bomb_pot_every", "bomb_pot_amount"] as const;
+export const ruleKeys = [
+  "small_blind",
+  "big_blind",
+  "think_time_seconds",
+  "seven_deuce_bonus",
+  "starting_stack",
+  "ante",
+  "bomb_pot_every",
+  "bomb_pot_amount",
+  "run_it_twice",
+  "rabbit_hunt",
+] as const;
 export type EditableRules = Pick<RoomInfo, (typeof ruleKeys)[number]>;
 
 /** The PATCH body of the owner's rules form: only what changed, so a pending change of another
  *  field (waiting for the next hand) is left alone. Empty = nothing to save. */
 export function changedRules(current: EditableRules, edited: EditableRules): UpdateRoomRequest {
-  const body: UpdateRoomRequest = {};
+  const body: Record<string, number | boolean> = {};
   for (const key of ruleKeys) if (edited[key] !== current[key]) body[key] = edited[key];
-  return body;
+  return body as UpdateRoomRequest;
 }
 
 /** "bomb pot 40 mỗi 5 ván" ("mọi ván" for every hand), or "tắt bomb pot". */
@@ -248,6 +274,8 @@ export function pendingText(pending: UpdateRoomRequest | null | undefined, room:
   if (pending.ante !== undefined) parts.push(pending.ante > 0 ? `ante ${fmt(pending.ante)}` : "tắt ante");
   if (pending.bomb_pot_every !== undefined || pending.bomb_pot_amount !== undefined)
     parts.push(bombText(pending.bomb_pot_every ?? room.bomb_pot_every, pending.bomb_pot_amount ?? room.bomb_pot_amount));
+  if (pending.run_it_twice !== undefined) parts.push(pending.run_it_twice ? "chạy 2 lần khi all-in" : "tắt chạy 2 lần");
+  if (pending.rabbit_hunt !== undefined) parts.push(pending.rabbit_hunt ? "bật xem bài chưa chia" : "tắt xem bài chưa chia");
   if (pending.name !== undefined) parts.push(`tên "${pending.name}"`);
   return parts.length ? `Ván sau: ${parts.join(" · ")}` : null;
 }
