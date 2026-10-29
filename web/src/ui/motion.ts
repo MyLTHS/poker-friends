@@ -18,7 +18,7 @@ export const DURATION = {
   /** a bet flying from a seat to its spot in front of the seat / into the pot */
   chip: 480,
   /** the pot sliding to the winner */
-  collect: 950,
+  collect: 850,
   /** a card turning over */
   flip: 650,
   /** one breath of the "your turn" halo */
@@ -47,7 +47,7 @@ export const STAGGER = {
   /** chips of several players moving at once (bets into the pot) */
   chips: 40,
   /** hands turning over at showdown, in showdown order */
-  showdown: 1100,
+  showdown: 800,
 } as const;
 
 /** A short rest between two steps of one hand (bets gathered, then the board; hands shown, then

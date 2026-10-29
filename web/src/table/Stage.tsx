@@ -252,6 +252,24 @@ function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatV
 /** My cards turn over by themselves this long after they land (the deal takes up to ~3 s). */
 const AUTO_TURN_MS = 5000;
 
+// The hand whose cards I already turned over survives a reload or the phone/desktop switch.
+const OPEN_KEY = "pf.openHand";
+function readOpenHand(): number | null {
+  try {
+    const v = Number(sessionStorage.getItem(OPEN_KEY));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+function keepOpenHand(handId: number | null | undefined) {
+  try {
+    if (handId != null) sessionStorage.setItem(OPEN_KEY, String(handId));
+  } catch {
+    // private mode: the cards just start face down again after a reload
+  }
+}
+
 /** My own seat: big hole cards, wide plate. Desktop stacks cards over the plate; the phone puts
  *  the cards beside the plate (hint above it) at the bottom centre of the stage. */
 function MeSeat({ device, s, hint, clock, handId }: { device: Device; s: SeatView; hint?: ReactNode; clock?: TurnClock; handId?: number | null }) {
@@ -260,10 +278,13 @@ function MeSeat({ device, s, hint, clock, handId }: { device: Device; s: SeatVie
   const d = device === "desktop";
   // My cards land face down and turn over when I touch them, by themselves after a while, or at
   // once when it is my turn. Without a hand id (replays) they are simply face up.
-  const [openFor, setOpenFor] = useState<number | null>(null);
+  const [openFor, setOpenFor] = useState<number | null>(readOpenHand);
   const real = cards.length > 0 && cards.every((c) => c !== "??");
   const open = handId == null || openFor === handId || !real;
-  const turnUp = useCallback(() => setOpenFor(handId ?? null), [handId]);
+  const turnUp = useCallback(() => {
+    setOpenFor(handId ?? null);
+    keepOpenHand(handId);
+  }, [handId]);
   if (!open && s.state === "turn") setOpenFor(handId ?? null);
   useEffect(() => {
     if (open) return;
@@ -277,10 +298,11 @@ function MeSeat({ device, s, hint, clock, handId }: { device: Device; s: SeatVie
       <span
         className={`me-cards${open ? "" : " is-closed"}${premium ? " is-premium" : ""}`}
         data-seat-cards={s.seat}
-        {...(open ? {} : { role: "button", tabIndex: 0, "aria-label": "Lật bài của bạn", onClick: turnUp, onKeyDown: (e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), turnUp()) })}
+        // once open it stays focusable (-1), so a keyboard user's focus is not dropped
+        {...(open ? { tabIndex: -1 } : { role: "button", tabIndex: 0, "aria-label": "Lật bài của bạn", onClick: turnUp, onKeyDown: (e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), turnUp()) })}
       >
         {cards.length > 0 ? (
-          cards.map((c, i) => <FlipCard key={i} card={c} faceUp={open} w={d ? 84 : 54} rotate={i === 0 ? -6 : 6} className={`me-card me-flip-${i}`} />)
+          cards.map((c, i) => <FlipCard key={`${handId ?? "x"}-${i}`} card={c} faceUp={open} w={d ? 84 : 54} rotate={i === 0 ? -6 : 6} className={`me-card me-flip-${i}`} />)
         ) : (
           <span className="me-nocards">{s.state === "folded" ? "Đã bỏ bài" : "Chưa có bài"}</span>
         )}

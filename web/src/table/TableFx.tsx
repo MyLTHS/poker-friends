@@ -33,7 +33,7 @@ export type FxApi = {
 };
 
 /** How long a full house or better holds the table before the pot moves. */
-export const BIG_HAND_MS = 2200;
+export const BIG_HAND_MS = 1800;
 
 /** Centre of an element in stage pixels. */
 function centre(el: Element, stage: Element, device: Device): Pt {
@@ -119,6 +119,21 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
     const fresh = cues.filter((c) => c.id > played.current);
     if (fresh.length === 0) return;
     played.current = fresh.at(-1)!.id;
+    // Cards shown after the hand turn over beside what is still playing.
+    if (fresh.every((c) => c.kind === "reveal")) {
+      for (const c of fresh) {
+        if (c.kind !== "reveal") continue;
+        setUnflipped((u) => new Set(u).add(c.seat));
+        later(60, () =>
+          setUnflipped((u) => {
+            const next = new Set(u);
+            next.delete(c.seat);
+            return next;
+          }),
+        );
+      }
+      return;
+    }
     finishAll();
     const root = stage();
     if (!root || (typeof document !== "undefined" && document.hidden)) return;
@@ -218,6 +233,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
           break;
         }
         case "seven":
+        case "reveal":
           break;
       }
     }
@@ -236,17 +252,19 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
   const done = useCallback((key: number) => setGhosts((all) => all.filter((g) => g.key !== key)), []);
 
   const layerEl = (
-    <div ref={layer} className="fx-layer" aria-hidden>
-      {ghosts.map((gh) => (
-        <GhostPiece key={gh.key} ghost={gh} onDone={done} track={track} />
-      ))}
+    <>
+      <div ref={layer} className="fx-layer" aria-hidden>
+        {ghosts.map((gh) => (
+          <GhostPiece key={gh.key} ghost={gh} onDone={done} track={track} />
+        ))}
+      </div>
       {big && (
         <div key={big.key} className="fx-big" style={{ left: GEO[device].c.x, top: GEO[device].c.y }} role="status">
           <Confetti count={44} spread={1.6} />
           <b className="fx-big-title">{big.title}</b>
         </div>
       )}
-    </div>
+    </>
   );
   return { layer: layerEl, fx: { unflipped } satisfies FxApi };
 }

@@ -400,8 +400,10 @@ function onCardsShown(model: TableModel, message: CardsShownMessage): TableModel
   if (before.some((h) => h.player_id === shown.player_id)) return model;
   const mine = shown.player_id === model.table?.you.player_id;
   const entry: LogEntry = { kind: "reveal", seat: shown.seat, cards: shown.cards };
-  // Someone else's cards turn over where they sit (mine are already face up in front of me).
-  const fx: Cue[] = mine ? [] : [{ kind: "showdown", order: [shown.seat], id: (model.fx.at(-1)?.id ?? 0) + 1 }];
+  // Someone else's cards turn over where they sit (mine are already face up in front of me), as
+  // long as that hand is still the one on the table.
+  const onTable = model.table?.hand?.hand_id === message.hand_id && model.table.hand.complete;
+  const fx: Cue[] = mine || !onTable ? [] : [{ kind: "reveal", seat: shown.seat, id: (model.fx.at(-1)?.id ?? 0) + 1 }];
   return {
     ...model,
     fx: [...model.fx, ...fx].slice(-FX_KEPT),

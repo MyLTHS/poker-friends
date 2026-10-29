@@ -4076,7 +4076,7 @@
     color: #1a1208;
     background: linear-gradient(180deg, var(--brass-2), #b98f45);
     border-color: var(--brass-2);
-    animation: tbl-medal var(--dur-slow) var(--ease-d1-settle) var(--dur-flip) both;
+    animation: tbl-pop var(--dur-slow) var(--ease-d1-settle) var(--dur-flip) both;
   }
 
   /* the winner's seat breathes while the result stands */
@@ -4095,7 +4095,8 @@
   .d1 .fx-big {
     position: absolute;
     translate: -50% -50%;
-    z-index: 2;
+    z-index: 8;
+    pointer-events: none;
     display: grid;
     place-items: center;
   }
@@ -4124,6 +4125,12 @@
     padding: 8px 16px;
   }
 
+  @keyframes tbl-pop {
+    from {
+      opacity: 0;
+      scale: 0.5;
+    }
+  }
   @keyframes tbl-peek {
     50% {
       opacity: 0.55;

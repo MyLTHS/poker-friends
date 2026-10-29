@@ -57,7 +57,7 @@ function WatchCount({ spectators }: { spectators: Spectator[] }) {
   if (spectators.length === 0) return null;
   const names = spectators.map((s) => s.display_name).join(", ");
   return (
-    <span className="tbar-watch" title={`Đang xem: ${names}`} aria-label={`${spectators.length} người đang xem: ${names}`}>
+    <span className="tbar-watch" role="img" title={`Đang xem: ${names}`} aria-label={`${spectators.length} người đang xem: ${names}`}>
       <Eye size={15} strokeWidth={2} aria-hidden />
       {spectators.length}
     </span>

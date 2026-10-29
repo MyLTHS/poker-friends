@@ -27,7 +27,10 @@ export type CueBody =
   /** the 7-2 moment. */
   | { kind: "seven"; seat: number }
   /** a full house or better turned over at the showdown: its own moment before the pot moves. */
-  | { kind: "big"; seat: number; title: string };
+  | { kind: "big"; seat: number; title: string }
+  /** cards one player showed after the hand turn over where they sit; plays beside whatever is
+   *  running (never cuts the end of the hand short). */
+  | { kind: "reveal"; seat: number };
 
 export type Cue = CueBody & { id: number };
 
@@ -81,9 +84,10 @@ export function cuesFor(prev: TableState, event: StateEvent): CueBody[] {
       if (turned.length && !seven_deuce) {
         const order = showdownOrder(hand).filter((s) => turned.includes(s));
         cues.push({ kind: "showdown", order });
-        const big = biggestHand(event.payload.showdown.filter((h) => turned.includes(h.seat)));
-        if (big) cues.push({ kind: "big", seat: big.seat, title: bigHandTitle(big)! });
       }
+      // Any shown hand counts, mine included (my cards were never face down to me).
+      const big = seven_deuce ? null : biggestHand(event.payload.showdown);
+      if (big) cues.push({ kind: "big", seat: big.seat, title: bigHandTitle(big)! });
       // Pots as they stood before the payout (the completed hand reports them emptied). When the
       // last fold already paid them out, each winner's gain stands in for the pot.
       const winners = results.filter((r) => r.hand_net > 0);
