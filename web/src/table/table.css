@@ -4544,3 +4544,25 @@
     letter-spacing: -0.02em;
   }
 }
+
+@layer components {
+  /* asked to stand up / leave during a hand: said on the felt, with a way back */
+  .d1 .leave-pill {
+    pointer-events: auto;
+    border-color: rgba(224, 96, 90, 0.55);
+  }
+  .d1 .leave-undo {
+    margin-left: 4px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--brass-2);
+    background: none;
+    color: var(--brass-2);
+    font: var(--w-strong) var(--fs-xs) / 1.4 var(--text);
+    cursor: pointer;
+  }
+  .d1 .leave-undo:hover,
+  .d1 .leave-undo:focus-visible {
+    background: rgba(232, 207, 146, 0.16);
+  }
+}

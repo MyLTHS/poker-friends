@@ -66,7 +66,9 @@ export function createRoomsApi(
     rotateInvite: (id: number) => request<RoomDetail>("POST", room(id, "invite/")),
     snapshot: (id: number) => request<TableSnapshot>("GET", room(id, "snapshot/")),
     takeSeat: (id: number, seat: number) => request<SeatOccupant>("POST", room(id, "seats/"), { seat }),
-    leaveSeat: (id: number) => request<void>("DELETE", room(id, "seats/me/")),
+    // 204: up at once; 202 {leaving: true}: in the running hand, up when it ends
+    leaveSeat: (id: number) => request<Schemas["LeavingAfterHand"] | undefined>("DELETE", room(id, "seats/me/")),
+    stay: (id: number) => request<SeatOccupant>("POST", room(id, "seats/me/stay/")),
     chat: (id: number) => request<Schemas["ChatHistory"]>("GET", room(id, "chat/")),
     hands: (id: number) => request<Schemas["HandList"]>("GET", room(id, "hands/")),
     summary: (id: number) => request<Schemas["RoomSummary"]>("GET", room(id, "summary/")),

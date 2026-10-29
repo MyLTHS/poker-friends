@@ -271,7 +271,7 @@ describe("my seat", () => {
       ...snapshot,
       payload: { table: { ...snapshot.payload.table, you: { player_id: "9", seat: null } } },
     };
-    const occupant = { seat: 7, player_id: "9", display_name: "Khách", stack: 0, sitting_out: false, connected: true };
+    const occupant = { seat: 7, player_id: "9", display_name: "Khách", stack: 0, sitting_out: false, connected: true, leaving: false };
     const sat: ServerMessage = { ...snapshot, type: "seat.updated", hand_id: null, version: 12, payload: { seat: 7, occupant } };
     let model = run([{ type: "socket.open" }, server(watching), server(sat)]);
     expect(model.table?.you.seat).toBe(7);

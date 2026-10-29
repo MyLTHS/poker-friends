@@ -5,7 +5,7 @@
 // it gets (FitStage). Elements the animations move carry data-* hooks (data-seat-cards, data-bet,
 // data-board, data-av, data-pot); TableFx finds them there.
 import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
-import { Crown, Moon, Plus, Timer, WifiOff } from "lucide-react";
+import { Crown, LogOut, Moon, Plus, Timer, WifiOff } from "lucide-react";
 
 import { Avatar, ChipStack, Confetti, FlipCard, PlayingCard, fmt } from "@/ui";
 
@@ -139,6 +139,14 @@ const Bet = memo(function Bet({ device, s }: { device: Device; s: SeatView }) {
 
 function SeatTag({ s, device, clock }: { s: SeatView; device: Device; clock?: TurnClock }) {
   const ic = device === "desktop" ? 12 : 10;
+  if (s.leaving && s.state !== "turn" && s.state !== "winner") {
+    return (
+      <span className="tag tag-out">
+        <LogOut size={ic} strokeWidth={2.2} />
+        Sắp rời
+      </span>
+    );
+  }
   switch (s.state) {
     case "turn":
       return (
@@ -251,7 +259,7 @@ function SeatPodView({ device, s, cx, clock, turning, onSit }: { device: Device;
         </span>
       </span>
       {/* keyed: a new action or state pops in again */}
-      <SeatTag key={`${s.state}:${s.lastAction ?? ""}`} s={s} device={device} clock={clock} />
+      <SeatTag key={`${s.state}:${s.lastAction ?? ""}:${s.leaving ? 1 : 0}`} s={s} device={device} clock={clock} />
       {s.hand && <span className="seat-hand">{s.hand}</span>}
     </div>
   );

@@ -70,12 +70,12 @@ test("table and room screens: no serious axe findings; the turn is announced; Ta
   await expect(menu).toContainText(/\d+ đang xem/);
   const items = await menu.locator(".tmenu-item").allTextContents();
   const names = items.map((t) => t.trim());
-  expect(names.slice(0, -1)).toEqual(["Nghỉ ván sau", "Bảng chủ phòng", "Nhật ký ván", "Lời / lỗ", "Cài đặt", "Góp ý"]);
-  // dealt into the running hand: "Rời ghế" waits for the hand to end (the server would refuse)
-  expect(names.at(-1)).toMatch(/^Rời ghế/);
-  const leaveItem = menu.getByRole("button", { name: /^Rời ghế/ });
-  if ((names.at(-1) ?? "").includes("hết ván")) await expect(leaveItem).toBeDisabled();
-  else await expect(leaveItem).toBeEnabled();
+  // the owner's room deals (the E2E server starts rooms running): "Tạm dừng" comes first
+  expect(names.slice(0, -2)).toEqual(["Nghỉ ván sau", "Tạm dừng (hết ván này)", "Bảng chủ phòng", "Nhật ký ván", "Lời / lỗ", "Cài đặt", "Góp ý"]);
+  // dealt into the running hand, standing up or leaving waits for the hand to end
+  expect(names.at(-2)).toMatch(/^Đứng dậy xem/);
+  expect(names.at(-1)).toMatch(/^Rời phòng/);
+  await expect(menu.getByRole("button", { name: /^Đứng dậy xem/ })).toBeEnabled();
   await expect(menu.getByRole("link", { name: "Lời / lỗ" })).toHaveAttribute("href", `/rooms/${id}/history`);
   await settled(owner.page);
   await audit(owner.page, "menu bàn");

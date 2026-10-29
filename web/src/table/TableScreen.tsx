@@ -9,8 +9,9 @@
 import "./table.css";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bomb, Coins, Crown, Eye, Hourglass, Play } from "lucide-react";
+import { Bomb, Coins, Crown, Eye, Hourglass, LogOut, Play } from "lucide-react";
 
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
 import { FeedbackDialog } from "@/feedback/FeedbackDialog";
@@ -73,6 +74,8 @@ export type TableScreenProps = {
   onTakeSeat?: (seat: number) => Promise<string | null>;
   /** Leave my seat (keep watching). */
   onLeaveSeat?: () => Promise<string | null>;
+  /** Take back a leave asked during a hand (POST seats/me/stay/); resolves with an error text, or null. */
+  onStay?: () => Promise<string | null>;
   /** Out of chips: take the room's starting stack again ("Mua thêm"); resolves with an error text, or null. */
   onRebuy?: () => Promise<string | null>;
   /** Room owner: renders the owner's sheet (rooms/OwnerPanel) over the table. */
@@ -104,6 +107,7 @@ export function TableScreen({
   loadChat,
   onTakeSeat,
   onLeaveSeat,
+  onStay,
   onRebuy,
   owner,
   invite,
@@ -120,6 +124,13 @@ export function TableScreen({
   const [seatError, setSeatError] = useState<string | null>(null);
   const [rebuying, setRebuying] = useState(false);
   const [controlBusy, setControlBusy] = useState(false);
+  // "Rời phòng" pressed: once my seat is free (now, or when the running hand ends), back to the lobby.
+  const [exiting, setExiting] = useState(false);
+  const router = useRouter();
+  const seatedNow = !!model.table?.seats.some((s) => s.player_id === model.table?.you.player_id);
+  useEffect(() => {
+    if (exiting && !seatedNow) router.push(backHref);
+  }, [exiting, seatedNow, router, backHref]);
   // One sheet or dialog at a time: picking a menu item swaps the menu for what it opens.
   const [dialog, setDialog] = useState<"menu" | "log" | "owner" | "invite" | "settings" | "help" | "feedback" | null>(startWithInvite && invite ? "invite" : null);
   const sound = useTableSound();
@@ -281,7 +292,24 @@ export function TableScreen({
     if (!onTakeSeat) return;
     setSeatError(await onTakeSeat(seat));
   };
+  // Standing up during a hand waits for its end (the server answers 202 and marks the seat leaving).
   const leave = onLeaveSeat && isSeated ? async () => setSeatError(await onLeaveSeat()) : undefined;
+  const exitRoom = async () => {
+    setExiting(true);
+    if (!isSeated || !onLeaveSeat) return;
+    const error = await onLeaveSeat();
+    if (error) {
+      setExiting(false);
+      setSeatError(error);
+    }
+  };
+  const stay =
+    onStay && occupant?.leaving
+      ? async () => {
+          setExiting(false);
+          setSeatError(await onStay());
+        }
+      : undefined;
   const toggleSit = () => dispatch({ type: "sit", out: !sittingOut, commandId: newCommandId() });
   const menuItems: TableMenuItems = {
     watchers: model.spectators.length,
@@ -291,7 +319,8 @@ export function TableScreen({
     historyHref,
     onSettings: () => setDialog("settings"),
     onFeedback: () => setDialog("feedback"),
-    leave: leave && { onLeave: leave, busy: !!hand && !hand.complete && hand.players.some((p) => p.player_id === you.player_id) },
+    leave: leave && { onLeave: leave, afterHand: !!hand && !hand.complete && hand.players.some((p) => p.player_id === you.player_id), leaving: !!occupant?.leaving, onStay: stay },
+    onExit: exitRoom,
     control: toggleRunning && { running, busy: controlBusy || !online, onToggle: toggleRunning },
   };
   const menu = { open: dialog === "menu", onOpen: () => setDialog("menu") };
@@ -372,6 +401,19 @@ export function TableScreen({
           busy={controlBusy}
           online={online}
         />
+      )}
+      {occupant?.leaving && (
+        <div className="watch-pill leave-pill" role="status">
+          <LogOut size={device === "desktop" ? 15 : 12} strokeWidth={2} aria-hidden />
+          <span>
+            <b>{exiting ? "Bạn sẽ rời phòng" : "Bạn sẽ đứng dậy"}</b> khi hết ván này
+          </span>
+          {stay && (
+            <button type="button" className="leave-undo" onClick={stay}>
+              Huỷ
+            </button>
+          )}
+        </div>
       )}
       {!isSeated && !celebration && (
         <div className="watch-pill" role="status">
@@ -657,7 +699,7 @@ export function TableScreen({
           </>
         }
         right={
-          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} />
+          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} onExit={occupant?.leaving ? undefined : exitRoom} />
         }
       />
       <div className={`table-area${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`} {...probe}>

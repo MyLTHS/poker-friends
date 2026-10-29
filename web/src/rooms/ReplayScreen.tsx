@@ -70,6 +70,7 @@ function tableAt(replay: HandReplay, hand: HandView, me: string | null, roomName
       stack: p.stack,
       sitting_out: false,
       connected: true,
+      leaving: false,
     })),
     hand,
     turn: null,

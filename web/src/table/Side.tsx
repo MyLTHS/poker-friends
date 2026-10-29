@@ -75,11 +75,17 @@ function SoundButton({ sound, size }: { sound: SoundToggle; size: number }) {
   );
 }
 
-export function TableTools({ onInvite, menu, spectators = [], sound }: { onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[]; sound?: SoundToggle }) {
+export function TableTools({ onInvite, menu, spectators = [], sound, onExit }: { onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[]; sound?: SoundToggle; onExit?: () => void }) {
   return (
     <>
       <WatchCount spectators={spectators} />
       {sound && <SoundButton sound={sound} size={19} />}
+      {onExit && (
+        <button type="button" className="tbar-btn is-quiet" onClick={onExit}>
+          <LogOut size={15} strokeWidth={1.9} aria-hidden />
+          <span className="tbar-label">Rời phòng</span>
+        </button>
+      )}
       {onInvite && (
         <button type="button" className="tbar-btn" aria-haspopup="dialog" aria-label="Mời bạn" onClick={onInvite}>
           <UserPlus size={15} strokeWidth={1.9} aria-hidden />
@@ -118,9 +124,11 @@ export type TableMenuItems = {
   /** sound, keys, feedback (TableSettings) */
   onSettings: () => void;
   onFeedback?: () => void;
-  /** seated: leave the seat and keep watching (`busy`: dealt into the running hand, which the
-   *  server refuses until it ends, folded or not) */
-  leave?: { onLeave: () => void; busy: boolean };
+  /** seated: stand up and keep watching. Dealt into the running hand (`afterHand`), the seat is
+   *  freed when it ends; `leaving` = already asked, `onStay` takes it back. */
+  leave?: { onLeave: () => void; afterHand: boolean; leaving: boolean; onStay?: () => void };
+  /** leave the room: the seat first (after the running hand), then back to the lobby */
+  onExit?: () => void;
   /** room owner: start dealing, or stop after the running hand */
   control?: { running: boolean; busy: boolean; onToggle: () => void };
 };
@@ -128,7 +136,7 @@ export type TableMenuItems = {
 /** The table's menu: a narrow sheet of plain buttons. Picking one closes the menu first, so a
  *  dialog it opens (settings, owner's sheet…) gives the focus back to the ☰ button. */
 export function TableMenu({ open, onClose, items }: { open: boolean; onClose: () => void; items: TableMenuItems }) {
-  const { watchers, sit, onOwner, onLog, historyHref, onSettings, onFeedback, leave, control } = items;
+  const { watchers, sit, onOwner, onLog, historyHref, onSettings, onFeedback, leave, onExit, control } = items;
   const pick = (run: () => void) => () => {
     onClose();
     run();
@@ -181,9 +189,21 @@ export function TableMenu({ open, onClose, items }: { open: boolean; onClose: ()
             Góp ý
           </MenuItem>
         )}
-        {leave && (
-          <MenuItem icon={<LogOut size={18} strokeWidth={1.9} />} onClick={pick(leave.onLeave)} disabled={leave.busy} quiet>
-            {leave.busy ? "Rời ghế · hết ván mới rời được" : "Rời ghế"}
+        {leave &&
+          (leave.leaving ? (
+            leave.onStay && (
+              <MenuItem icon={<Coffee size={18} strokeWidth={1.9} />} onClick={pick(leave.onStay)}>
+                Ở lại bàn (huỷ đứng dậy)
+              </MenuItem>
+            )
+          ) : (
+            <MenuItem icon={<Eye size={18} strokeWidth={1.9} />} onClick={pick(leave.onLeave)} quiet>
+              {leave.afterHand ? "Đứng dậy xem · sau ván này" : "Đứng dậy xem"}
+            </MenuItem>
+          ))}
+        {onExit && (
+          <MenuItem icon={<LogOut size={18} strokeWidth={1.9} />} onClick={pick(onExit)} quiet>
+            {leave?.afterHand && !leave.leaving ? "Rời phòng · sau ván này" : "Rời phòng"}
           </MenuItem>
         )}
       </ul>

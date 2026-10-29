@@ -29,6 +29,8 @@ export type SeatView = {
   blind?: "SB" | "BB";
   /** Lost the connection: drawn as a flag on the avatar whatever the state. */
   offline?: boolean;
+  /** Asked to leave during the hand: stands up when it ends. */
+  leaving?: boolean;
   lastAction?: string;
   /** Name of the hand shown at the showdown ("Thùng già A"). */
   hand?: string;
@@ -198,6 +200,7 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
       isButton: !!hand && hand.button_seat === seat,
       blind: blinds?.sb === seat ? "SB" : blinds?.bb === seat ? "BB" : undefined,
       offline: !occupant.connected,
+      leaving: occupant.leaving,
       lastAction,
       hand: handNames[seat],
       delta: result && net !== 0 ? { text: signed(net), kind: net > 0 ? "gain" : "loss" } : undefined,
