@@ -153,6 +153,8 @@ ROOM_SETTINGS = (
     "ante",
     "bomb_pot_every",
     "bomb_pot_amount",
+    "run_it_twice",
+    "rabbit_hunt",
 )
 KICKED_CLOSE_CODE = 4403
 BOMB_POT_NEEDS_AMOUNT = "bomb_pot_amount must be above 0 while bomb_pot_every is on"
@@ -189,6 +191,10 @@ class TableActor:
         self._audience: list[dict[str, str]] = []  # last spectator list sent (B8)
         self._pausing = False  # between two hands, waiting for next_hand_delay
         self._closers: set[asyncio.Task] = set()  # see _drop_full
+        # The last finished hand, whose players may show their cards until the next hand
+        # starts (command.show_cards), and what was shown. In memory only: lost on a restart.
+        self._last_hand: tuple[int, HandEngine] | None = None
+        self._shown: list[dict[str, Any]] = []
         self._task = asyncio.create_task(self._run())
 
     # ---- public: called from consumers/views, never touches the engine directly -----------
@@ -387,6 +393,7 @@ class TableActor:
             "command.act": self._act,
             "command.sit_out": self._sit_out,
             "command.sit_in": self._sit_in,
+            "command.show_cards": self._show_cards,
         }[kind]
         result_version = self.version + 1  # the first state event this command would cause
         try:
@@ -468,6 +475,29 @@ class TableActor:
             sitting_out=True
         )
         await self._seat_updated(self._seat_of(player_id))
+
+    async def _show_cards(self, player_id: str, message: dict[str, Any]) -> None:
+        """A player of the last finished hand shows their two cards to the whole table, until
+        the next hand starts. Stored with the hand (Hand.shown_cards) for its history."""
+        if self.hand is not None and message["hand_id"] == self.hand.pk:
+            raise Reject("hand_in_progress", "Show your cards once the hand is over.")
+        if self._last_hand is None or message["hand_id"] != self._last_hand[0]:
+            raise Reject("stale_hand", "Only the last hand, until the next one starts.")
+        hand_pk, engine = self._last_hand
+        if any(shown["player_id"] == player_id for shown in self._shown):
+            raise Reject("already_shown")
+        try:
+            cards = engine.cards_to_show(player_id)
+        except IllegalAction as error:
+            raise Reject(error.code, str(error)) from None
+        shown = {"player_id": player_id, "seat": engine.seat_of(player_id), "cards": cards}
+        try:
+            await Hand.objects.filter(pk=hand_pk).aupdate(shown_cards=[*self._shown, shown])
+        except Exception as error:  # nothing changed yet: the same command can be sent again
+            log.exception("room %s: storing shown cards of hand %s failed", self.room.pk, hand_pk)
+            raise Reject("internal_error", "Not saved; send it again.") from error
+        self._shown.append(shown)
+        await self._broadcast("cards.shown", lambda viewer: shown, hand_id=hand_pk)
 
     async def _sit_in(self, player_id: str, message: dict[str, Any]) -> None:
         if player_id not in self.session.seats.values():
@@ -571,6 +601,7 @@ class TableActor:
             self.session.hand_no -= 1
             self.session._button_seat = previous_button
             raise
+        self._last_hand, self._shown = None, []  # too late to show the previous hand's cards
         await self._broadcast("hand.started", lambda viewer: {"hand": self._hand_view(viewer)})
         await self._schedule_turn()
 
@@ -645,7 +676,8 @@ class TableActor:
             return {"hand_id": hand_pk, "hand_no": hand_no, **engine.view_for(seated)}
 
         results, seven_deuce = _settlement_payload(engine, new_entries, self.session, self)
-        showdown = engine.showdown_hands()
+        showdown, runouts, rabbit = engine.showdown_hands(), engine.runouts(), engine.rabbit_cards()
+        self._last_hand, self._shown = (hand_pk, engine), []
         await self._broadcast(
             "hand.completed",
             lambda viewer: {
@@ -653,6 +685,8 @@ class TableActor:
                 "results": results,
                 "seven_deuce": seven_deuce,
                 "showdown": showdown,
+                "runouts": runouts,
+                "rabbit_cards": rabbit,
             },
             hand_id=hand_pk,
         )
@@ -928,6 +962,8 @@ class TableActor:
             "ante": self.room.ante,
             "bomb_pot_every": self.room.bomb_pot_every,
             "bomb_pot_amount": self.room.bomb_pot_amount,
+            "run_it_twice": self.room.run_it_twice,
+            "rabbit_hunt": self.room.rabbit_hunt,
         }
 
     def _occupant(self, seat: int) -> dict[str, Any] | None:

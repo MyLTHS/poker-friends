@@ -103,6 +103,8 @@ SETTING_RULES = {
     "ante": (int, 0, MAX_STARTING_STACK),
     "bomb_pot_every": (int, 0, 1000),
     "bomb_pot_amount": (int, 0, MAX_STARTING_STACK),
+    "run_it_twice": (bool, None, None),
+    "rabbit_hunt": (bool, None, None),
     "is_private": (bool, None, None),
 }
 
@@ -182,6 +184,8 @@ def room_info(room: Room) -> dict[str, Any]:
         "ante": room.ante,
         "bomb_pot_every": room.bomb_pot_every,
         "bomb_pot_amount": room.bomb_pot_amount,
+        "run_it_twice": room.run_it_twice,
+        "rabbit_hunt": room.rabbit_hunt,
     }
 
 

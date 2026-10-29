@@ -12,7 +12,9 @@
     "starting_stack": 1000,
     "ante": 0,
     "bomb_pot_every": 0,
-    "bomb_pot_amount": 0
+    "bomb_pot_amount": 0,
+    "run_it_twice": false,
+    "rabbit_hunt": true
   },
   "players": [
     {

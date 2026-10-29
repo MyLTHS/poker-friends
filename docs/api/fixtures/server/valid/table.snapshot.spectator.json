@@ -19,7 +19,9 @@
         "starting_stack": 1000,
         "ante": 0,
         "bomb_pot_every": 0,
-        "bomb_pot_amount": 0
+        "bomb_pot_amount": 0,
+        "run_it_twice": false,
+        "rabbit_hunt": true
       },
       "you": {
         "player_id": "4",
@@ -64,6 +66,7 @@
           "8d",
           "Jc"
         ],
+        "second_board": null,
         "pots": [
           {
             "amount": 65,

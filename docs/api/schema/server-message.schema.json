@@ -19,6 +19,9 @@
       "$ref": "messages/hand.completed.schema.json"
     },
     {
+      "$ref": "messages/cards.shown.schema.json"
+    },
+    {
       "$ref": "messages/seat.updated.schema.json"
     },
     {

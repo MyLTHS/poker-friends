@@ -3,6 +3,7 @@
 python -m apps.games.engine.simulate --hands 5000 --players 9
 python -m apps.games.engine.simulate --hands 2000 --players 2 --seven-deuce-bonus 150
 python -m apps.games.engine.simulate --hands 2000 --players 6 --ante 1 --bomb-pot-every 5
+python -m apps.games.engine.simulate --hands 2000 --players 4 --run-it-twice
 """
 
 import argparse
@@ -21,6 +22,7 @@ class SimulationReport:
     hands_played: int = 0
     actions: int = 0
     seven_deuce_hands: int = 0  # hands that paid the 7-2 bonus
+    ran_twice_hands: int = 0  # hands whose board was dealt twice
     violations: list[str] = field(default_factory=list)
 
 
@@ -64,6 +66,8 @@ def run_simulation(
     ante: int = 0,
     bomb_pot_every: int = 0,
     bomb_pot_amount: int = 10,
+    run_it_twice: bool = False,
+    rabbit_hunt: bool = False,
 ) -> SimulationReport:
     rng = random.Random(seed)
     table = TableSession(
@@ -74,6 +78,8 @@ def run_simulation(
         ante=ante,
         bomb_pot_every=bomb_pot_every,
         bomb_pot_amount=bomb_pot_amount,
+        run_it_twice=run_it_twice,
+        rabbit_hunt=rabbit_hunt,
     )
     ids = [f"P{i}" for i in range(1, players + 1)]
     for player, seat in zip(ids, rng.sample(range(1, 10), players), strict=True):
@@ -101,6 +107,14 @@ def run_simulation(
             report.violations.append(f"hand {hand_no}: replay result differs")
         if replayed.view_for(None) != hand.view_for(None):
             report.violations.append(f"hand {hand_no}: replay view differs")
+        if replayed.runouts() != hand.runouts():
+            report.violations.append(f"hand {hand_no}: replay runouts differ")
+        if hand.ran_twice:
+            report.ran_twice_hands += 1
+            # Each pot is halved, an odd chip to the first board: at most one chip per pot apart.
+            first, second = (sum(w["amount"] for w in r["winners"]) for r in hand.runouts())
+            if not 0 <= first - second < len(hand.player_order):
+                report.violations.append(f"hand {hand_no}: boards paid {first} and {second}")
 
         ledger_before = len(table.ledger)
         table.finish_hand()
@@ -123,6 +137,7 @@ def main() -> None:
     parser.add_argument("--ante", type=int, default=0)
     parser.add_argument("--bomb-pot-every", type=int, default=0)
     parser.add_argument("--bomb-pot-amount", type=int, default=10)
+    parser.add_argument("--run-it-twice", action="store_true")
     args = parser.parse_args()
 
     started = time.perf_counter()
@@ -134,6 +149,7 @@ def main() -> None:
         ante=args.ante,
         bomb_pot_every=args.bomb_pot_every,
         bomb_pot_amount=args.bomb_pot_amount,
+        run_it_twice=args.run_it_twice,
     )
     elapsed = time.perf_counter() - started
     print(

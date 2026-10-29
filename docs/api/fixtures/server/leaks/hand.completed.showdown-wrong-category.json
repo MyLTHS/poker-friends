@@ -21,6 +21,7 @@
         "Jh",
         "6h"
       ],
+      "second_board": null,
       "pots": [
         {
           "amount": 0,
@@ -75,6 +76,7 @@
       {
         "player_id": "2",
         "seat": 3,
+        "board": 1,
         "category": "two_pair",
         "cards": [
           "Ac",
@@ -84,6 +86,8 @@
           "7d"
         ]
       }
-    ]
+    ],
+    "runouts": null,
+    "rabbit_cards": []
   }
 }

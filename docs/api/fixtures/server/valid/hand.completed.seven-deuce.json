@@ -19,6 +19,7 @@
         "8d",
         "Jc"
       ],
+      "second_board": null,
       "pots": [
         {
           "amount": 0,
@@ -105,6 +106,11 @@
       ],
       "total": 100
     },
-    "showdown": []
+    "showdown": [],
+    "runouts": null,
+    "rabbit_cards": [
+      "Td",
+      "6c"
+    ]
   }
 }

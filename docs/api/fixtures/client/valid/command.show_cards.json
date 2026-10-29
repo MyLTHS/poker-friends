@@ -1,0 +1,8 @@
+{
+  "protocol_version": 1,
+  "type": "command.show_cards",
+  "room_id": 1,
+  "hand_id": 41,
+  "command_id": "9a1f4c2e-6b3d-4e8a-b7c5-1d2e3f4a5b6c",
+  "payload": {}
+}

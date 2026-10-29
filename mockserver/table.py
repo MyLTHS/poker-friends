@@ -77,7 +77,17 @@ class MockTable:
             self.room["big_blind"],
             max_seats=self.room["max_seats"],
             shuffle=shuffle,
-            seven_deuce_bonus=self.room["seven_deuce_bonus"],
+            **{
+                rule: self.room[rule]
+                for rule in (
+                    "seven_deuce_bonus",
+                    "ante",
+                    "bomb_pot_every",
+                    "bomb_pot_amount",
+                    "run_it_twice",
+                    "rabbit_hunt",
+                )
+            },
         )
         for player in scenario["players"]:
             self.session.take_seat(player["player_id"], player["seat"])
@@ -91,6 +101,9 @@ class MockTable:
         # sit-out/sit-in, which only this process remembers (lost on restart).
         # Value: (what was asked, version of the first event it caused).
         self._applied: dict[tuple[int | None, str], tuple[tuple, int]] = {}
+        # The last finished hand and the cards shown since (command.show_cards).
+        self._last_hand: tuple[int, HandEngine] | None = None
+        self._shown: list[dict[str, Any]] = []
         self._script: dict[str, list[str]] = {}  # bot moves left for the running hand
         self._turn_started = 0.0
         self._deadline: float | None = None
@@ -165,6 +178,7 @@ class MockTable:
             "command.act": self._act,
             "command.sit_out": self._sit_out,
             "command.sit_in": self._sit_in,
+            "command.show_cards": self._show_cards,
         }[message["type"]]
         result_version = self.version + 1  # the first state event the command causes
         try:
@@ -198,6 +212,22 @@ class MockTable:
             raise Reject("already_sitting_out")
         self.session.sit_out(player_id)
         return self._seat_updated(self._seat_of(player_id))
+
+    def _show_cards(self, player_id: str, message: dict[str, Any]) -> list[Outbound]:
+        if self.session.current_hand is not None and message["hand_id"] == self._hand_id():
+            raise Reject("hand_in_progress")
+        if self._last_hand is None or message["hand_id"] != self._last_hand[0]:
+            raise Reject("stale_hand")
+        hand_id, hand = self._last_hand
+        if any(shown["player_id"] == player_id for shown in self._shown):
+            raise Reject("already_shown")
+        try:
+            cards = hand.cards_to_show(player_id)
+        except IllegalAction as error:
+            raise Reject(error.code, str(error)) from None
+        shown = {"player_id": player_id, "seat": hand.seat_of(player_id), "cards": cards}
+        self._shown.append(shown)
+        return self._broadcast("cards.shown", lambda viewer: shown, hand_id=hand_id)
 
     def _sit_in(self, player_id: str, message: dict[str, Any]) -> list[Outbound]:
         if player_id not in self.session.seats.values():
@@ -238,6 +268,7 @@ class MockTable:
             player: list(moves)
             for player, moves in self.bot_script.get(str(self.session.hand_no), {}).items()
         }
+        self._last_hand, self._shown = None, []
         out = self._broadcast("hand.started", lambda viewer: {"hand": self._hand_view(viewer)})
         return out + self._turn()
 
@@ -326,6 +357,7 @@ class MockTable:
                 "payments": payments,
                 "total": sum(p["amount"] for p in payments),
             }
+        self._last_hand, self._shown = (hand_id, hand), []
         return self._broadcast(
             "hand.completed",
             lambda viewer: {
@@ -333,6 +365,8 @@ class MockTable:
                 "results": results,
                 "seven_deuce": seven_deuce,
                 "showdown": showdown,
+                "runouts": hand.runouts(),
+                "rabbit_cards": hand.rabbit_cards(),
             },
             hand_id=hand_id,
         )

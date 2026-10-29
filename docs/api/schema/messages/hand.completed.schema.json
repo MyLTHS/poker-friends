@@ -52,13 +52,40 @@
             "$ref": "../common.schema.json#/$defs/ShowdownHand"
           },
           "maxItems": 9
+        },
+        "runouts": {
+          "description": "Both boards of a hand run twice, each with what it paid; null otherwise.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "../common.schema.json#/$defs/Runout"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rabbit_cards": {
+          "description": "Rabbit hunt (room.rabbit_hunt): for a hand over before the river, the board cards that would have come next, in order, burns skipped. Only to look at, no chips move; [] otherwise. Never sent before the hand is over.",
+          "type": "array",
+          "items": {
+            "$ref": "../common.schema.json#/$defs/Card"
+          },
+          "maxItems": 5,
+          "uniqueItems": true
         }
       },
       "required": [
         "hand",
         "results",
         "seven_deuce",
-        "showdown"
+        "showdown",
+        "runouts",
+        "rabbit_cards"
       ],
       "additionalProperties": false
     }

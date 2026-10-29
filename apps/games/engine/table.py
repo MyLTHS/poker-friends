@@ -52,6 +52,8 @@ class TableSession:
         ante: int = 0,
         bomb_pot_every: int = 0,
         bomb_pot_amount: int = 0,
+        run_it_twice: bool = False,
+        rabbit_hunt: bool = False,
     ):
         self.small_blind = small_blind
         self.big_blind = big_blind
@@ -61,6 +63,8 @@ class TableSession:
         # Every bomb_pot_every-th hand of the room (by hand number) is a bomb pot; 0 = never.
         self.bomb_pot_every = bomb_pot_every
         self.bomb_pot_amount = bomb_pot_amount
+        self.run_it_twice = run_it_twice
+        self.rabbit_hunt = rabbit_hunt
         self._shuffle = shuffle
         self.seats: dict[int, str] = {}
         self.sitting_out: set[str] = set()
@@ -163,6 +167,8 @@ class TableSession:
                 seven_deuce_bonus=self.seven_deuce_bonus,
                 ante=0 if bomb else self.ante,
                 bomb_pot=self.bomb_pot_amount if bomb else 0,
+                run_it_twice=self.run_it_twice,
+                rabbit_hunt=self.rabbit_hunt,
             )
         )
         return self.current_hand

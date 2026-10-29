@@ -30,6 +30,7 @@ class Command(BaseCommand):
         parser.add_argument("--ante", type=int, default=0)
         parser.add_argument("--bomb-pot-every", type=int, default=0)
         parser.add_argument("--bomb-pot-amount", type=int, default=0)
+        parser.add_argument("--run-it-twice", action="store_true")
         parser.add_argument("--seed", type=int, default=0)
         parser.add_argument(
             "--leave-unfinished",
@@ -53,6 +54,7 @@ class Command(BaseCommand):
                 ante=options["ante"],
                 bomb_pot_every=options["bomb_pot_every"],
                 bomb_pot_amount=options["bomb_pot_amount"],
+                run_it_twice=options["run_it_twice"],
             )
             session = TableSession(
                 room.small_blind,

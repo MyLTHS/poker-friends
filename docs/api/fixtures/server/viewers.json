@@ -5,6 +5,7 @@
     "action.applied.timeout-fold": "2",
     "action.applied.with-legal-actions": "3",
     "audience.updated": "1",
+    "cards.shown": "1",
     "chat.message": "1",
     "command.ack": "1",
     "command.ack.duplicate": "1",

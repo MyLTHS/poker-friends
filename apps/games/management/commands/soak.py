@@ -288,6 +288,7 @@ class Command(BaseCommand):
         parser.add_argument("--ante", type=int, default=0)
         parser.add_argument("--bomb-pot-every", type=int, default=0)
         parser.add_argument("--bomb-pot-amount", type=int, default=0)
+        parser.add_argument("--run-it-twice", action="store_true")
         parser.add_argument("--reconnect", type=float, default=0.01, help="chance per message")
         parser.add_argument("--slow", type=float, default=0.03, help="chance to time out a turn")
         parser.add_argument("--seed", default="soak")
@@ -304,6 +305,7 @@ class Command(BaseCommand):
             ante=options["ante"],
             bomb_pot_every=options["bomb_pot_every"],
             bomb_pot_amount=options["bomb_pot_amount"],
+            run_it_twice=options["run_it_twice"],
         )
         seated = seat_guest_players(room, options["players"], options["chips"])
         options["room_id"] = room.pk

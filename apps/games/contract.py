@@ -28,6 +28,7 @@ MESSAGE_TYPES: dict[Direction, list[str]] = {
         "action.applied",
         "turn.deadline",
         "hand.completed",
+        "cards.shown",
         "seat.updated",
         "room.suspended",
         "room.updated",
@@ -37,7 +38,14 @@ MESSAGE_TYPES: dict[Direction, list[str]] = {
         "command.rejected",
         "protocol.error",
     ],
-    "client": ["command.act", "command.sit_out", "command.sit_in", "resync.request", "chat.send"],
+    "client": [
+        "command.act",
+        "command.sit_out",
+        "command.sit_in",
+        "command.show_cards",
+        "resync.request",
+        "chat.send",
+    ],
 }
 
 # Server messages that change the room and add 1 to its version; every other server message
@@ -48,6 +56,7 @@ STATE_EVENTS = frozenset(
         "action.applied",
         "turn.deadline",
         "hand.completed",
+        "cards.shown",
         "seat.updated",
         "room.suspended",
         "room.updated",
@@ -141,6 +150,17 @@ def hand_view_errors(hand: dict[str, Any], viewer: str) -> list[str]:
     found = []
     complete = hand["complete"]
     seen: list[str] = list(hand["board"])
+    second = hand["second_board"]
+    if second is not None:
+        if not complete or len(hand["board"]) != 5 or len(second) != 5:
+            found.append("hand/second_board: only a complete hand run twice, both boards full")
+        else:
+            shared = 0
+            while shared < 5 and second[shared] == hand["board"][shared]:
+                shared += 1
+            if shared == 5:
+                found.append("hand/second_board: the second board is the first one again")
+            seen += second[shared:]  # the cards dealt before the all-in are on both boards
     for player in hand["players"]:
         pid, cards = player["player_id"], player["cards"]
         where = f"hand/players/{pid}"
@@ -256,17 +276,22 @@ def _showdown_errors(payload: dict[str, Any], viewer: str) -> list[str]:
     found = []
     hand, showdown = payload["hand"], payload["showdown"]
     players = {p["player_id"]: p for p in hand["players"]}
+    boards = {1: hand["board"], 2: hand["second_board"]}
     if showdown and payload["seven_deuce"] is not None:
         found.append("showdown: a 7-2 bluff is won by folds, there is no showdown")
     if showdown and len(hand["board"]) != 5:
         found.append("showdown: a showdown needs the whole board")
-    named = [entry["player_id"] for entry in showdown]
+    named = [(entry["board"], entry["player_id"]) for entry in showdown]
     if len(set(named)) != len(named):
-        found.append("showdown: a player is named twice")
+        found.append("showdown: a player is named twice on one board")
     for entry in showdown:
         pid = entry["player_id"]
         player = players.get(pid)
-        where = f"showdown/{pid}"
+        board = boards.get(entry["board"]) or []
+        where = f"showdown/{entry['board']}/{pid}"
+        if not board:
+            found.append(f"{where}: there is no such board")
+            continue
         if (
             player is None
             or not player["in_hand"]
@@ -277,15 +302,41 @@ def _showdown_errors(payload: dict[str, Any], viewer: str) -> list[str]:
             continue
         if entry["seat"] != player["seat"]:
             found.append(f"{where}: seat does not match the hand")
-        if not set(entry["cards"]) <= set(player["cards"]) | set(hand["board"]):
+        if not set(entry["cards"]) <= set(player["cards"]) | set(board):
             found.append(f"{where}: cards are not the player's shown cards and the board")
-        elif len(hand["board"]) == 5:
-            found += _made_hand_errors(entry, player["cards"], hand["board"])
+        elif len(board) == 5:
+            found += _made_hand_errors(entry, player["cards"], board)
     if payload["seven_deuce"] is None:
         for pid, player in players.items():
             shown = player["cards"] and HIDDEN not in player["cards"]
-            if pid != viewer and shown and pid not in named:
+            if pid != viewer and shown and pid not in {p for _, p in named}:
                 found.append(f"showdown: {pid}'s cards are shown without a hand name")
+    return found
+
+
+def _runout_errors(payload: dict[str, Any]) -> list[str]:
+    """A hand run twice lists both boards and what each paid; rabbit cards only for a hand
+    over before the river, never a card anyone already saw."""
+    found = []
+    hand, runouts, rabbit = payload["hand"], payload["runouts"], payload["rabbit_cards"]
+    second = hand["second_board"]
+    if (runouts is None) != (second is None):
+        found.append("runouts: only, and always, for a hand run twice")
+    elif runouts is not None:
+        if [r["board"] for r in runouts] != [hand["board"], second]:
+            found.append("runouts: the boards are not the hand's two boards")
+        in_hand = {p["player_id"] for p in hand["players"] if p["in_hand"]}
+        for i, runout in enumerate(runouts, 1):
+            if any(w["player_id"] not in in_hand for w in runout["winners"]):
+                found.append(f"runouts/{i}: pays a player who is not in the hand")
+    if rabbit:
+        if second is not None or len(hand["board"]) + len(rabbit) != 5:
+            found.append("rabbit_cards: only the cards a board over before the river is missing")
+        seen = set(hand["board"])
+        for player in hand["players"]:
+            seen |= {card for card in player["cards"] if card != HIDDEN}
+        if seen & set(rabbit):
+            found.append("rabbit_cards: a card that was already dealt")
     return found
 
 
@@ -319,6 +370,7 @@ def semantic_errors(message: dict[str, Any], viewer: str) -> list[str]:
             if message["type"] == "hand.completed":
                 found += _settlement_errors(payload)
                 found += _showdown_errors(payload, viewer)
+                found += _runout_errors(payload)
     return found
 
 
