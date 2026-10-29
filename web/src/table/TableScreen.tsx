@@ -210,6 +210,8 @@ export function TableScreen({
 
   const dismissNotice = useCallback(() => dispatch({ type: "dismiss.notice" }), [dispatch]);
   const onAct = useCallback((kind: ActKind, amount?: number) => dispatch({ type: "act", kind, amount, commandId: newCommandId() }), [dispatch]);
+  // The amount of my last raise for this decision: a refused raise brings the bar back with it.
+  const [lastRaise, setLastRaise] = useState<{ key: string; amount: number } | null>(null);
   const say = useCallback((text: string) => dispatch({ type: "chat.send", text }), [dispatch]);
   const showCards = useCallback(() => dispatch({ type: "show", commandId: newCommandId() }), [dispatch]);
 
@@ -295,8 +297,9 @@ export function TableScreen({
   // Standing up during a hand waits for its end (the server answers 202 and marks the seat leaving).
   const leave = onLeaveSeat && isSeated ? async () => setSeatError(await onLeaveSeat()) : undefined;
   const exitRoom = async () => {
+    if (!onLeaveSeat) return router.push(backHref);
     setExiting(true);
-    if (!isSeated || !onLeaveSeat) return;
+    if (!isSeated) return;
     const error = await onLeaveSeat();
     if (error) {
       setExiting(false);
@@ -329,6 +332,7 @@ export function TableScreen({
     <PreActions device={device} choice={model.preAction?.kind ?? null} facingBet={facingBet(model)} disabled={!online} onChoose={(kind) => dispatch({ type: "pre.select", kind, commandId: newCommandId() })} />
   ) : null;
 
+  const decisionKey = `${hand?.hand_id}-${hand?.board.length}-${legal?.min_raise_to}-${legal?.max_raise_to}-${legal?.call_amount}`;
   const turnProps = legal && hand
     ? {
         device,
@@ -340,10 +344,13 @@ export function TableScreen({
         clock: myClock,
         enabled: online && !pending,
         keys: device === "desktop" && keysOn,
-        onAct,
+        startAt: lastRaise?.key === decisionKey ? lastRaise.amount : undefined,
+        onAct: (kind: ActKind, amount?: number) => {
+          if (kind === "raise" && amount !== undefined) setLastRaise({ key: decisionKey, amount });
+          onAct(kind, amount);
+        },
       }
     : null;
-  const decisionKey = `${hand?.hand_id}-${hand?.board.length}-${legal?.min_raise_to}-${legal?.max_raise_to}-${legal?.call_amount}`;
 
   const meHint = sentLabel ? (
     <span className="turn-hint is-sent">
@@ -363,6 +370,35 @@ export function TableScreen({
       <small>Ván này</small>
     </span>
   ) : undefined;
+
+  // Watching, or leaving after this hand: said once on the felt (desktop), or under the phone's
+  // title bar, which covers the top of its stage.
+  const pills = (
+    <>
+      {occupant?.leaving && (
+        <div className="watch-pill leave-pill" role="status">
+          <LogOut size={device === "desktop" ? 15 : 12} strokeWidth={2} aria-hidden />
+          <span>
+            <b>{exiting ? "Bạn sẽ rời phòng" : "Bạn sẽ đứng dậy"}</b> khi hết ván này
+          </span>
+          {stay && (
+            <button type="button" className="leave-undo" aria-label="Huỷ, ở lại bàn" onClick={stay}>
+              Huỷ
+            </button>
+          )}
+        </div>
+      )}
+      {!isSeated && !celebration && (
+        <div className="watch-pill" role="status">
+          <Eye size={device === "desktop" ? 15 : 12} strokeWidth={2} aria-hidden />
+          <span>
+            <b>Bạn đang xem</b>
+            {onTakeSeat ? " · bấm ghế trống để vào chơi" : ""}
+          </span>
+        </div>
+      )}
+    </>
+  );
 
   const stage = (
     <Stage
@@ -402,28 +438,7 @@ export function TableScreen({
           online={online}
         />
       )}
-      {occupant?.leaving && (
-        <div className="watch-pill leave-pill" role="status">
-          <LogOut size={device === "desktop" ? 15 : 12} strokeWidth={2} aria-hidden />
-          <span>
-            <b>{exiting ? "Bạn sẽ rời phòng" : "Bạn sẽ đứng dậy"}</b> khi hết ván này
-          </span>
-          {stay && (
-            <button type="button" className="leave-undo" onClick={stay}>
-              Huỷ
-            </button>
-          )}
-        </div>
-      )}
-      {!isSeated && !celebration && (
-        <div className="watch-pill" role="status">
-          <Eye size={device === "desktop" ? 15 : 12} strokeWidth={2} aria-hidden />
-          <span>
-            <b>Bạn đang xem</b>
-            {onTakeSeat ? " · bấm ghế trống để vào chơi" : ""}
-          </span>
-        </div>
-      )}
+      {device === "desktop" && pills}
       {hand?.complete && (winners.length > 0 || view.runouts) && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} handOf={handOf} runouts={view.runouts} />}
       {celebration && sevenSpot && (
         <SevenDeuceStage key={hand?.hand_id} device={device} award={celebration} seats={table.seats} spot={sevenSpot} pot={Math.max(0, (model.results?.find((r) => r.player_id === celebration.player_id)?.hand_net ?? 0))} quiet={model.celebrationQuiet} startedAt={model.celebrationAt} />
@@ -467,7 +482,7 @@ export function TableScreen({
       <div className={`scrim scrim-${device === "desktop" ? "d" : "m"}`} />
       {device === "desktop" && <ConnStrip device="desktop" />}
       <div className="rc-wrap">
-        <ReconnectCard device={device} retry={retry} refusal={refusal} myClock={myClock} canCheck={!!legal?.can_check} backHref={backHref} onRetry={reconnectNow} />
+        <ReconnectCard device={device} retry={retry} refusal={refusal} myClock={myTurn ? clock : undefined} canCheck={!!legal?.can_check} backHref={backHref} onRetry={reconnectNow} />
       </div>
     </>
   );
@@ -567,6 +582,7 @@ export function TableScreen({
           <FitStage device="mobile" className={!online || suspended ? "is-dimmed" : ""}>
             {stage}
           </FitStage>
+          <div className="pills-m">{pills}</div>
           <MobileTableBar
             backHref={backHref}
             title={room.name}

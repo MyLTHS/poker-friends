@@ -4570,3 +4570,48 @@
     background: rgba(232, 207, 146, 0.16);
   }
 }
+
+/* Review fixes (motion pass 2) */
+@layer components {
+  /* scale on top of a translate(-50%…) placement: grow and pulse around the anchor (left/top),
+     which origin 0 0 is before that translate */
+  .d1 .timer-ring.is-low,
+  .d1 .seat[data-seat],
+  .d1 .me-hand {
+    transform-origin: 0 0;
+  }
+  /* "Bài đẹp!" waits for the cards to finish turning */
+  .d1 .me-hand.me-premium {
+    animation: tbl-pop var(--dur-slow) var(--ease-d1-settle) var(--dur-flip) both;
+  }
+  /* asked to leave after this hand: a brass badge on the avatar (its action tag stays) */
+  .d1 .av-flag.av-leave {
+    right: auto;
+    left: -4px;
+    background: var(--brass-2);
+    color: #1a1208;
+  }
+  /* the phone: the watching / leaving pill sits under the title bar, outside the scaled stage */
+  .d1 .pills-m {
+    position: absolute;
+    left: 8px;
+    top: 50px;
+    z-index: 11;
+    display: grid;
+    gap: 6px;
+    pointer-events: none;
+  }
+  .d1 .pills-m .watch-pill {
+    position: static;
+    translate: none;
+  }
+  .d1 .pills-m .leave-undo {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .d1 .me-hand.me-premium {
+      animation: none;
+    }
+  }
+}

@@ -30,6 +30,8 @@ type Ghost = {
 export type FxApi = {
   /** Seats whose shown cards still face down (showdown in progress). */
   unflipped: Set<number>;
+  /** Board cards turned face up so far while new ones turn over; null = all of them. */
+  boardUp: number | null;
 };
 
 /** How long a full house or better holds the table before the pot moves. */
@@ -94,6 +96,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
   const layer = useRef<HTMLDivElement>(null);
   const [scene] = useState(createScene);
   const [unflipped, setUnflipped] = useState<Set<number>>(() => new Set());
+  const [boardUp, setBoardUp] = useState<number | null>(null);
   const played = useRef<number>(cues.at(-1)?.id ?? 0);
   const running = useRef(new Set<Animation>());
   const timers = useRef<{ id: ReturnType<typeof setTimeout>; run: () => void }[]>([]);
@@ -135,6 +138,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
     running.current.clear();
     scene.set((sc) => (sc === EMPTY_SCENE ? sc : EMPTY_SCENE));
     setUnflipped((u) => (u.size ? new Set() : u));
+    setBoardUp(null);
   }, [scene]);
 
   useLayoutEffect(() => {
@@ -218,11 +222,17 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
             const k = i - cue.from;
             track(play(el, arrive(el, g.pot, centre(el, root, device), { lift: 12, scale: 0.7, fade: true }), { duration: DURATION.deal, easing: EASE.out, delay: t + k * STAGGER.deal }));
             if (reduced) continue;
+            if (k === 0) setBoardUp(cue.from);
             el.classList.add("pc-back", "fx-back");
             const base = el.style.transform || "";
             const flipAt = turnAt + k * STAGGER.boardFlip;
-            track(play(el, [{ transform: `${base} scaleX(1)` }, { transform: `${base} scaleX(0.04)`, offset: 0.5 }, { transform: `${base} scaleX(1)` }], { duration: DURATION.boardFlip, easing: EASE.standard, delay: flipAt }));
-            later(flipAt + DURATION.boardFlip / 2, () => el.classList.remove("pc-back", "fx-back"));
+            // fill none: until its turn the card keeps sliding in under the first animation
+            track(play(el, [{ transform: `${base} scaleX(1)` }, { transform: `${base} scaleX(0.04)`, offset: 0.5 }, { transform: `${base} scaleX(1)` }], { duration: DURATION.boardFlip, easing: EASE.standard, delay: flipAt, fill: "none" }));
+            const up = i + 1;
+            later(flipAt + DURATION.boardFlip / 2, () => {
+              el.classList.remove("pc-back", "fx-back");
+              setBoardUp(up >= cue.to ? null : up);
+            });
           }
           t = reduced ? t + (n - 1) * STAGGER.deal + DURATION.deal + BEAT : turnAt + (n - 1) * STAGGER.boardFlip + DURATION.boardFlip + BEAT;
           break;
@@ -298,7 +308,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
   }, []);
 
   const layerEl = <FxLayer scene={scene} device={device} layerRef={layer} track={track} />;
-  return { layer: layerEl, fx: { unflipped } satisfies FxApi };
+  return { layer: layerEl, fx: { unflipped, boardUp } satisfies FxApi };
 }
 
 /** The effects layer: flying chips and cards, win bursts, the big-hand title. Subscribed to the

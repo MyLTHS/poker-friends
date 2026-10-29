@@ -32,17 +32,19 @@ export type TurnProps = {
   enabled: boolean;
   /** single-key shortcuts on (desktop; the table settings can turn them off) */
   keys?: boolean;
+  /** Raise amount to start from (my refused raise for this same decision), instead of the minimum. */
+  startAt?: number;
   onAct: (kind: ActKind, amount?: number) => void;
 };
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, Math.round(v)));
 
-/** The raise amount being chosen, starting at the minimum raise. The parent remounts this (key) for
- *  every new decision, so it never carries an old amount into a new street. */
-function useRaise(legal: LegalActions) {
+/** The raise amount being chosen, starting at the minimum raise (or `startAt`). The parent remounts
+ *  this (key) for every new decision, so it never carries an old amount into a new street. */
+function useRaise(legal: LegalActions, startAt?: number) {
   const min = legal.min_raise_to ?? 0;
   const max = Math.max(min, legal.max_raise_to ?? 0);
-  const [amount, setAmount] = useState(min);
+  const [amount, setAmount] = useState(startAt ?? min);
   const set = useCallback((v: number) => setAmount(clamp(v, min, max)), [min, max]);
   return { min, max, amount: clamp(amount, min, max), set };
 }
@@ -184,7 +186,7 @@ const timeoutNote = (legal: LegalActions, short: boolean) =>
 /** Desktop: my turn. */
 export function TurnBar(props: TurnProps) {
   const { legal, presets, sizing, step, facingBet, clock, enabled, keys = false, onAct } = props;
-  const raise = useRaise(legal);
+  const raise = useRaise(legal, props.startAt);
   useShortcuts(enabled && keys, legal, presets, step, raise, onAct);
   const noteId = useId();
   const canRaise = legal.min_raise_to !== null;
@@ -226,7 +228,7 @@ export function TurnBar(props: TurnProps) {
  *  bottom where the right thumb rests. */
 export function TurnPanel(props: TurnProps) {
   const { legal, presets, step, facingBet, clock, enabled, onAct } = props;
-  const raise = useRaise(legal);
+  const raise = useRaise(legal, props.startAt);
   const canRaise = legal.min_raise_to !== null;
   return (
     <aside className="ppanel tpanel" aria-label="Tới lượt bạn">

@@ -139,14 +139,6 @@ const Bet = memo(function Bet({ device, s }: { device: Device; s: SeatView }) {
 
 function SeatTag({ s, device, clock }: { s: SeatView; device: Device; clock?: TurnClock }) {
   const ic = device === "desktop" ? 12 : 10;
-  if (s.leaving && s.state !== "turn" && s.state !== "winner") {
-    return (
-      <span className="tag tag-out">
-        <LogOut size={ic} strokeWidth={2.2} />
-        Sắp rời
-      </span>
-    );
-  }
   switch (s.state) {
     case "turn":
       return (
@@ -196,6 +188,8 @@ function SeatTag({ s, device, clock }: { s: SeatView; device: Device; clock?: Tu
 export type StageFx = {
   /** Seats whose face-up cards still show their backs (showdown flips not reached yet). */
   unflipped?: Set<number>;
+  /** Board cards already turned face up while new ones turn over (null: all). */
+  boardUp?: number | null;
 };
 
 // Memoized: an effect or a chat line elsewhere does not redraw every seat. onSit only reads stable
@@ -246,6 +240,11 @@ function SeatPodView({ device, s, cx, clock, turning, onSit }: { device: Device;
         )}
         <Avatar name={s.name ?? "?"} size={avSize} />
         {s.state === "turn" && clock && <LiveRing size={avSize} clock={clock} gap={2} stroke={d ? 4 : 3} />}
+        {s.leaving && (
+          <span className="av-flag av-leave" role="img" aria-label="Sắp rời bàn sau ván này" title="Sắp rời bàn sau ván này">
+            <LogOut size={d ? 12 : 10} strokeWidth={2.6} />
+          </span>
+        )}
         {s.offline && (
           <span className="av-flag" aria-label="Mất kết nối">
             <WifiOff size={d ? 12 : 10} strokeWidth={2.6} />
@@ -259,7 +258,7 @@ function SeatPodView({ device, s, cx, clock, turning, onSit }: { device: Device;
         </span>
       </span>
       {/* keyed: a new action or state pops in again */}
-      <SeatTag key={`${s.state}:${s.lastAction ?? ""}:${s.leaving ? 1 : 0}`} s={s} device={device} clock={clock} />
+      <SeatTag key={`${s.state}:${s.lastAction ?? ""}`} s={s} device={device} clock={clock} />
       {s.hand && <span className="seat-hand">{s.hand}</span>}
     </div>
   );
@@ -422,7 +421,7 @@ export function Stage({ device, seats, board, boardHi, runouts, rabbit, pot, pot
         .map((s) => (
           <SeatPod key={s.seat} device={device} s={s} cx={g.c.x} clock={s.state === "turn" ? clock : undefined} turning={fx.unflipped?.has(s.seat) ?? false} onSit={onSit} />
         ))}
-      {me && <MeSeat device={device} s={me} hint={meHint} clock={me.state === "turn" ? clock : undefined} handId={meHand} board={board} />}
+      {me && <MeSeat device={device} s={me} hint={meHint} clock={me.state === "turn" ? clock : undefined} handId={meHand} board={fx.boardUp == null ? board : board.slice(0, fx.boardUp)} />}
       {children}
     </div>
   );

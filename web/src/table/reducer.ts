@@ -335,12 +335,14 @@ function firePreAction(model: TableModel): TableModel {
 }
 
 /** Server minus local time. Each message reads it short by its trip through the network, so the
- *  largest reading is the closest: keep it, so deadlines do not jitter with every message. A jump
- *  of over 2 s (the local clock was set, or a first reading) is taken as it is. */
-function nextOffset(model: TableModel, seen: number): number {
+ *  largest reading is the closest: keep it, so deadlines do not jitter with every message. It
+ *  eases down a little with each message (a local clock set forward settles in); a jump of over
+ *  2 s (the local clock was set back, or a first reading) is taken as it is. */
+export function nextOffset(model: Pick<TableModel, "lastVersion" | "clockOffsetMs">, seen: number): number {
   if (model.lastVersion === null || Math.abs(seen - model.clockOffsetMs) > 2000) return seen;
-  return Math.max(model.clockOffsetMs, seen);
+  return Math.max(model.clockOffsetMs - OFFSET_EASE_MS, seen);
 }
+const OFFSET_EASE_MS = 5;
 
 function onIntent(model: TableModel, intent: Extract<TableAction, { type: "act" }>): TableModel {
   const hand = model.table?.hand;
@@ -514,7 +516,8 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
     case "hand.started":
       return {
         ...model,
-        table: { ...table, hand: event.payload.hand, turn: null },
+        // the countdown that led here is over (the server does not send room.updated for it)
+        table: { ...table, room: { ...table.room, next_hand_at: null }, hand: event.payload.hand, turn: null },
         lastAction: null,
         results: null,
         showdown: null,

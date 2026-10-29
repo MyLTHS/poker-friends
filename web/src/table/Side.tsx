@@ -81,7 +81,7 @@ export function TableTools({ onInvite, menu, spectators = [], sound, onExit }: {
       <WatchCount spectators={spectators} />
       {sound && <SoundButton sound={sound} size={19} />}
       {onExit && (
-        <button type="button" className="tbar-btn is-quiet" onClick={onExit}>
+        <button type="button" className="tbar-btn is-quiet" aria-label="Rời phòng" onClick={onExit}>
           <LogOut size={15} strokeWidth={1.9} aria-hidden />
           <span className="tbar-label">Rời phòng</span>
         </button>

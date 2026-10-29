@@ -126,8 +126,9 @@ test("two players and a spectator play one hand; nobody sees hidden cards", asyn
   await expect(an.page.locator(".chat").getByText("chúc may mắn")).toBeVisible();
 
   // Play: check or call every turn until the hand ends. The first action is a double click: the
-  // bar locks after the first click, so the server must see one action (reusing the command_id
-  // when a second click does get through is covered in reducer.test.ts "one click, one command").
+  // bar gives way to "Đã chọn" after the first click, so the server must see one action (reusing
+  // the command_id when a second click does get through is covered in reducer.test.ts "one click,
+  // one command").
   let actions = 0;
   for (let round = 0; round < 40; round++) {
     for (const player of [an, binh]) {
