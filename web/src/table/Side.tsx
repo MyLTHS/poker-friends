@@ -52,9 +52,22 @@ export function TableTopBar({
 }
 
 /** The desktop bar's right end: "Mời bạn" and the ☰ menu (everything else lives in the menu). */
-export function TableTools({ onInvite, menu }: { onInvite?: () => void; menu: MenuButtonProps }) {
+/** Who is watching without a seat, always in sight in the top bar ("👁 2"); names on hover. */
+function WatchCount({ spectators }: { spectators: Spectator[] }) {
+  if (spectators.length === 0) return null;
+  const names = spectators.map((s) => s.display_name).join(", ");
+  return (
+    <span className="tbar-watch" title={`Đang xem: ${names}`} aria-label={`${spectators.length} người đang xem: ${names}`}>
+      <Eye size={15} strokeWidth={2} aria-hidden />
+      {spectators.length}
+    </span>
+  );
+}
+
+export function TableTools({ onInvite, menu, spectators = [] }: { onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[] }) {
   return (
     <>
+      <WatchCount spectators={spectators} />
       {onInvite && (
         <button type="button" className="tbar-btn" aria-haspopup="dialog" aria-label="Mời bạn" onClick={onInvite}>
           <UserPlus size={15} strokeWidth={1.9} aria-hidden />
@@ -187,10 +200,11 @@ export function MobileTableBar({ backHref, title, sub, right }: { backHref: stri
   );
 }
 
-export function MobileTools({ unread, onChat, onInvite, menu }: { unread: number; onChat: () => void; onInvite?: () => void; menu: MenuButtonProps }) {
+export function MobileTools({ unread, onChat, onInvite, menu, spectators = [] }: { unread: number; onChat: () => void; onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[] }) {
   // id: the chat drawer gives focus back to this button when it closes
   return (
     <>
+      <WatchCount spectators={spectators} />
       <IconButton id="tbl-chat-btn" label="Chat" badge={unread > 0 ? unread : undefined} onClick={onChat}>
         <MessageCircle size={20} strokeWidth={1.9} aria-hidden />
       </IconButton>

@@ -66,7 +66,7 @@ describe("play", () => {
     const frames = [{ opacity: 0 }, { opacity: 1 }];
     expect(play(el, frames, { duration: DURATION.deal, delay: 90 })).not.toBeNull();
     expect(calls).toEqual([
-      { keyframes: frames, options: { duration: 280, easing: EASE.standard, delay: 90, fill: "backwards" } },
+      { keyframes: frames, options: { duration: DURATION.deal, easing: EASE.standard, delay: 90, fill: "backwards" } },
     ]);
   });
 

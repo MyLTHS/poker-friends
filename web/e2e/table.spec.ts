@@ -37,7 +37,7 @@ const area = (page: Page) => page.locator("[data-hand]");
 
 /** Labels of my own two cards ("Bài úp" would be a card back). */
 async function myCards(page: Page): Promise<string[]> {
-  const cards = page.locator(".me .me-cards [role=img]");
+  const cards = page.locator(".me .me-cards .pc-flip-front");
   await expect(cards).toHaveCount(2);
   return cards.evaluateAll((nodes) => nodes.map((n) => n.getAttribute("aria-label") ?? ""));
 }

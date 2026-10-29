@@ -79,9 +79,9 @@ export function PlayingCard({ card, w = 44, rotate = 0, className = "", style, .
 
 /** A card that turns over (showdown, the 7-2 reveal): the back until `faceUp`, then a 3D turn of
  *  --dur-flip; reduced motion cross-fades instead (d1.css .pc-flip). */
-export function FlipCard({ card, faceUp, w = 44, className = "" }: { card: string; faceUp: boolean; w?: number; className?: string }) {
+export function FlipCard({ card, faceUp, w = 44, rotate = 0, className = "" }: { card: string; faceUp: boolean; w?: number; rotate?: number; className?: string }) {
   return (
-    <span className={`pc-flip${faceUp ? " is-up" : ""} ${className}`} style={{ "--w": `${w}px` } as CSSProperties}>
+    <span className={`pc-flip${faceUp ? " is-up" : ""} ${className}`} style={{ "--w": `${w}px`, transform: rotate ? `rotate(${rotate}deg)` : undefined } as CSSProperties}>
       <PlayingCard card="??" w={w} className="pc-flip-back" aria-hidden={faceUp} />
       <PlayingCard card={card} w={w} className="pc-flip-front" aria-hidden={!faceUp} />
     </span>

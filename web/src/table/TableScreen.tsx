@@ -328,6 +328,7 @@ export function TableScreen({
       showPot={!hand?.complete}
       fx={fx}
       onSit={!isSeated && onTakeSeat ? sit : undefined}
+      meHand={hand && !hand.complete ? hand.hand_id : null}
       className={celebration ? "is-seven" : ""}
     >
       {layer}
@@ -476,7 +477,7 @@ export function TableScreen({
                   Mất kết nối · đang thử lại
                 </span>
               ) : (
-                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} />
+                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} />
               )
             }
           />
@@ -586,7 +587,7 @@ export function TableScreen({
           </>
         }
         right={
-          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} />
+          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} />
         }
       />
       <div className={`table-area${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`} {...probe}>

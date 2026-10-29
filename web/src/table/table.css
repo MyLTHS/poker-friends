@@ -4022,3 +4022,163 @@
 }
 
 .d1 .idle-rebuy { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+/* Motion pass (29/10): my cards land face down and turn over on a touch, a fine start shines, the
+   winner glows while the pot arrives, and a full house or better gets its own moment (TableFx). */
+@layer components {
+  .d1 .pc-flip.me-card {
+    box-shadow: none;
+  }
+  .d1 .pc-flip.me-card > .pc {
+    box-shadow:
+      inset 0 0 0 1px rgba(120, 95, 50, 0.25),
+      0 14px 26px rgba(0, 0, 0, 0.6);
+  }
+  .d1 .me-flip-1 > .pc {
+    transition-delay: calc(var(--dur-flip) / 3);
+  }
+  .d1 .me-cards.is-closed {
+    cursor: pointer;
+    border-radius: 10px;
+    outline-offset: 6px;
+  }
+  .d1 .me-cards.is-closed .me-card {
+    transition: translate var(--dur-fast) var(--ease-d1-out);
+  }
+  .d1 .me-cards.is-closed:hover .me-card,
+  .d1 .me-cards.is-closed:focus-visible .me-card {
+    translate: 0 -6px;
+  }
+  .d1 .me-peek {
+    position: absolute;
+    left: 50%;
+    top: -30px;
+    transform: translateX(-50%);
+    z-index: 3;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(8, 6, 4, 0.85);
+    border: 1px solid var(--hair);
+    font: var(--w-label) var(--fs-sm) / 1.2 var(--text);
+    color: var(--ivory-2);
+    white-space: nowrap;
+    pointer-events: none;
+    animation: tbl-peek 1.8s var(--ease-d1-standard) infinite;
+  }
+  .d1 .me-cards.is-premium .me-card > .pc-flip-front {
+    box-shadow:
+      0 0 0 2px var(--brass-2),
+      0 0 26px rgba(244, 216, 150, 0.75),
+      0 14px 26px rgba(0, 0, 0, 0.6);
+    animation: tbl-shine 1.6s var(--dur-flip) var(--ease-d1-standard) 2 both;
+  }
+  .d1 .me-premium {
+    color: #1a1208;
+    background: linear-gradient(180deg, var(--brass-2), #b98f45);
+    border-color: var(--brass-2);
+    animation: tbl-medal var(--dur-slow) var(--ease-d1-settle) var(--dur-flip) both;
+  }
+
+  /* the winner's seat breathes while the result stands */
+  .d1 .seat.st-winner .seat-plate,
+  .d1 .me.st-winner .me-plate {
+    animation: tbl-win 1.6s var(--ease-d1-standard) 3;
+  }
+
+  /* a full house or better: the seat lights up, the title bursts over the felt */
+  .d1 .seat.fx-big-seat .seat-shown .pc,
+  .d1 .me.fx-big-seat .me-card > .pc {
+    box-shadow:
+      0 0 0 2px var(--brass-2),
+      0 0 32px rgba(244, 216, 150, 0.85);
+  }
+  .d1 .fx-big {
+    position: absolute;
+    translate: -50% -50%;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+  }
+  .d1 .fx-big .confetti {
+    left: 50%;
+    top: 50%;
+  }
+  .d1 .fx-big-title {
+    padding: 10px 26px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(40, 28, 14, 0.95), rgba(14, 10, 6, 0.95));
+    border: 2px solid var(--brass-2);
+    box-shadow:
+      0 0 40px rgba(244, 216, 150, 0.55),
+      0 16px 34px rgba(0, 0, 0, 0.6);
+    font: var(--w-display) 44px / 1 var(--display);
+    letter-spacing: 0.02em;
+    color: var(--brass-2);
+    white-space: nowrap;
+    animation:
+      tbl-big-in 520ms var(--ease-d1-settle) both,
+      tbl-fade 400ms var(--ease-d1-standard) 3.4s reverse forwards;
+  }
+  .d1 .stage-mobile .fx-big-title {
+    font-size: 26px;
+    padding: 8px 16px;
+  }
+
+  @keyframes tbl-peek {
+    50% {
+      opacity: 0.55;
+    }
+  }
+  @keyframes tbl-shine {
+    50% {
+      filter: brightness(1.18);
+    }
+  }
+  @keyframes tbl-win {
+    50% {
+      box-shadow:
+        0 0 0 1px var(--brass-2),
+        0 0 46px rgba(244, 216, 150, 0.8),
+        0 8px 18px rgba(0, 0, 0, 0.55);
+    }
+  }
+  @keyframes tbl-big-in {
+    from {
+      opacity: 0;
+      transform: scale(0.4) rotate(-4deg);
+    }
+    70% {
+      opacity: 1;
+      transform: scale(1.12) rotate(1deg);
+    }
+    to {
+      transform: scale(1) rotate(0deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .d1 .me-peek,
+    .d1 .me-cards.is-premium .me-card > .pc-flip-front,
+    .d1 .seat.st-winner .seat-plate,
+    .d1 .me.st-winner .me-plate {
+      animation: none;
+    }
+    .d1 .fx-big-title {
+      animation: tbl-fade var(--dur-base) var(--ease-d1-out) both;
+    }
+  }
+}
+
+@layer components {
+  .d1 .tbar-watch {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--hair);
+    background: rgba(8, 6, 4, 0.55);
+    font: var(--w-label) var(--fs-sm) / 1.2 var(--text);
+    color: var(--ivory-2);
+    white-space: nowrap;
+  }
+}

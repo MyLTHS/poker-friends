@@ -84,3 +84,41 @@ export function runoutLines(runouts: RunoutWinners[]): { title: string; detail: 
   }
   return { title: "Chạy 2 lần", detail: runouts.map((r, i) => `Lần ${i + 1}: ${runoutText(r) || "không ai"}`).join(" · ") };
 }
+
+const STRENGTH: HandCategory[] = ["high_card", "one_pair", "two_pair", "three_of_a_kind", "straight", "flush", "full_house", "four_of_a_kind", "straight_flush"];
+
+/** A made hand worth a moment of its own at the showdown: a full house or better. */
+export function bigHandTitle(hand: ShownHand): string | null {
+  switch (hand.category) {
+    case "full_house":
+      return "Cù lũ!";
+    case "four_of_a_kind":
+      return "Tứ quý!";
+    case "straight_flush":
+      return rank(hand.cards[0]) === "A" ? "Thùng phá sảnh lớn!" : "Thùng phá sảnh!";
+    default:
+      return null;
+  }
+}
+
+/** The strongest big hand of a showdown (full house or better), or null. */
+export function biggestHand(showdown: readonly ShownHand[] | null | undefined): ShownHand | null {
+  let best: ShownHand | null = null;
+  for (const h of showdown ?? []) {
+    if (!bigHandTitle(h)) continue;
+    if (!best || STRENGTH.indexOf(h.category) > STRENGTH.indexOf(best.category)) best = h;
+  }
+  return best;
+}
+
+const ORDER = "23456789TJQKA";
+
+/** Two hole cards worth a little shine when they are turned over: a pair of tens or better, A-K,
+ *  or A-Q suited. "??" (hidden) is never one. */
+export function isPremiumStart(cards: readonly string[]): boolean {
+  if (cards.length !== 2 || cards.some((c) => c.length < 2 || !ORDER.includes(c[0]))) return false;
+  const [hi, lo] = [...cards].sort((a, b) => ORDER.indexOf(b[0]) - ORDER.indexOf(a[0]));
+  if (hi[0] === lo[0]) return ORDER.indexOf(hi[0]) >= ORDER.indexOf("T");
+  if (hi[0] !== "A") return false;
+  return lo[0] === "K" || (lo[0] === "Q" && hi[1] === lo[1]);
+}

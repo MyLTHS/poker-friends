@@ -6,6 +6,7 @@
 import type { HandView, TableState } from "@/api/protocol";
 
 import type { StateEvent } from "./reducer";
+import { bigHandTitle, biggestHand } from "./handName";
 import { dealOrder, showdownOrder } from "./seatView";
 
 export type CueBody =
@@ -24,7 +25,9 @@ export type CueBody =
   /** each pot to its winners, one after the other (`amount` = chips each winner takes). */
   | { kind: "award"; pots: { winners: { seat: number; amount: number }[] }[] }
   /** the 7-2 moment. */
-  | { kind: "seven"; seat: number };
+  | { kind: "seven"; seat: number }
+  /** a full house or better turned over at the showdown: its own moment before the pot moves. */
+  | { kind: "big"; seat: number; title: string };
 
 export type Cue = CueBody & { id: number };
 
@@ -78,6 +81,8 @@ export function cuesFor(prev: TableState, event: StateEvent): CueBody[] {
       if (turned.length && !seven_deuce) {
         const order = showdownOrder(hand).filter((s) => turned.includes(s));
         cues.push({ kind: "showdown", order });
+        const big = biggestHand(event.payload.showdown.filter((h) => turned.includes(h.seat)));
+        if (big) cues.push({ kind: "big", seat: big.seat, title: bigHandTitle(big)! });
       }
       // Pots as they stood before the payout (the completed hand reports them emptied). When the
       // last fold already paid them out, each winner's gain stands in for the pot.

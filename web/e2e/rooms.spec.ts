@@ -423,7 +423,7 @@ test("house rules 2: run it twice on an all-in preflop, then rabbit cards after 
   await winner.getByRole("button", { name: "Menu", exact: true }).click();
   await winner.getByRole("dialog", { name: "Menu" }).getByRole("button", { name: "Nghỉ ván sau" }).click();
   await expect.poll(async () => (await api(owner, "GET", `/api/rooms/${roomId}/snapshot/`)).table.seats.some((s: { sitting_out: boolean }) => s.sitting_out)).toBe(true);
-  const myCards = await folder.locator(".me-cards [role=img]").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+  const myCards = await folder.locator(".me-cards .pc-flip-front").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
   expect(myCards).toHaveLength(2);
   await folder.getByRole("region", { name: "Tới lượt bạn" }).locator(".act-fold").click();
   for (const p of pages) {

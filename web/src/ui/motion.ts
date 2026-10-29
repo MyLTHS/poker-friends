@@ -14,13 +14,13 @@ export const DURATION = {
   /** modal and sheet open/close */
   slow: 320,
   /** one card flying from the dealer to a seat */
-  deal: 280,
+  deal: 440,
   /** a bet flying from a seat to its spot in front of the seat / into the pot */
-  chip: 380,
+  chip: 480,
   /** the pot sliding to the winner */
-  collect: 560,
+  collect: 950,
   /** a card turning over */
-  flip: 420,
+  flip: 650,
   /** one breath of the "your turn" halo */
   turnPulse: 1600,
   /** the whole 7-2 moment before it settles into a banner */
@@ -43,12 +43,16 @@ export const EASE = {
 /** Delay between the items of one sequence, in ms. */
 export const STAGGER = {
   /** card to card while dealing (round-robin from the small blind) */
-  deal: 90,
+  deal: 170,
   /** chips of several players moving at once (bets into the pot) */
   chips: 40,
   /** hands turning over at showdown, in showdown order */
-  showdown: 180,
+  showdown: 1100,
 } as const;
+
+/** A short rest between two steps of one hand (bets gathered, then the board; hands shown, then
+ *  the pot paid), so a step lands before the next one starts. */
+export const BEAT = 380;
 
 /** Duration of the fade that replaces a movement when the user asked for reduced motion. */
 export const REDUCED_FADE = 120;

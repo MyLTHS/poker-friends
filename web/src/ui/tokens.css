@@ -99,11 +99,11 @@
   --dur-fast: 140ms;
   --dur-base: 220ms;
   --dur-slow: 320ms;
-  --dur-deal: 280ms;
-  --dur-chip: 380ms;
-  --dur-collect: 560ms;
-  --dur-flip: 420ms;
-  --dur-confetti: 900ms;
+  --dur-deal: 440ms;
+  --dur-chip: 480ms;
+  --dur-collect: 950ms;
+  --dur-flip: 650ms;
+  --dur-confetti: 1400ms;
   --dur-turn-pulse: 1600ms;
   --dur-seven-deuce: 2600ms;
   --ease-d1-standard: cubic-bezier(0.2, 0, 0, 1);

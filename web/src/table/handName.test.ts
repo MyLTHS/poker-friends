@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { HandCategory, ShowdownHand } from "@/api/protocol";
 
-import { boardHighlights, handName, showdownBySeat, winnerLines } from "./handName";
+import { bigHandTitle, biggestHand, boardHighlights, handName, isPremiumStart, showdownBySeat, winnerLines } from "./handName";
 
 const entry = (category: HandCategory, cards: string[], seat = 1): ShowdownHand =>
   ({ player_id: String(seat), seat, category, cards }) as ShowdownHand;
@@ -63,5 +63,35 @@ describe("winnerLines", () => {
       { name: "Bình", amount: 50 },
     ]);
     expect(lines).toEqual({ title: "An, Chi, Bình chia pot", detail: "An +900 (Thùng già A) · Chi +300 (Đôi K) · Bình +50" });
+  });
+});
+
+describe("big hands and premium starts", () => {
+  const h = (seat: number, category: HandCategory, cards: string[]) => ({ player_id: String(seat), seat, category, cards });
+
+  it("names a full house or better, nothing below", () => {
+    expect(bigHandTitle(h(1, "flush", ["Ah", "Th", "8h", "5h", "2h"]))).toBeNull();
+    expect(bigHandTitle(h(1, "full_house", ["Kd", "Kh", "Ks", "9c", "9d"]))).toBe("Cù lũ!");
+    expect(bigHandTitle(h(1, "four_of_a_kind", ["7d", "7h", "7s", "7c", "Ad"]))).toBe("Tứ quý!");
+    expect(bigHandTitle(h(1, "straight_flush", ["As", "Ks", "Qs", "Js", "Ts"]))).toBe("Thùng phá sảnh lớn!");
+    expect(bigHandTitle(h(1, "straight_flush", ["9s", "8s", "7s", "6s", "5s"]))).toBe("Thùng phá sảnh!");
+  });
+
+  it("picks the strongest big hand of a showdown", () => {
+    const quads = h(4, "four_of_a_kind", ["7d", "7h", "7s", "7c", "Ad"]);
+    expect(biggestHand([h(1, "full_house", ["Kd", "Kh", "Ks", "9c", "9d"]), quads, h(6, "two_pair", ["Ad", "Ah", "9s", "9c", "2d"])])).toBe(quads);
+    expect(biggestHand([h(1, "straight", ["9d", "8h", "7s", "6c", "5d"])])).toBeNull();
+    expect(biggestHand(null)).toBeNull();
+  });
+
+  it("shines on tens or better, A-K, A-Q suited", () => {
+    expect(isPremiumStart(["Ah", "As"])).toBe(true);
+    expect(isPremiumStart(["Td", "Tc"])).toBe(true);
+    expect(isPremiumStart(["9d", "9c"])).toBe(false);
+    expect(isPremiumStart(["Kc", "Ad"])).toBe(true);
+    expect(isPremiumStart(["Qh", "Ah"])).toBe(true);
+    expect(isPremiumStart(["Qh", "Ad"])).toBe(false);
+    expect(isPremiumStart(["Jd", "9s"])).toBe(false);
+    expect(isPremiumStart(["??", "??"])).toBe(false);
   });
 });

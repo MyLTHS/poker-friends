@@ -4,14 +4,14 @@
 // design's fixed coordinates (geometry.ts), drawn at design size and scaled as a whole to the room
 // it gets (FitStage). Elements the animations move carry data-* hooks (data-seat-cards, data-bet,
 // data-board, data-av, data-pot); TableFx finds them there.
-import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Crown, Moon, Plus, Timer, WifiOff } from "lucide-react";
 
 import { Avatar, ChipStack, FlipCard, PlayingCard, fmt } from "@/ui";
 
 import { Countdown, LiveRing, type TurnClock } from "./clock";
 import { GEO, betPos, dealerPos, fitScale, spotPos, type Device, type Pt } from "./geometry";
-import { runoutText } from "./handName";
+import { isPremiumStart, runoutText } from "./handName";
 import type { RunoutView, SeatView } from "./seatView";
 
 const at = (p: Pt, extra?: CSSProperties): CSSProperties => ({ left: p.x, top: p.y, ...extra });
@@ -249,22 +249,44 @@ function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatV
   );
 }
 
+/** My cards turn over by themselves this long after they land (the deal takes up to ~3 s). */
+const AUTO_TURN_MS = 5000;
+
 /** My own seat: big hole cards, wide plate. Desktop stacks cards over the plate; the phone puts
  *  the cards beside the plate (hint above it) at the bottom centre of the stage. */
-function MeSeat({ device, s, hint, clock }: { device: Device; s: SeatView; hint?: ReactNode; clock?: TurnClock }) {
+function MeSeat({ device, s, hint, clock, handId }: { device: Device; s: SeatView; hint?: ReactNode; clock?: TurnClock; handId?: number | null }) {
   const p = spotPos(device, 1, true);
   const cards = s.cards ?? [];
   const d = device === "desktop";
+  // My cards land face down and turn over when I touch them, by themselves after a while, or at
+  // once when it is my turn. Without a hand id (replays) they are simply face up.
+  const [openFor, setOpenFor] = useState<number | null>(null);
+  const real = cards.length > 0 && cards.every((c) => c !== "??");
+  const open = handId == null || openFor === handId || !real;
+  const turnUp = useCallback(() => setOpenFor(handId ?? null), [handId]);
+  if (!open && s.state === "turn") setOpenFor(handId ?? null);
+  useEffect(() => {
+    if (open) return;
+    const timer = setTimeout(turnUp, AUTO_TURN_MS);
+    return () => clearTimeout(timer);
+  }, [open, turnUp]);
+  const premium = open && real && handId != null && isPremiumStart(cards);
   return (
     <div className={`me me-${device} st-${s.state}`} style={at(p)} data-seat={s.seat} role="group" aria-label={`Ghế ${s.seat}: ${s.name} (bạn)`}>
       {s.delta && <span className={`delta delta-${s.delta.kind}`}>{s.delta.text}</span>}
-      <span className="me-cards" data-seat-cards={s.seat}>
+      <span
+        className={`me-cards${open ? "" : " is-closed"}${premium ? " is-premium" : ""}`}
+        data-seat-cards={s.seat}
+        {...(open ? {} : { role: "button", tabIndex: 0, "aria-label": "Lật bài của bạn", onClick: turnUp, onKeyDown: (e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), turnUp()) })}
+      >
         {cards.length > 0 ? (
-          cards.map((c, i) => <PlayingCard key={i} card={c} w={d ? 84 : 54} rotate={i === 0 ? -6 : 6} className="me-card" />)
+          cards.map((c, i) => <FlipCard key={i} card={c} faceUp={open} w={d ? 84 : 54} rotate={i === 0 ? -6 : 6} className={`me-card me-flip-${i}`} />)
         ) : (
           <span className="me-nocards">{s.state === "folded" ? "Đã bỏ bài" : "Chưa có bài"}</span>
         )}
-        {s.hand && <span className="me-hand">{s.hand}</span>}
+        {!open && <span className="me-peek">Chạm để xem bài</span>}
+        {open && s.hand && <span className="me-hand">{s.hand}</span>}
+        {premium && !s.hand && <span className="me-hand me-premium">Bài đẹp!</span>}
       </span>
       <span className="me-plate">
         <span className="me-av" data-av={s.seat}>
@@ -308,11 +330,13 @@ export type StageProps = {
   /** Board cards not drawn yet (an animation deals them in). */
   boardHidden?: number;
   onSit?: (seat: number) => void;
+  /** The live hand: my cards then land face down and turn over on a touch (none in a replay). */
+  meHand?: number | null;
   children?: ReactNode;
   className?: string;
 };
 
-export function Stage({ device, seats, board, boardHi, runouts, rabbit, pot, potLabel, mark, badge, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, children, className = "" }: StageProps) {
+export function Stage({ device, seats, board, boardHi, runouts, rabbit, pot, potLabel, mark, badge, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, meHand, children, className = "" }: StageProps) {
   const g = GEO[device];
   const me = seats.find((s) => s.isMe);
   const button = seats.find((s) => s.isButton);
@@ -346,7 +370,7 @@ export function Stage({ device, seats, board, boardHi, runouts, rabbit, pot, pot
         .map((s) => (
           <SeatPod key={s.seat} device={device} s={s} cx={g.c.x} clock={s.state === "turn" ? clock : undefined} fx={fx} onSit={onSit} />
         ))}
-      {me && <MeSeat device={device} s={me} hint={meHint} clock={me.state === "turn" ? clock : undefined} />}
+      {me && <MeSeat device={device} s={me} hint={meHint} clock={me.state === "turn" ? clock : undefined} handId={meHand} />}
       {children}
     </div>
   );
