@@ -1650,6 +1650,7 @@
   }
   .d1 .abar-status {
     width: 196px;
+    flex: none;
     display: flex;
     flex-direction: column;
     gap: 5px;
@@ -4079,9 +4080,17 @@
     animation: tbl-pop var(--dur-slow) var(--ease-d1-settle) var(--dur-flip) both;
   }
 
-  /* the winner's seat breathes while the result stands */
-  .d1 .seat.st-winner .seat-plate,
-  .d1 .me.st-winner .me-plate {
+  /* the winner's seat breathes while the result stands: a fixed glow whose opacity pulses (an
+     animated box-shadow would repaint every frame) */
+  .d1 .seat.st-winner .seat-plate::after,
+  .d1 .me.st-winner .me-plate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 46px rgba(244, 216, 150, 0.8);
+    opacity: 0;
+    pointer-events: none;
     animation: tbl-win 1.6s var(--ease-d1-standard) 3;
   }
 
@@ -4143,10 +4152,7 @@
   }
   @keyframes tbl-win {
     50% {
-      box-shadow:
-        0 0 0 1px var(--brass-2),
-        0 0 46px rgba(244, 216, 150, 0.8),
-        0 8px 18px rgba(0, 0, 0, 0.55);
+      opacity: 1;
     }
   }
   @keyframes tbl-big-in {
@@ -4165,8 +4171,8 @@
   @media (prefers-reduced-motion: reduce) {
     .d1 .me-peek,
     .d1 .me-cards.is-premium .me-card > .pc-flip-front,
-    .d1 .seat.st-winner .seat-plate,
-    .d1 .me.st-winner .me-plate {
+    .d1 .seat.st-winner .seat-plate::after,
+    .d1 .me.st-winner .me-plate::after {
       animation: none;
     }
     .d1 .fx-big-title {
@@ -4198,11 +4204,9 @@
     visibility: hidden;
   }
 
-  /* the dealer button travels to its new seat */
+  /* the dealer button travels to its new seat (placed with translate: Stage dealerAt) */
   .d1 .dealer {
-    transition:
-      left 700ms var(--ease-d1-out),
-      top 700ms var(--ease-d1-out);
+    transition: translate 700ms var(--ease-d1-out);
   }
 
   /* an action or a state change pops in at the seat */
@@ -4244,11 +4248,28 @@
     height: 0;
   }
 
-  /* fine hole cards: sparkles around them */
+  /* fine hole cards: sparkles around them; these and the win bursts fade out where they land
+     (the 7-2 confetti stays, under its banner) */
   .d1 .me-sparkle {
     left: 50%;
     top: 40%;
     --dur-confetti: 1600ms;
+  }
+  .d1 .me-sparkle .cf,
+  .d1 .fx-burst .cf {
+    animation-name: tbl-confetti-fade;
+  }
+  @keyframes tbl-confetti-fade {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -50%) rotate(0deg) scale(0.4);
+    }
+    20% {
+      opacity: 0.92;
+    }
+    to {
+      opacity: 0;
+    }
   }
 
   /* a free seat for someone already seated: a faint chair, no call to sit */

@@ -6,7 +6,7 @@
 // came from; what no longer exists (gathered bets, the paid pot, folded cards) flies as a ghost
 // that removes itself. New cues finish the running ones first, a snapshot (epoch) finishes all,
 // a hidden tab skips them, and reduced motion turns movements into fades (ghosts are skipped).
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 
 import { BEAT, ChipStack, Confetti, DURATION, EASE, PlayingCard, STAGGER, fmt, play, prefersReducedMotion } from "@/ui";
 
@@ -64,12 +64,36 @@ function arrive(el: HTMLElement, from: Pt, at: Pt, opts: { lift?: number; scale?
 /** Where a seat sits on the stage: its spot, and whether it is my own seat. */
 export type SeatPlace = { spot: number; me: boolean };
 
+/** What flies over the stage right now. Kept in a small store of its own so that a chip landing
+ *  or a burst fading redraws only the effects layer, not the whole table. */
+type Scene = { ghosts: Ghost[]; bursts: { key: number; at: Pt }[]; big: { key: number; title: string } | null };
+const EMPTY_SCENE: Scene = { ghosts: [], bursts: [], big: null };
+
+function createScene() {
+  let state = EMPTY_SCENE;
+  const subs = new Set<() => void>();
+  return {
+    get: () => state,
+    set(next: (s: Scene) => Scene) {
+      const after = next(state);
+      if (after === state) return;
+      state = after;
+      for (const notify of subs) notify();
+    },
+    subscribe(notify: () => void) {
+      subs.add(notify);
+      return () => {
+        subs.delete(notify);
+      };
+    },
+  };
+}
+type SceneStore = ReturnType<typeof createScene>;
+
 export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoch: number; device: Device; placeOf: (seat: number) => SeatPlace | undefined }) {
   const layer = useRef<HTMLDivElement>(null);
-  const [ghosts, setGhosts] = useState<Ghost[]>([]);
+  const [scene] = useState(createScene);
   const [unflipped, setUnflipped] = useState<Set<number>>(() => new Set());
-  const [big, setBig] = useState<{ key: number; title: string } | null>(null);
-  const [bursts, setBursts] = useState<{ key: number; at: Pt }[]>([]);
   const played = useRef<number>(cues.at(-1)?.id ?? 0);
   const running = useRef(new Set<Animation>());
   const timers = useRef<{ id: ReturnType<typeof setTimeout>; run: () => void }[]>([]);
@@ -78,13 +102,13 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
 
   const stage = () => layer.current?.closest(".stage") ?? null;
 
-  const track = (a: Animation | null) => {
+  const track = useCallback((a: Animation | null) => {
     if (!a) return;
     running.current.add(a);
     const done = () => running.current.delete(a);
     a.addEventListener("finish", done);
     a.addEventListener("cancel", done);
-  };
+  }, []);
 
   const later = (ms: number, run: () => void) => {
     const entry = { id: setTimeout(() => {
@@ -109,11 +133,9 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
     }
     for (const a of [...running.current]) a.finish();
     running.current.clear();
-    setGhosts([]);
+    scene.set((sc) => (sc === EMPTY_SCENE ? sc : EMPTY_SCENE));
     setUnflipped((u) => (u.size ? new Set() : u));
-    setBig(null);
-    setBursts([]);
-  }, []);
+  }, [scene]);
 
   useLayoutEffect(() => {
     if (lastEpoch.current !== epoch) {
@@ -225,11 +247,11 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
           const key = ++seq.current;
           later(t, () => {
             seatEl?.classList.add("fx-big-seat");
-            setBig({ key, title: cue.title });
+            scene.set((sc) => ({ ...sc, big: { key, title: cue.title } }));
           });
           later(t + BIG_HAND_MS + 1600, () => {
             seatEl?.classList.remove("fx-big-seat");
-            setBig((b) => (b?.key === key ? null : b));
+            scene.set((sc) => (sc.big?.key === key ? { ...sc, big: null } : sc));
           });
           t += reduced ? 0 : BIG_HAND_MS;
           break;
@@ -248,8 +270,8 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
                 // a little gold burst where the chips land (the main pot only)
                 if (i === 0) {
                   const key = ++seq.current;
-                  later(lands + DURATION.collect * 0.8, () => setBursts((all) => [...all, { key, at: to }]));
-                  later(lands + DURATION.collect * 0.8 + BURST_MS, () => setBursts((all) => all.filter((b) => b.key !== key)));
+                  later(lands + DURATION.collect * 0.8, () => scene.set((sc) => ({ ...sc, bursts: [...sc.bursts, { key, at: to }] })));
+                  later(lands + DURATION.collect * 0.8 + BURST_MS, () => scene.set((sc) => ({ ...sc, bursts: sc.bursts.filter((b) => b.key !== key) })));
                 }
               }
             });
@@ -263,7 +285,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
           break;
       }
     }
-    if (newGhosts.length) setGhosts(newGhosts);
+    if (newGhosts.length) scene.set((sc) => ({ ...sc, ghosts: newGhosts }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cues, epoch, device]);
 
@@ -275,11 +297,19 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
     };
   }, []);
 
-  const done = useCallback((key: number) => setGhosts((all) => all.filter((g) => g.key !== key)), []);
+  const layerEl = <FxLayer scene={scene} device={device} layerRef={layer} track={track} />;
+  return { layer: layerEl, fx: { unflipped } satisfies FxApi };
+}
 
-  const layerEl = (
+/** The effects layer: flying chips and cards, win bursts, the big-hand title. Subscribed to the
+ *  scene store, so its own updates never re-render the table around it. */
+const FxLayer = memo(function FxLayer({ scene, device, layerRef, track }: { scene: SceneStore; device: Device; layerRef: RefObject<HTMLDivElement | null>; track: (a: Animation | null) => void }) {
+  const { ghosts, bursts, big } = useSyncExternalStore(scene.subscribe, scene.get, scene.get);
+  // A finished flight leaves the scene; when the last one lands the list empties at once.
+  const done = useCallback((key: number) => scene.set((sc) => ({ ...sc, ghosts: sc.ghosts.filter((g) => g.key !== key) })), [scene]);
+  return (
     <>
-      <div ref={layer} className="fx-layer" aria-hidden>
+      <div ref={layerRef} className="fx-layer" aria-hidden>
         {ghosts.map((gh) => (
           <GhostPiece key={gh.key} ghost={gh} onDone={done} track={track} />
         ))}
@@ -297,8 +327,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
       )}
     </>
   );
-  return { layer: layerEl, fx: { unflipped } satisfies FxApi };
-}
+});
 
 function GhostPiece({ ghost, onDone, track }: { ghost: Ghost; onDone: (key: number) => void; track: (a: Animation | null) => void }) {
   const ref = useRef<HTMLDivElement>(null);

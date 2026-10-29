@@ -245,7 +245,12 @@ export function TableScreen({
   const deadline = turn ? Date.parse(turn.deadline) - model.clockOffsetMs : 0;
   const frozenAt = suspended && model.suspendedAt !== null ? secondsLeft(deadline, model.suspendedAt) : undefined;
   const clock: TurnClock | undefined = turn ? { deadline, total: turn.think_time_seconds, frozenAt } : undefined;
-  const myClock = myTurn ? clock : undefined;
+  // My action is on its way: show it as done at once (the tunnel round trip can take half a
+  // second); a refusal clears `pending` and brings the bar back.
+  const sent = myTurn && model.pending?.message.hand_id === hand?.hand_id ? model.pending!.message.payload : null;
+  const sentLabel = sent && legal ? (sent.kind === "fold" ? "Bỏ bài" : sent.kind === "check" ? "Check" : sent.kind === "call" ? `Theo ${fmt(legal.call_amount)}` : sent.amount === legal.max_raise_to ? `All-in ${fmt(sent.amount ?? 0)}` : `Tố ${fmt(sent.amount ?? 0)}`) : null;
+  const acting = myTurn && !sent;
+  const myClock = acting ? clock : undefined;
   const myFrozen = turn?.player_id === you.player_id ? frozenAt : undefined;
 
   // Hands are dealt only once the owner pressed "Bắt đầu" (a server without it always deals); the
@@ -309,7 +314,12 @@ export function TableScreen({
     : null;
   const decisionKey = `${hand?.hand_id}-${hand?.board.length}-${legal?.min_raise_to}-${legal?.max_raise_to}-${legal?.call_amount}`;
 
-  const meHint = myTurn && clock ? (
+  const meHint = sentLabel ? (
+    <span className="turn-hint is-sent">
+      <b>✓</b>
+      <small>{sentLabel}</small>
+    </span>
+  ) : acting && clock ? (
     <span className="turn-hint">
       <b>
         <Countdown deadline={clock.deadline} />s
@@ -341,7 +351,7 @@ export function TableScreen({
           </>
         ) : undefined
       }
-      clock={clock}
+      clock={sent ? undefined : clock}
       meHint={meHint}
       showPot={!hand?.complete}
       fx={fx}
@@ -388,9 +398,9 @@ export function TableScreen({
       <Sheet open={dialog === "log"} onClose={closeDialog} title="Nhật ký ván">
         {hand && !hand.complete && <HandFooter pot={view.potTotal} bets={view.bets} inHand={view.inHand} />}
         {celebration && <SevenLedger device={device} award={celebration} seats={table.seats} />}
-        <LogList entries={model.log} seats={table.seats} you={you.player_id} />
+        {dialog === "log" && <LogList entries={model.log} seats={table.seats} you={you.player_id} />}
         <h3 className="log-sub">Người chơi</h3>
-        <PlayerList seats={view.seats} />
+        {dialog === "log" && <PlayerList seats={view.seats} />}
       </Sheet>
       {owner?.({ open: dialog === "owner", onClose: closeDialog, seats: table.seats, inHand })}
       {invite?.({ open: dialog === "invite", onClose: closeDialog })}
@@ -452,8 +462,17 @@ export function TableScreen({
           <PausedCard device="mobile" handNo={handNo} frozenAt={myFrozen} onReload={reload} backHref={backHref} />
         </aside>
       );
-    } else if (myTurn && turnProps) {
+    } else if (acting && turnProps) {
       panel = <TurnPanel key={decisionKey} {...turnProps} device="mobile" />;
+    } else if (sentLabel) {
+      panel = (
+        <aside className="ppanel idle-panel is-sent">
+          <div className="ip-next">
+            <span className="abar-eyebrow">Đã chọn</span>
+            <span className="ip-status">{sentLabel}</span>
+          </div>
+        </aside>
+      );
     } else if (celebration) {
       panel = (
         <aside className="ppanel sd-panel">
@@ -533,8 +552,19 @@ export function TableScreen({
 
   /* ---------- desktop ---------- */
   const bar =
-    myTurn && turnProps ? (
+    acting && turnProps ? (
       <TurnBar key={decisionKey} {...turnProps} device="desktop" />
+    ) : sentLabel ? (
+      <IdleBar
+        className="abar-sent"
+        left={
+          <span className="idle-hand">
+            <small>Đã chọn</small>
+            <b>{sentLabel}</b>
+          </span>
+        }
+        center={<span className="idle-msg is-quiet">Đang gửi tới bàn…</span>}
+      />
     ) : (
       <IdleBar
         className={pre ? "abar-pre" : ""}

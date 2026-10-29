@@ -211,7 +211,7 @@ export function reduce(model: TableModel, action: TableAction): TableModel {
         showing: null,
       };
     case "server": {
-      const next = firePreAction(onServer({ ...model, clockOffsetMs: Date.parse(action.message.server_time) - action.receivedAt }, action.message));
+      const next = firePreAction(onServer({ ...model, clockOffsetMs: nextOffset(model, Date.parse(action.message.server_time) - action.receivedAt) }, action.message));
       const suspended = next.table?.room.status === "suspended";
       const suspendedAt = suspended ? (model.table?.room.status === "suspended" ? model.suspendedAt : action.receivedAt) : null;
       const celebrationAt = next.celebration ? (next.celebration === model.celebration ? model.celebrationAt : action.receivedAt) : null;
@@ -332,6 +332,14 @@ function firePreAction(model: TableModel): TableModel {
   const cleared = { ...model, preAction: null };
   if (kind === null || (kind === "fold" && !legal.can_fold)) return cleared;
   return onIntent(cleared, { type: "act", kind, commandId: pre.commandId });
+}
+
+/** Server minus local time. Each message reads it short by its trip through the network, so the
+ *  largest reading is the closest: keep it, so deadlines do not jitter with every message. A jump
+ *  of over 2 s (the local clock was set, or a first reading) is taken as it is. */
+function nextOffset(model: TableModel, seen: number): number {
+  if (model.lastVersion === null || Math.abs(seen - model.clockOffsetMs) > 2000) return seen;
+  return Math.max(model.clockOffsetMs, seen);
 }
 
 function onIntent(model: TableModel, intent: Extract<TableAction, { type: "act" }>): TableModel {

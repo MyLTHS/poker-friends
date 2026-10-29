@@ -5,7 +5,7 @@
 // or chatting), chat lines and composer, who is watching. Chat goes through the table's own
 // socket (chat.send → chat.message).
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ChartNoAxesColumn, ChevronLeft, Coffee, Crown, Eye, LogOut, Menu as MenuIcon, MessageCircle, MessageSquareText, Pause, Play, ScrollText, Send, Settings, Smile, UserPlus, X } from "lucide-react";
 
 import type { ChatMessage, Spectator } from "@/api/protocol";
@@ -258,7 +258,8 @@ export function HandFooter({ pot, bets, inHand }: { pot: number; bets: number; i
 
 /* ---------- chat ---------- */
 
-export function ChatList({ messages, me, spectators, compact = false }: { messages: ChatMessage[]; me: string; spectators: Spectator[]; compact?: boolean }) {
+// Memoized: the chat redraws when a line or a watcher comes, not with every move on the table.
+export const ChatList = memo(function ChatList({ messages, me, spectators, compact = false }: { messages: ChatMessage[]; me: string; spectators: Spectator[]; compact?: boolean }) {
   const list = useRef<HTMLDivElement>(null);
   const watching = new Set(spectators.map((s) => s.player_id));
   // Newest line in view: scroll the list itself (scrollIntoView would also scroll the page sideways
@@ -297,7 +298,7 @@ export function ChatList({ messages, me, spectators, compact = false }: { messag
       })}
     </div>
   );
-}
+});
 
 export function ChatComposer({ onSend, disabled }: { onSend: (text: string) => void; disabled?: boolean }) {
   // Offline (disabled) the draft stays: it is sent once the socket is back.

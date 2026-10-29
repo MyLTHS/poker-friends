@@ -766,7 +766,6 @@
     fill: none;
     stroke: var(--brass-2);
     stroke-linecap: round;
-    filter: drop-shadow(0 0 4px rgba(232, 207, 146, 0.7));
   }
   .d1 .timer-ring.is-low .tr-fg {
     stroke: #e0605a;

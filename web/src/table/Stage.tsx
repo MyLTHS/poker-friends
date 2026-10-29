@@ -4,7 +4,7 @@
 // design's fixed coordinates (geometry.ts), drawn at design size and scaled as a whole to the room
 // it gets (FitStage). Elements the animations move carry data-* hooks (data-seat-cards, data-bet,
 // data-board, data-av, data-pot); TableFx finds them there.
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Crown, Moon, Plus, Timer, WifiOff } from "lucide-react";
 
 import { Avatar, ChipStack, Confetti, FlipCard, PlayingCard, fmt } from "@/ui";
@@ -17,6 +17,7 @@ import { Rolling } from "./Rolling";
 import type { RunoutView, SeatView } from "./seatView";
 
 const at = (p: Pt, extra?: CSSProperties): CSSProperties => ({ left: p.x, top: p.y, ...extra });
+const dealerAt = (p: Pt): CSSProperties => ({ left: 0, top: 0, translate: `${p.x}px ${p.y}px` });
 
 /** Scale of the stage on screen: animations convert screen boxes to stage pixels with it. */
 export const StageScale = createContext(1);
@@ -76,7 +77,7 @@ function BoardCards({ cards, w, hi, hidden, rabbit = [], mark }: { cards: string
   );
 }
 
-export function Board({ device, cards, hi = [], hidden = 0, runouts, rabbit }: { device: Device; cards: string[]; hi?: number[]; hidden?: number; runouts?: RunoutView[] | null; rabbit?: string[] }) {
+export const Board = memo(function Board({ device, cards, hi = [], hidden = 0, runouts, rabbit }: { device: Device; cards: string[]; hi?: number[]; hidden?: number; runouts?: RunoutView[] | null; rabbit?: string[] }) {
   const g = GEO[device];
   if (runouts?.length) {
     // Run twice: one compact row per board, "Lần 1" / "Lần 2", who it paid at the end of the row.
@@ -108,9 +109,9 @@ export function Board({ device, cards, hi = [], hidden = 0, runouts, rabbit }: {
       <BoardCards cards={cards} w={g.cardW} hi={hi} hidden={hidden} rabbit={rabbit} mark />
     </div>
   );
-}
+});
 
-export function Pot({ device, amount, label = "Pot" }: { device: Device; amount: number; label?: string }) {
+export const Pot = memo(function Pot({ device, amount, label = "Pot" }: { device: Device; amount: number; label?: string }) {
   const d = device === "desktop";
   return (
     <div className="pot" data-pot style={at(GEO[device].pot)}>
@@ -123,16 +124,16 @@ export function Pot({ device, amount, label = "Pot" }: { device: Device; amount:
       </span>
     </div>
   );
-}
+});
 
-function Bet({ device, s }: { device: Device; s: SeatView }) {
+const Bet = memo(function Bet({ device, s }: { device: Device; s: SeatView }) {
   return (
     <div className="bet" data-bet={s.seat} style={at(betPos(device, s.spot, s.isMe))}>
       <ChipStack amount={s.bet!} size={device === "desktop" ? 20 : 14} max={4} />
       <span className="bet-amt">{fmt(s.bet!)}</span>
     </div>
   );
-}
+});
 
 /* ---------- seats ---------- */
 
@@ -189,7 +190,12 @@ export type StageFx = {
   unflipped?: Set<number>;
 };
 
-function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatView; cx: number; clock?: TurnClock; fx: StageFx; onSit?: (seat: number) => void }) {
+// Memoized: an effect or a chat line elsewhere does not redraw every seat. onSit only reads stable
+// handlers (the table's take-seat call and its error setter), so a new function alone is no reason.
+const sameClock = (a?: TurnClock, b?: TurnClock) => a === b || (!!a && !!b && a.deadline === b.deadline && a.total === b.total && a.frozenAt === b.frozenAt);
+const SeatPod = memo(SeatPodView, (a, b) => a.s === b.s && sameClock(a.clock, b.clock) && a.turning === b.turning && a.device === b.device && a.cx === b.cx && !a.onSit === !b.onSit);
+
+function SeatPodView({ device, s, cx, clock, turning, onSit }: { device: Device; s: SeatView; cx: number; clock?: TurnClock; turning: boolean; onSit?: (seat: number) => void }) {
   const p = spotPos(device, s.spot);
   const d = device === "desktop";
   const avSize = d ? 56 : 36;
@@ -211,7 +217,6 @@ function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatV
   const side = p.x <= cx ? "r" : "l";
   const cards = s.cards ?? [];
   const hidden = cards.length > 0 && !s.shown;
-  const turning = fx.unflipped?.has(s.seat) ?? false;
   return (
     <div className={`seat st-${s.state} toward-${side}${p.y < 100 ? " is-top" : ""}`} style={at(p)} data-seat={s.seat} role="group" aria-label={`Ghế ${s.seat}: ${s.name}`}>
       {s.delta && <span className={`delta delta-${s.delta.kind}`}>{s.delta.text}</span>}
@@ -399,14 +404,15 @@ export function Stage({ device, seats, board, boardHi, runouts, rabbit, pot, pot
       <Board device={device} cards={board} hi={boardHi} hidden={boardHidden} runouts={runouts} rabbit={rabbit} />
       {seats.filter((s) => (s.bet ?? 0) > 0).map((s) => <Bet key={s.seat} device={device} s={s} />)}
       {button && (
-        <span className="dealer" style={at(dealerPos(device, button.spot, button.isMe))} aria-label="Nút dealer">
+        // placed with translate (not left/top), so its slide to the next button seat stays on the GPU
+        <span className="dealer" style={dealerAt(dealerPos(device, button.spot, button.isMe))} aria-label="Nút dealer">
           D
         </span>
       )}
       {seats
         .filter((s) => !s.isMe)
         .map((s) => (
-          <SeatPod key={s.seat} device={device} s={s} cx={g.c.x} clock={s.state === "turn" ? clock : undefined} fx={fx} onSit={onSit} />
+          <SeatPod key={s.seat} device={device} s={s} cx={g.c.x} clock={s.state === "turn" ? clock : undefined} turning={fx.unflipped?.has(s.seat) ?? false} onSit={onSit} />
         ))}
       {me && <MeSeat device={device} s={me} hint={meHint} clock={me.state === "turn" ? clock : undefined} handId={meHand} board={board} />}
       {children}
