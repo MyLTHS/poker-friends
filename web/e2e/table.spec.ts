@@ -97,13 +97,11 @@ test("two players and a spectator play one hand; nobody sees hidden cards", asyn
     small_blind: 5,
     big_blind: 10,
     think_time_seconds: 60,
+    starting_stack: 1000, // the chips come with the seat
   });
   const roomId = created.room.room_id;
   await api(an.page, "POST", `/api/rooms/${roomId}/seats/`, { seat: 1 });
   await api(binh.page, "POST", `/api/rooms/${roomId}/seats/`, { seat: 2 });
-  for (const player of [an, binh]) {
-    await api(an.page, "POST", `/api/rooms/${roomId}/chips/`, { player_id: player.id, amount: 1000 });
-  }
 
   for (const player of [an, binh, chi]) {
     await player.page.goto(`/rooms/${roomId}/table`);
@@ -140,7 +138,7 @@ test("two players and a spectator play one hand; nobody sees hidden cards", asyn
   for (const player of [an, binh, chi]) await expect(area(player.page)).toHaveAttribute("data-hand", "complete");
 
   // Every page agrees on the stacks (read before the next hand starts, 4 s later), and the
-  // chips granted are all still there.
+  // chips the seats came with are all still there.
   const seen = await stacks(an.page);
   expect(await stacks(binh.page)).toEqual(seen);
   expect(await stacks(chi.page)).toEqual(seen);
