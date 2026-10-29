@@ -187,7 +187,7 @@ export function SettingsModal({
               </span>
               <span className="tset-text">
                 <b>Phím tắt một phím</b>
-                <small>F, C, R, 1–4, mũi tên, M, ?. Tắt nếu hay lỡ tay hoặc dùng trình đọc màn hình.</small>
+                <small>F, C, R, 1–6, mũi tên, M, ?. Tắt nếu hay lỡ tay hoặc dùng trình đọc màn hình.</small>
               </span>
               <Toggle on={keys.on} label="Phím tắt một phím" onChange={keys.set} />
             </div>

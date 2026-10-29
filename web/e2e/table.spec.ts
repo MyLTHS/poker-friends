@@ -37,7 +37,7 @@ const area = (page: Page) => page.locator("[data-hand]");
 
 /** Labels of my own two cards ("Bài úp" would be a card back). */
 async function myCards(page: Page): Promise<string[]> {
-  const cards = page.locator(".me .me-cards [role=img]");
+  const cards = page.locator(".me .me-cards .pc-flip-front");
   await expect(cards).toHaveCount(2);
   return cards.evaluateAll((nodes) => nodes.map((n) => n.getAttribute("aria-label") ?? ""));
 }
@@ -110,7 +110,8 @@ test("two players and a spectator play one hand; nobody sees hidden cards", asyn
   // The phone draws the landscape layout (right column), the spectator has no seat of their own.
   await expect(binh.page.locator(".tbl-mobile .ppanel")).toBeVisible();
   await expect(chi.page.locator(".me")).toHaveCount(0);
-  await expect(chi.page.getByText("Bạn đang xem")).toBeVisible();
+  // said on the felt (top-left) and in the bar
+  await expect(chi.page.locator(".watch-pill")).toContainText("Bạn đang xem");
 
   // Each player sees their own two cards and never the other's; the spectator sees none.
   const anCards = await myCards(an.page);
@@ -125,8 +126,9 @@ test("two players and a spectator play one hand; nobody sees hidden cards", asyn
   await expect(an.page.locator(".chat").getByText("chúc may mắn")).toBeVisible();
 
   // Play: check or call every turn until the hand ends. The first action is a double click: the
-  // bar locks after the first click, so the server must see one action (reusing the command_id
-  // when a second click does get through is covered in reducer.test.ts "one click, one command").
+  // bar gives way to "Đã chọn" after the first click, so the server must see one action (reusing
+  // the command_id when a second click does get through is covered in reducer.test.ts "one click,
+  // one command").
   let actions = 0;
   for (let round = 0; round < 40; round++) {
     for (const player of [an, binh]) {
@@ -139,10 +141,15 @@ test("two players and a spectator play one hand; nobody sees hidden cards", asyn
 
   // Every page agrees on the stacks (read before the next hand starts, 4 s later), and the
   // chips the seats came with are all still there.
+  // (the counts roll up to their new value for a moment: wait until every page has settled)
+  await expect
+    .poll(async () => {
+      const pages = [await stacks(an.page), await stacks(binh.page), await stacks(chi.page)];
+      const [a, b, c] = pages.map((p) => JSON.stringify(Object.entries(p).sort()));
+      return a === b && a === c && Object.values(pages[0]).reduce((x, y) => x + y, 0) === 2000 ? "ok" : JSON.stringify(pages);
+    })
+    .toBe("ok");
   const seen = await stacks(an.page);
-  expect(await stacks(binh.page)).toEqual(seen);
-  expect(await stacks(chi.page)).toEqual(seen);
-  expect(Object.values(seen).reduce((a, b) => a + b, 0)).toBe(2000);
 
   // The server applied exactly the actions taken: the double click counted once.
   const hands = await api(chi.page, "GET", `/api/rooms/${roomId}/hands/`);

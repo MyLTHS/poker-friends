@@ -46,11 +46,28 @@ class TestSimulateHands:
         room = simulated_room(hands=5, players=4, leave_unfinished=True)
         assert list(room.hands.filter(completed_at=None).values_list("hand_no", flat=True)) == [6]
 
+    def test_bomb_pots_get_an_amount_of_two_big_blinds_unless_given(self):
+        room = simulated_room(hands=4, players=3, bomb_pot_every=2)
+        assert (room.bomb_pot_every, room.bomb_pot_amount) == (2, 4)
+        assert room.hands.filter(config__bomb_pot=4).count() == 2
+        with pytest.raises(CommandError, match="bomb-pot-amount"):
+            call_command("simulate_hands", bomb_pot_every=2, bomb_pot_amount=0, stdout=StringIO())
+
     def test_rejects_bad_arguments(self):
         with pytest.raises(CommandError):
             call_command("simulate_hands", players=1, stdout=StringIO())
         with pytest.raises(CommandError):
             call_command("simulate_hands", hands=0, stdout=StringIO())
+
+
+class TestSoak:
+    def test_refuses_a_hand_pause_no_room_can_have(self):
+        # Checked before anything else: the room's own check (6 to 20 s) would end in an
+        # IntegrityError.
+        for wrong in (5, 21):
+            with pytest.raises(CommandError, match="--hand-pause"):
+                call_command("soak", hand_pause=wrong, stdout=StringIO())
+        assert not Room.objects.exists()
 
 
 class TestCheckLedgerPasses:

@@ -1,4 +1,4 @@
-"""Minimal REST for B4 (docs/api/openapi.yaml): take/leave a seat, read a snapshot.
+"""Minimal REST for B4 (docs/api/openapi.yaml): take/leave a seat (or stay), read a snapshot.
 
 Mutations go through the room's ``TableActor`` so they are ordered with WebSocket commands by
 the same single writer (ADR-001); only ``get_snapshot`` reads the actor directly.
@@ -103,10 +103,32 @@ async def leave_seat(request: HttpRequest, room_id: int) -> JsonResponse:
         return limited
     act = await actor_module.get_actor(room_id)
     try:
-        await act.leave_seat(user)
+        left_now = await act.leave_seat(user)
     except actor_module.Reject as reject:
         return _error(reject.code, str(reject), _status_for(reject.code))
+    if not left_now:  # in the running hand: the seat is freed when it ends
+        return JsonResponse({"leaving": True}, status=202)
     return JsonResponse(None, status=204, safe=False)
+
+
+async def stay(request: HttpRequest, room_id: int) -> JsonResponse:
+    """Take back a leave asked during the hand: the player keeps the seat after it."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    if not (await request.auser()).is_authenticated:  # no guest made just to be told that
+        return _error("not_seated", "Sit down first.", 409)
+    found = await _player_in_room(request, room_id)
+    if isinstance(found, JsonResponse):
+        return found
+    _, user = found
+    if limited := _count_seat_change(user):
+        return limited
+    act = await actor_module.get_actor(room_id)
+    try:
+        occupant = await act.stay(user)
+    except actor_module.Reject as reject:
+        return _error(reject.code, str(reject), _status_for(reject.code))
+    return JsonResponse(occupant)
 
 
 async def rebuy(request: HttpRequest, room_id: int) -> JsonResponse:

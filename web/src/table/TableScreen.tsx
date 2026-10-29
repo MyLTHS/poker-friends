@@ -9,15 +9,16 @@
 import "./table.css";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bomb, Coins, Crown, Eye, Hourglass } from "lucide-react";
+import { Bomb, Coins, Crown, Eye, Hourglass, LogOut, Play } from "lucide-react";
 
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
 import { FeedbackDialog } from "@/feedback/FeedbackDialog";
 import { Button, ButtonLink, CardText, D1Root, Sheet, Spinner, ToastProvider, fmt, signed } from "@/ui";
 
 import { IdleBar, PreActions, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
-import { Countdown, secondsLeft, useRecent, type TurnClock } from "./clock";
+import { Countdown, secondsLeft, useNow, useRecent, type TurnClock } from "./clock";
 import { useDevice } from "./device";
 import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
@@ -25,7 +26,7 @@ import { ConnStrip, PausedCard, ReconnectCard } from "./Overlays";
 import { runoutLines, winnerLines } from "./handName";
 import { bombPotHand, isBombPot, stakesText } from "./houseRules";
 import { canPreAct, canShowCards, facingBet, shownHands } from "./reducer";
-import { describeAction, raisePresets, tableView, type RunoutView, type SeatView } from "./seatView";
+import { describeAction, raisePresets, raiseSizing, tableView, type RunoutView, type SeatView } from "./seatView";
 import { SevenDeuceStage, SevenLedger, SevenMedal } from "./SevenDeuce";
 import {
   ChatComposer,
@@ -73,6 +74,8 @@ export type TableScreenProps = {
   onTakeSeat?: (seat: number) => Promise<string | null>;
   /** Leave my seat (keep watching). */
   onLeaveSeat?: () => Promise<string | null>;
+  /** Take back a leave asked during a hand (POST seats/me/stay/); resolves with an error text, or null. */
+  onStay?: () => Promise<string | null>;
   /** Out of chips: take the room's starting stack again ("Mua thêm"); resolves with an error text, or null. */
   onRebuy?: () => Promise<string | null>;
   /** Room owner: renders the owner's sheet (rooms/OwnerPanel) over the table. */
@@ -85,6 +88,9 @@ export type TableScreenProps = {
   replayHref?: (handId: number) => string;
   /** The room's win/loss page, linked from the top bar. */
   historyHref?: string;
+  /** Room owner: start dealing (a 10 s countdown, then hands follow one another) or stop after
+   *  the running hand. Each resolves with an error text, or null. */
+  control?: { onStart: () => Promise<string | null>; onPause: () => Promise<string | null> };
 };
 
 /** What the owner's sheet gets from the table. */
@@ -101,12 +107,14 @@ export function TableScreen({
   loadChat,
   onTakeSeat,
   onLeaveSeat,
+  onStay,
   onRebuy,
   owner,
   invite,
   startWithInvite = false,
   replayHref,
   historyHref,
+  control,
 }: TableScreenProps) {
   const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
   const refusal = useAuthRefusal(retry.final && !!retry.auth);
@@ -115,6 +123,14 @@ export function TableScreen({
   const [seen, setSeen] = useState(0);
   const [seatError, setSeatError] = useState<string | null>(null);
   const [rebuying, setRebuying] = useState(false);
+  const [controlBusy, setControlBusy] = useState(false);
+  // "Rời phòng" pressed: once my seat is free (now, or when the running hand ends), back to the lobby.
+  const [exiting, setExiting] = useState(false);
+  const router = useRouter();
+  const seatedNow = !!model.table?.seats.some((s) => s.player_id === model.table?.you.player_id);
+  useEffect(() => {
+    if (exiting && !seatedNow) router.push(backHref);
+  }, [exiting, seatedNow, router, backHref]);
   // One sheet or dialog at a time: picking a menu item swaps the menu for what it opens.
   const [dialog, setDialog] = useState<"menu" | "log" | "owner" | "invite" | "settings" | "help" | "feedback" | null>(startWithInvite && invite ? "invite" : null);
   const sound = useTableSound();
@@ -194,6 +210,8 @@ export function TableScreen({
 
   const dismissNotice = useCallback(() => dispatch({ type: "dismiss.notice" }), [dispatch]);
   const onAct = useCallback((kind: ActKind, amount?: number) => dispatch({ type: "act", kind, amount, commandId: newCommandId() }), [dispatch]);
+  // The amount of my last raise for this decision: a refused raise brings the bar back with it.
+  const [lastRaise, setLastRaise] = useState<{ key: string; amount: number } | null>(null);
   const say = useCallback((text: string) => dispatch({ type: "chat.send", text }), [dispatch]);
   const showCards = useCallback(() => dispatch({ type: "show", commandId: newCommandId() }), [dispatch]);
 
@@ -240,8 +258,25 @@ export function TableScreen({
   const deadline = turn ? Date.parse(turn.deadline) - model.clockOffsetMs : 0;
   const frozenAt = suspended && model.suspendedAt !== null ? secondsLeft(deadline, model.suspendedAt) : undefined;
   const clock: TurnClock | undefined = turn ? { deadline, total: turn.think_time_seconds, frozenAt } : undefined;
-  const myClock = myTurn ? clock : undefined;
+  // My action is on its way: show it as done at once (the tunnel round trip can take half a
+  // second); a refusal clears `pending` and brings the bar back.
+  const sent = myTurn && model.pending?.message.hand_id === hand?.hand_id ? model.pending!.message.payload : null;
+  const sentLabel = sent && legal ? (sent.kind === "fold" ? "Bỏ bài" : sent.kind === "check" ? "Check" : sent.kind === "call" ? `Theo ${fmt(legal.call_amount)}` : sent.amount === legal.max_raise_to ? `All-in ${fmt(sent.amount ?? 0)}` : `Tố ${fmt(sent.amount ?? 0)}`) : null;
+  const acting = myTurn && !sent;
+  const myClock = acting ? clock : undefined;
   const myFrozen = turn?.player_id === you.player_id ? frozenAt : undefined;
+
+  // Hands are dealt only once the owner pressed "Bắt đầu" (a server without it always deals); the
+  // next one comes at next_hand_at, read on our clock like the turn deadline.
+  const running = room.running !== false;
+  const nextAt = room.next_hand_at ? Date.parse(room.next_hand_at) - model.clockOffsetMs : null;
+  const toggleRunning = control
+    ? async () => {
+        setControlBusy(true);
+        setSeatError(await (running ? control.onPause() : control.onStart()));
+        setControlBusy(false);
+      }
+    : undefined;
 
   const handNo = hand?.hand_no;
   const blinds = `${fmt(room.small_blind)}/${fmt(room.big_blind)}`;
@@ -259,7 +294,25 @@ export function TableScreen({
     if (!onTakeSeat) return;
     setSeatError(await onTakeSeat(seat));
   };
+  // Standing up during a hand waits for its end (the server answers 202 and marks the seat leaving).
   const leave = onLeaveSeat && isSeated ? async () => setSeatError(await onLeaveSeat()) : undefined;
+  const exitRoom = async () => {
+    if (!onLeaveSeat) return router.push(backHref);
+    setExiting(true);
+    if (!isSeated) return;
+    const error = await onLeaveSeat();
+    if (error) {
+      setExiting(false);
+      setSeatError(error);
+    }
+  };
+  const stay =
+    onStay && occupant?.leaving
+      ? async () => {
+          setExiting(false);
+          setSeatError(await onStay());
+        }
+      : undefined;
   const toggleSit = () => dispatch({ type: "sit", out: !sittingOut, commandId: newCommandId() });
   const menuItems: TableMenuItems = {
     watchers: model.spectators.length,
@@ -269,29 +322,42 @@ export function TableScreen({
     historyHref,
     onSettings: () => setDialog("settings"),
     onFeedback: () => setDialog("feedback"),
-    leave: leave && { onLeave: leave, busy: !!hand && !hand.complete && hand.players.some((p) => p.player_id === you.player_id) },
+    leave: leave && { onLeave: leave, afterHand: !!hand && !hand.complete && hand.players.some((p) => p.player_id === you.player_id), leaving: !!occupant?.leaving, onStay: stay },
+    onExit: exitRoom,
+    control: toggleRunning && { running, busy: controlBusy || !online, onToggle: toggleRunning },
   };
   const menu = { open: dialog === "menu", onOpen: () => setDialog("menu") };
+  const soundToggle = { on: sound.prefs.on, onToggle: () => sound.setPrefs({ ...sound.prefs, on: !sound.prefs.on }) };
   const pre = canPreAct(model) && !celebration ? (
     <PreActions device={device} choice={model.preAction?.kind ?? null} facingBet={facingBet(model)} disabled={!online} onChoose={(kind) => dispatch({ type: "pre.select", kind, commandId: newCommandId() })} />
   ) : null;
 
+  const decisionKey = `${hand?.hand_id}-${hand?.board.length}-${legal?.min_raise_to}-${legal?.max_raise_to}-${legal?.call_amount}`;
   const turnProps = legal && hand
     ? {
         device,
         legal,
-        presets: raisePresets(hand, legal),
+        presets: raisePresets(hand, legal, room.big_blind),
+        sizing: raiseSizing(hand, legal, room.big_blind),
         step: room.big_blind,
         facingBet: hand.players.some((p) => p.bet > 0),
         clock: myClock,
         enabled: online && !pending,
         keys: device === "desktop" && keysOn,
-        onAct,
+        startAt: lastRaise?.key === decisionKey ? lastRaise.amount : undefined,
+        onAct: (kind: ActKind, amount?: number) => {
+          if (kind === "raise" && amount !== undefined) setLastRaise({ key: decisionKey, amount });
+          onAct(kind, amount);
+        },
       }
     : null;
-  const decisionKey = `${hand?.hand_id}-${hand?.board.length}-${legal?.min_raise_to}-${legal?.max_raise_to}-${legal?.call_amount}`;
 
-  const meHint = myTurn && clock ? (
+  const meHint = sentLabel ? (
+    <span className="turn-hint is-sent">
+      <b>✓</b>
+      <small>{sentLabel}</small>
+    </span>
+  ) : acting && clock ? (
     <span className="turn-hint">
       <b>
         <Countdown deadline={clock.deadline} />s
@@ -304,6 +370,35 @@ export function TableScreen({
       <small>Ván này</small>
     </span>
   ) : undefined;
+
+  // Watching, or leaving after this hand: said once on the felt (desktop), or under the phone's
+  // title bar, which covers the top of its stage.
+  const pills = (
+    <>
+      {occupant?.leaving && (
+        <div className="watch-pill leave-pill" role="status">
+          <LogOut size={device === "desktop" ? 15 : 12} strokeWidth={2} aria-hidden />
+          <span>
+            <b>{exiting ? "Bạn sẽ rời phòng" : "Bạn sẽ đứng dậy"}</b> khi hết ván này
+          </span>
+          {stay && (
+            <button type="button" className="leave-undo" aria-label="Huỷ, ở lại bàn" onClick={stay}>
+              Huỷ
+            </button>
+          )}
+        </div>
+      )}
+      {!isSeated && !celebration && (
+        <div className="watch-pill" role="status">
+          <Eye size={device === "desktop" ? 15 : 12} strokeWidth={2} aria-hidden />
+          <span>
+            <b>Bạn đang xem</b>
+            {onTakeSeat ? " · bấm ghế trống để vào chơi" : ""}
+          </span>
+        </div>
+      )}
+    </>
+  );
 
   const stage = (
     <Stage
@@ -323,14 +418,27 @@ export function TableScreen({
           </>
         ) : undefined
       }
-      clock={clock}
+      clock={sent ? undefined : clock}
       meHint={meHint}
       showPot={!hand?.complete}
       fx={fx}
       onSit={!isSeated && onTakeSeat ? sit : undefined}
+      meHand={hand && !hand.complete ? hand.hand_id : null}
       className={celebration ? "is-seven" : ""}
     >
       {layer}
+      {(!hand || (hand.complete && !running)) && !suspended && room.status !== "closed" && !celebration && (
+        <StartGate
+          compact={!!hand}
+          running={running}
+          nextAt={nextAt}
+          seated={table.seats.filter((s) => !s.sitting_out && s.stack > 0).length}
+          onStart={!running ? toggleRunning : undefined}
+          busy={controlBusy}
+          online={online}
+        />
+      )}
+      {device === "desktop" && pills}
       {hand?.complete && (winners.length > 0 || view.runouts) && !celebration && <WinnerBanner device={device} winners={winners} nameOf={nameOf} handOf={handOf} runouts={view.runouts} />}
       {celebration && sevenSpot && (
         <SevenDeuceStage key={hand?.hand_id} device={device} award={celebration} seats={table.seats} spot={sevenSpot} pot={Math.max(0, (model.results?.find((r) => r.player_id === celebration.player_id)?.hand_net ?? 0))} quiet={model.celebrationQuiet} startedAt={model.celebrationAt} />
@@ -349,9 +457,9 @@ export function TableScreen({
       <Sheet open={dialog === "log"} onClose={closeDialog} title="Nhật ký ván">
         {hand && !hand.complete && <HandFooter pot={view.potTotal} bets={view.bets} inHand={view.inHand} />}
         {celebration && <SevenLedger device={device} award={celebration} seats={table.seats} />}
-        <LogList entries={model.log} seats={table.seats} you={you.player_id} />
+        {dialog === "log" && <LogList entries={model.log} seats={table.seats} you={you.player_id} />}
         <h3 className="log-sub">Người chơi</h3>
-        <PlayerList seats={view.seats} />
+        {dialog === "log" && <PlayerList seats={view.seats} />}
       </Sheet>
       {owner?.({ open: dialog === "owner", onClose: closeDialog, seats: table.seats, inHand })}
       {invite?.({ open: dialog === "invite", onClose: closeDialog })}
@@ -374,7 +482,7 @@ export function TableScreen({
       <div className={`scrim scrim-${device === "desktop" ? "d" : "m"}`} />
       {device === "desktop" && <ConnStrip device="desktop" />}
       <div className="rc-wrap">
-        <ReconnectCard device={device} retry={retry} refusal={refusal} myClock={myClock} canCheck={!!legal?.can_check} backHref={backHref} onRetry={reconnectNow} />
+        <ReconnectCard device={device} retry={retry} refusal={refusal} myClock={myTurn ? clock : undefined} canCheck={!!legal?.can_check} backHref={backHref} onRetry={reconnectNow} />
       </div>
     </>
   );
@@ -413,13 +521,22 @@ export function TableScreen({
           <PausedCard device="mobile" handNo={handNo} frozenAt={myFrozen} onReload={reload} backHref={backHref} />
         </aside>
       );
-    } else if (myTurn && turnProps) {
+    } else if (acting && turnProps) {
       panel = <TurnPanel key={decisionKey} {...turnProps} device="mobile" />;
+    } else if (sentLabel) {
+      panel = (
+        <aside className="ppanel idle-panel is-sent">
+          <div className="ip-next">
+            <span className="abar-eyebrow">Đã chọn</span>
+            <span className="ip-status">{sentLabel}</span>
+          </div>
+        </aside>
+      );
     } else if (celebration) {
       panel = (
         <aside className="ppanel sd-panel">
           <SevenLedger device="mobile" award={celebration} seats={table.seats} />
-          <NextHand bomb={nextBomb} />
+          <NextHand bomb={nextBomb} at={nextAt} running={running} />
         </aside>
       );
     } else {
@@ -427,7 +544,7 @@ export function TableScreen({
         <aside className="ppanel idle-panel">
           <div className="ip-next">
             <span className="abar-eyebrow">{idle.eyebrow}</span>
-            {hand?.complete ? <NextHand bomb={nextBomb} /> : <span className="ip-status">{idle.status}</span>}
+            {hand?.complete ? <NextHand bomb={nextBomb} at={nextAt} running={running} /> : <span className="ip-status">{idle.status}</span>}
           </div>
           {idle.win && (
             <div className="ip-win">
@@ -465,6 +582,7 @@ export function TableScreen({
           <FitStage device="mobile" className={!online || suspended ? "is-dimmed" : ""}>
             {stage}
           </FitStage>
+          <div className="pills-m">{pills}</div>
           <MobileTableBar
             backHref={backHref}
             title={room.name}
@@ -476,7 +594,7 @@ export function TableScreen({
                   Mất kết nối · đang thử lại
                 </span>
               ) : (
-                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} />
+                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} />
               )
             }
           />
@@ -494,8 +612,19 @@ export function TableScreen({
 
   /* ---------- desktop ---------- */
   const bar =
-    myTurn && turnProps ? (
+    acting && turnProps ? (
       <TurnBar key={decisionKey} {...turnProps} device="desktop" />
+    ) : sentLabel ? (
+      <IdleBar
+        className="abar-sent"
+        left={
+          <span className="idle-hand">
+            <small>Đã chọn</small>
+            <b>{sentLabel}</b>
+          </span>
+        }
+        center={<span className="idle-msg is-quiet">Đang gửi tới bàn…</span>}
+      />
     ) : (
       <IdleBar
         className={pre ? "abar-pre" : ""}
@@ -549,7 +678,7 @@ export function TableScreen({
                 Xem lại ván
               </Link>
             )}
-            {hand?.complete && <NextHand bomb={nextBomb} />}
+            {hand?.complete && <NextHand bomb={nextBomb} at={nextAt} running={running} />}
           </>
         }
       />
@@ -586,7 +715,7 @@ export function TableScreen({
           </>
         }
         right={
-          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} />
+          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} onExit={occupant?.leaving ? undefined : exitRoom} />
         }
       />
       <div className={`table-area${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`} {...probe}>
@@ -614,12 +743,65 @@ export function TableScreen({
 
 /* ---------- pieces ---------- */
 
-function NextHand({ bomb = false }: { bomb?: boolean }) {
+function NextHand({ bomb = false, at = null, running = true }: { bomb?: boolean; at?: number | null; running?: boolean }) {
   return (
     <span className="next-hand">
       {bomb ? <Bomb size={15} strokeWidth={2} aria-hidden /> : <Hourglass size={15} strokeWidth={2} />}
-      {bomb ? "Ván sau là bomb pot…" : "Ván mới sắp bắt đầu…"}
+      {!running ? (
+        "Bàn đang tạm dừng"
+      ) : at ? (
+        <>
+          {bomb ? "Bomb pot sau " : "Ván mới sau "}
+          <Countdown deadline={at} />s
+        </>
+      ) : bomb ? (
+        "Ván sau là bomb pot…"
+      ) : (
+        "Ván mới sắp bắt đầu…"
+      )}
     </span>
+  );
+}
+
+/** Between hands with nothing dealt yet (or the owner paused): who starts it, or the countdown to
+ *  the first hand in big numbers. `compact` sits under a finished hand still on the felt. */
+function StartGate({ compact, running, nextAt, seated, onStart, busy, online }: { compact: boolean; running: boolean; nextAt: number | null; seated: number; onStart?: () => void; busy: boolean; online: boolean }) {
+  if (running && nextAt) return <BigCountdown at={nextAt} />;
+  if (running) {
+    return (
+      <div className="start-gate is-quiet" role="status">
+        <small>{seated < 2 ? "Cần ít nhất 2 người có chip để chia bài" : "Sắp chia bài…"}</small>
+      </div>
+    );
+  }
+  const few = seated < 2;
+  return (
+    <div className={`start-gate${compact ? " is-compact" : ""}`} role="status">
+      {!compact && <b className="sg-title">{onStart ? "Sẵn sàng chưa?" : "Chờ chủ phòng bắt đầu"}</b>}
+      {onStart ? (
+        <>
+          <Button kind="primary" size={compact ? "md" : "lg"} busy={busy} disabled={!online || few} icon={<Play size={18} strokeWidth={2.2} aria-hidden />} onClick={onStart}>
+            {compact ? "Tiếp tục chia" : "Bắt đầu"}
+          </Button>
+          <small>{few ? "Cần ít nhất 2 người ngồi (có chip) để bắt đầu" : compact ? "Bàn đang tạm dừng" : "Bấm để đếm ngược 10 giây rồi chia bài"}</small>
+        </>
+      ) : (
+        <small>{compact ? "Bàn đang tạm dừng — chờ chủ phòng" : "Chọn ghế, chủ phòng bấm “Bắt đầu” là chia bài"}</small>
+      )}
+    </div>
+  );
+}
+
+/** The first hand's countdown: each second pops in. */
+function BigCountdown({ at }: { at: number }) {
+  const n = secondsLeft(at, useNow(250));
+  return (
+    <div className="start-gate is-counting" role="timer" aria-live="polite" aria-label={`Chia bài sau ${n} giây`}>
+      <small>Chia bài sau</small>
+      <b key={n} className="sg-count">
+        {n}
+      </b>
+    </div>
   );
 }
 
@@ -715,8 +897,8 @@ function idleContent({
     const shownSub = lines?.detail && (winners.length === 1 && !runouts ? `với ${lines.detail}` : lines.detail);
     return {
       eyebrow: `Ván #${hand.hand_no} đã xong`,
-      status: nextBomb ? "Ván sau là bomb pot" : "Chờ ván mới",
-      center: nextBomb ? "Ván sau là bomb pot." : "Ván mới sắp bắt đầu.",
+      status: room.running === false ? "Bàn đang tạm dừng" : nextBomb ? "Ván sau là bomb pot" : "Chờ ván mới",
+      center: room.running === false ? "Bàn đang tạm dừng." : nextBomb ? "Ván sau là bomb pot." : "Ván mới sắp bắt đầu.",
       mine: net === null ? (me ? undefined : "Bạn đang xem") : `Bạn: ${mine ? `${mine} · ` : ""}${net > 0 ? `thắng ${signed(net)}` : net < 0 ? `thua ${fmt(net)}` : "hoà vốn"}`,
       win: celebration ? undefined : win,
       winSub: shownSub || (showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined),
@@ -731,7 +913,7 @@ function idleContent({
       ? "Đang nghỉ — mở Menu, bấm “Quay lại bàn”"
       : "Bạn đã ngồi — vào từ ván sau";
   if (!hand) {
-    const waiting = seated < 2 ? "Cần ít nhất 2 người ngồi để chia bài" : "Ván mới sắp bắt đầu";
+    const waiting = room.running === false ? "Chờ chủ phòng bấm Bắt đầu" : seated < 2 ? "Cần ít nhất 2 người ngồi để chia bài" : "Ván mới sắp bắt đầu";
     if (!me) return { eyebrow: "Bạn đang xem", status: waiting, center: "Bấm một ghế trống để ngồi." };
     return { eyebrow: noChips ? "Bạn đã ngồi" : sittingOut ? "Bạn đang nghỉ" : "Giữa hai ván", status: noChips ? seatedWait : waiting, center: noChips ? seatedWait : waiting + "." };
   }

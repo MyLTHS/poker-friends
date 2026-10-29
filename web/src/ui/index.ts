@@ -8,7 +8,7 @@ export type { BadgeKind, ButtonKind } from "./controls";
 export { Confetti, QR, sampleQrModules } from "./fx";
 export { cardName, fmt, isRed, parseCard, signed, tone } from "./format";
 export type { Face, Suit } from "./format";
-export { DURATION, EASE, REDUCED_FADE, STAGGER, fly, flyKeyframes, play, prefersReducedMotion } from "./motion";
+export { BEAT, DURATION, EASE, REDUCED_FADE, STAGGER, fly, flyKeyframes, play, prefersReducedMotion } from "./motion";
 export { Avatar, Crest, MiniTable, TimerRing, Wordmark } from "./people";
 export { RotatePrompt } from "./RotatePrompt";
 export { AppShell, D1Root, NAV_ITEMS, PageHead } from "./shell";

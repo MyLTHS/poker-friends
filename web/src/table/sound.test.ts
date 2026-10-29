@@ -66,13 +66,16 @@ describe("soundsForCues", () => {
       { kind: "seven" as const, seat: 1 },
     ];
     expect(soundsForCues(cues, 1)).toEqual([{ name: "seven" }]);
-    expect(soundsForCues([{ kind: "bet", seat: 2 }, { kind: "fold", seat: 3 }], 2)).toEqual([]);
+    expect(soundsForCues([{ kind: "bet", seat: 2 }, { kind: "fold", seat: 3 }], 2)).toEqual([{ name: "chip" }]);
+    expect(soundsForCues([{ kind: "fold", seat: 3 }], 2)).toEqual([]);
+    expect(soundsForCues([{ kind: "board", from: 0, to: 3 }], 2)).toEqual([{ name: "deal", count: 3 }]);
+    expect(soundsForCues([{ kind: "big", seat: 4, title: "Cù lũ!" }], 2)).toEqual([{ name: "big" }]);
   });
 });
 
 describe("recipe", () => {
   it("gives every sound short, quiet voices", () => {
-    for (const name of ["deal", "turn", "hurry", "pot", "win", "seven"] satisfies SoundName[]) {
+    for (const name of ["deal", "chip", "turn", "hurry", "pot", "win", "big", "seven"] satisfies SoundName[]) {
       const voices = recipe(name, 4);
       expect(voices.length).toBeGreaterThan(0);
       for (const v of voices) {

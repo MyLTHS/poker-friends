@@ -5,8 +5,8 @@
 // or chatting), chat lines and composer, who is watching. Chat goes through the table's own
 // socket (chat.send → chat.message).
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ChartNoAxesColumn, ChevronLeft, Coffee, Crown, Eye, LogOut, Menu as MenuIcon, MessageCircle, MessageSquareText, ScrollText, Send, Settings, Smile, UserPlus, X } from "lucide-react";
+import { memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { ChartNoAxesColumn, ChevronLeft, Coffee, Crown, Eye, LogOut, Menu as MenuIcon, MessageCircle, MessageSquareText, Pause, Play, ScrollText, Send, Settings, Smile, UserPlus, Volume2, VolumeX, X } from "lucide-react";
 
 import type { ChatMessage, Spectator } from "@/api/protocol";
 import { Avatar, IconButton, Sheet, fmt } from "@/ui";
@@ -52,9 +52,40 @@ export function TableTopBar({
 }
 
 /** The desktop bar's right end: "Mời bạn" and the ☰ menu (everything else lives in the menu). */
-export function TableTools({ onInvite, menu }: { onInvite?: () => void; menu: MenuButtonProps }) {
+/** Who is watching without a seat, always in sight in the top bar ("👁 2"); names on hover. */
+function WatchCount({ spectators }: { spectators: Spectator[] }) {
+  if (spectators.length === 0) return null;
+  const names = spectators.map((s) => s.display_name).join(", ");
+  return (
+    <span className="tbar-watch" role="img" title={`Đang xem: ${names}`} aria-label={`${spectators.length} người đang xem: ${names}`}>
+      <Eye size={15} strokeWidth={2} aria-hidden />
+      {spectators.length}
+    </span>
+  );
+}
+
+/** Sound on/off in one tap (volume stays in the settings). */
+export type SoundToggle = { on: boolean; onToggle: () => void };
+
+function SoundButton({ sound, size }: { sound: SoundToggle; size: number }) {
+  return (
+    <IconButton label="Âm thanh" pressed={sound.on} onClick={sound.onToggle}>
+      {sound.on ? <Volume2 size={size} strokeWidth={1.9} aria-hidden /> : <VolumeX size={size} strokeWidth={1.9} aria-hidden />}
+    </IconButton>
+  );
+}
+
+export function TableTools({ onInvite, menu, spectators = [], sound, onExit }: { onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[]; sound?: SoundToggle; onExit?: () => void }) {
   return (
     <>
+      <WatchCount spectators={spectators} />
+      {sound && <SoundButton sound={sound} size={19} />}
+      {onExit && (
+        <button type="button" className="tbar-btn is-quiet" aria-label="Rời phòng" onClick={onExit}>
+          <LogOut size={15} strokeWidth={1.9} aria-hidden />
+          <span className="tbar-label">Rời phòng</span>
+        </button>
+      )}
       {onInvite && (
         <button type="button" className="tbar-btn" aria-haspopup="dialog" aria-label="Mời bạn" onClick={onInvite}>
           <UserPlus size={15} strokeWidth={1.9} aria-hidden />
@@ -93,15 +124,19 @@ export type TableMenuItems = {
   /** sound, keys, feedback (TableSettings) */
   onSettings: () => void;
   onFeedback?: () => void;
-  /** seated: leave the seat and keep watching (`busy`: dealt into the running hand, which the
-   *  server refuses until it ends, folded or not) */
-  leave?: { onLeave: () => void; busy: boolean };
+  /** seated: stand up and keep watching. Dealt into the running hand (`afterHand`), the seat is
+   *  freed when it ends; `leaving` = already asked, `onStay` takes it back. */
+  leave?: { onLeave: () => void; afterHand: boolean; leaving: boolean; onStay?: () => void };
+  /** leave the room: the seat first (after the running hand), then back to the lobby */
+  onExit?: () => void;
+  /** room owner: start dealing, or stop after the running hand */
+  control?: { running: boolean; busy: boolean; onToggle: () => void };
 };
 
 /** The table's menu: a narrow sheet of plain buttons. Picking one closes the menu first, so a
  *  dialog it opens (settings, owner's sheet…) gives the focus back to the ☰ button. */
 export function TableMenu({ open, onClose, items }: { open: boolean; onClose: () => void; items: TableMenuItems }) {
-  const { watchers, sit, onOwner, onLog, historyHref, onSettings, onFeedback, leave } = items;
+  const { watchers, sit, onOwner, onLog, historyHref, onSettings, onFeedback, leave, onExit, control } = items;
   const pick = (run: () => void) => () => {
     onClose();
     run();
@@ -123,6 +158,11 @@ export function TableMenu({ open, onClose, items }: { open: boolean; onClose: ()
         {sit && (
           <MenuItem icon={<Coffee size={18} strokeWidth={1.9} />} onClick={pick(sit.onToggle)} disabled={sit.disabled}>
             {sit.sittingOut ? "Quay lại bàn" : "Nghỉ ván sau"}
+          </MenuItem>
+        )}
+        {control && (
+          <MenuItem icon={control.running ? <Pause size={18} strokeWidth={1.9} /> : <Play size={18} strokeWidth={1.9} />} onClick={pick(control.onToggle)} disabled={control.busy}>
+            {control.running ? "Tạm dừng (hết ván này)" : "Bắt đầu chia bài"}
           </MenuItem>
         )}
         {onOwner && (
@@ -149,9 +189,21 @@ export function TableMenu({ open, onClose, items }: { open: boolean; onClose: ()
             Góp ý
           </MenuItem>
         )}
-        {leave && (
-          <MenuItem icon={<LogOut size={18} strokeWidth={1.9} />} onClick={pick(leave.onLeave)} disabled={leave.busy} quiet>
-            {leave.busy ? "Rời ghế · hết ván mới rời được" : "Rời ghế"}
+        {leave &&
+          (leave.leaving ? (
+            leave.onStay && (
+              <MenuItem icon={<Coffee size={18} strokeWidth={1.9} />} onClick={pick(leave.onStay)}>
+                Ở lại bàn (huỷ đứng dậy)
+              </MenuItem>
+            )
+          ) : (
+            <MenuItem icon={<Eye size={18} strokeWidth={1.9} />} onClick={pick(leave.onLeave)} quiet>
+              {leave.afterHand ? "Đứng dậy xem · sau ván này" : "Đứng dậy xem"}
+            </MenuItem>
+          ))}
+        {onExit && (
+          <MenuItem icon={<LogOut size={18} strokeWidth={1.9} />} onClick={pick(onExit)} quiet>
+            {leave?.afterHand && !leave.leaving ? "Rời phòng · sau ván này" : "Rời phòng"}
           </MenuItem>
         )}
       </ul>
@@ -187,10 +239,12 @@ export function MobileTableBar({ backHref, title, sub, right }: { backHref: stri
   );
 }
 
-export function MobileTools({ unread, onChat, onInvite, menu }: { unread: number; onChat: () => void; onInvite?: () => void; menu: MenuButtonProps }) {
+export function MobileTools({ unread, onChat, onInvite, menu, spectators = [], sound }: { unread: number; onChat: () => void; onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[]; sound?: SoundToggle }) {
   // id: the chat drawer gives focus back to this button when it closes
   return (
     <>
+      <WatchCount spectators={spectators} />
+      {sound && <SoundButton sound={sound} size={18} />}
       <IconButton id="tbl-chat-btn" label="Chat" badge={unread > 0 ? unread : undefined} onClick={onChat}>
         <MessageCircle size={20} strokeWidth={1.9} aria-hidden />
       </IconButton>
@@ -237,7 +291,8 @@ export function HandFooter({ pot, bets, inHand }: { pot: number; bets: number; i
 
 /* ---------- chat ---------- */
 
-export function ChatList({ messages, me, spectators, compact = false }: { messages: ChatMessage[]; me: string; spectators: Spectator[]; compact?: boolean }) {
+// Memoized: the chat redraws when a line or a watcher comes, not with every move on the table.
+export const ChatList = memo(function ChatList({ messages, me, spectators, compact = false }: { messages: ChatMessage[]; me: string; spectators: Spectator[]; compact?: boolean }) {
   const list = useRef<HTMLDivElement>(null);
   const watching = new Set(spectators.map((s) => s.player_id));
   // Newest line in view: scroll the list itself (scrollIntoView would also scroll the page sideways
@@ -276,7 +331,7 @@ export function ChatList({ messages, me, spectators, compact = false }: { messag
       })}
     </div>
   );
-}
+});
 
 export function ChatComposer({ onSend, disabled }: { onSend: (text: string) => void; disabled?: boolean }) {
   // Offline (disabled) the draft stays: it is sent once the socket is back.

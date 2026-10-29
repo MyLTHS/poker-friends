@@ -4,17 +4,20 @@
 // design's fixed coordinates (geometry.ts), drawn at design size and scaled as a whole to the room
 // it gets (FitStage). Elements the animations move carry data-* hooks (data-seat-cards, data-bet,
 // data-board, data-av, data-pot); TableFx finds them there.
-import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Crown, Moon, Plus, Timer, WifiOff } from "lucide-react";
+import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { Crown, LogOut, Moon, Plus, Timer, WifiOff } from "lucide-react";
 
-import { Avatar, ChipStack, FlipCard, PlayingCard, fmt } from "@/ui";
+import { Avatar, ChipStack, Confetti, FlipCard, PlayingCard, fmt } from "@/ui";
 
 import { Countdown, LiveRing, type TurnClock } from "./clock";
 import { GEO, betPos, dealerPos, fitScale, spotPos, type Device, type Pt } from "./geometry";
-import { runoutText } from "./handName";
+import { isPremiumStart, runoutText } from "./handName";
+import { compareCategory, liveHand } from "./liveHand";
+import { Rolling } from "./Rolling";
 import type { RunoutView, SeatView } from "./seatView";
 
 const at = (p: Pt, extra?: CSSProperties): CSSProperties => ({ left: p.x, top: p.y, ...extra });
+const dealerAt = (p: Pt): CSSProperties => ({ left: 0, top: 0, translate: `${p.x}px ${p.y}px` });
 
 /** Scale of the stage on screen: animations convert screen boxes to stage pixels with it. */
 export const StageScale = createContext(1);
@@ -74,7 +77,7 @@ function BoardCards({ cards, w, hi, hidden, rabbit = [], mark }: { cards: string
   );
 }
 
-export function Board({ device, cards, hi = [], hidden = 0, runouts, rabbit }: { device: Device; cards: string[]; hi?: number[]; hidden?: number; runouts?: RunoutView[] | null; rabbit?: string[] }) {
+export const Board = memo(function Board({ device, cards, hi = [], hidden = 0, runouts, rabbit }: { device: Device; cards: string[]; hi?: number[]; hidden?: number; runouts?: RunoutView[] | null; rabbit?: string[] }) {
   const g = GEO[device];
   if (runouts?.length) {
     // Run twice: one compact row per board, "Lần 1" / "Lần 2", who it paid at the end of the row.
@@ -106,29 +109,31 @@ export function Board({ device, cards, hi = [], hidden = 0, runouts, rabbit }: {
       <BoardCards cards={cards} w={g.cardW} hi={hi} hidden={hidden} rabbit={rabbit} mark />
     </div>
   );
-}
+});
 
-export function Pot({ device, amount, label = "Pot" }: { device: Device; amount: number; label?: string }) {
+export const Pot = memo(function Pot({ device, amount, label = "Pot" }: { device: Device; amount: number; label?: string }) {
   const d = device === "desktop";
   return (
     <div className="pot" data-pot style={at(GEO[device].pot)}>
       <ChipStack amount={amount} cols={d ? 3 : 2} size={d ? 22 : 14} max={d ? 5 : 3} />
       <span className="pot-pill">
         <small>{label}</small>
-        <b>{fmt(amount)}</b>
+        <b>
+          <Rolling value={amount} />
+        </b>
       </span>
     </div>
   );
-}
+});
 
-function Bet({ device, s }: { device: Device; s: SeatView }) {
+const Bet = memo(function Bet({ device, s }: { device: Device; s: SeatView }) {
   return (
     <div className="bet" data-bet={s.seat} style={at(betPos(device, s.spot, s.isMe))}>
       <ChipStack amount={s.bet!} size={device === "desktop" ? 20 : 14} max={4} />
       <span className="bet-amt">{fmt(s.bet!)}</span>
     </div>
   );
-}
+});
 
 /* ---------- seats ---------- */
 
@@ -183,35 +188,37 @@ function SeatTag({ s, device, clock }: { s: SeatView; device: Device; clock?: Tu
 export type StageFx = {
   /** Seats whose face-up cards still show their backs (showdown flips not reached yet). */
   unflipped?: Set<number>;
+  /** Board cards already turned face up while new ones turn over (null: all). */
+  boardUp?: number | null;
 };
 
-function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatView; cx: number; clock?: TurnClock; fx: StageFx; onSit?: (seat: number) => void }) {
+// Memoized: an effect or a chat line elsewhere does not redraw every seat. onSit only reads stable
+// handlers (the table's take-seat call and its error setter), so a new function alone is no reason.
+const sameClock = (a?: TurnClock, b?: TurnClock) => a === b || (!!a && !!b && a.deadline === b.deadline && a.total === b.total && a.frozenAt === b.frozenAt);
+const SeatPod = memo(SeatPodView, (a, b) => a.s === b.s && sameClock(a.clock, b.clock) && a.turning === b.turning && a.device === b.device && a.cx === b.cx && !a.onSit === !b.onSit);
+
+function SeatPodView({ device, s, cx, clock, turning, onSit }: { device: Device; s: SeatView; cx: number; clock?: TurnClock; turning: boolean; onSit?: (seat: number) => void }) {
   const p = spotPos(device, s.spot);
   const d = device === "desktop";
   const avSize = d ? 56 : 36;
   if (s.state === "empty") {
-    const inner = (
-      <>
+    // Free seats invite a watcher to sit; for someone already seated they are just a faint chair.
+    return onSit ? (
+      <button type="button" className="seat seat-empty" style={at(p)} onClick={() => onSit(s.seat)} aria-label={`Ngồi vào ghế ${s.seat}`}>
         <span className="chair" style={{ width: avSize, height: avSize }}>
           <Plus size={d ? 18 : 14} strokeWidth={2} />
         </span>
         <span className="chair-label">Ngồi vào</span>
-      </>
-    );
-    return onSit ? (
-      <button type="button" className="seat seat-empty" style={at(p)} onClick={() => onSit(s.seat)} aria-label={`Ngồi vào ghế ${s.seat}`}>
-        {inner}
       </button>
     ) : (
       <div className="seat seat-empty is-idle" style={at(p)} aria-hidden>
-        {inner}
+        <span className="chair" style={{ width: avSize, height: avSize }} />
       </div>
     );
   }
   const side = p.x <= cx ? "r" : "l";
   const cards = s.cards ?? [];
   const hidden = cards.length > 0 && !s.shown;
-  const turning = fx.unflipped?.has(s.seat) ?? false;
   return (
     <div className={`seat st-${s.state} toward-${side}${p.y < 100 ? " is-top" : ""}`} style={at(p)} data-seat={s.seat} role="group" aria-label={`Ghế ${s.seat}: ${s.name}`}>
       {s.delta && <span className={`delta delta-${s.delta.kind}`}>{s.delta.text}</span>}
@@ -233,6 +240,11 @@ function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatV
         )}
         <Avatar name={s.name ?? "?"} size={avSize} />
         {s.state === "turn" && clock && <LiveRing size={avSize} clock={clock} gap={2} stroke={d ? 4 : 3} />}
+        {s.leaving && (
+          <span className="av-flag av-leave" role="img" aria-label="Sắp rời bàn sau ván này" title="Sắp rời bàn sau ván này">
+            <LogOut size={d ? 12 : 10} strokeWidth={2.6} />
+          </span>
+        )}
         {s.offline && (
           <span className="av-flag" aria-label="Mất kết nối">
             <WifiOff size={d ? 12 : 10} strokeWidth={2.6} />
@@ -241,30 +253,88 @@ function SeatPod({ device, s, cx, clock, fx, onSit }: { device: Device; s: SeatV
       </span>
       <span className="seat-plate">
         <b>{s.name}</b>
-        <span className="stack">{fmt(s.stack ?? 0)}</span>
+        <span className="stack">
+          <Rolling value={s.stack ?? 0} />
+        </span>
       </span>
-      <SeatTag s={s} device={device} clock={clock} />
+      {/* keyed: a new action or state pops in again */}
+      <SeatTag key={`${s.state}:${s.lastAction ?? ""}`} s={s} device={device} clock={clock} />
       {s.hand && <span className="seat-hand">{s.hand}</span>}
     </div>
   );
 }
 
+/** My cards turn over by themselves this long after they land (the deal takes up to ~3 s). */
+const AUTO_TURN_MS = 5000;
+
+// The hand whose cards I already turned over survives a reload or the phone/desktop switch.
+const OPEN_KEY = "pf.openHand";
+function readOpenHand(): number | null {
+  try {
+    const v = Number(sessionStorage.getItem(OPEN_KEY));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+function keepOpenHand(handId: number | null | undefined) {
+  try {
+    if (handId != null) sessionStorage.setItem(OPEN_KEY, String(handId));
+  } catch {
+    // private mode: the cards just start face down again after a reload
+  }
+}
+
 /** My own seat: big hole cards, wide plate. Desktop stacks cards over the plate; the phone puts
  *  the cards beside the plate (hint above it) at the bottom centre of the stage. */
-function MeSeat({ device, s, hint, clock }: { device: Device; s: SeatView; hint?: ReactNode; clock?: TurnClock }) {
+function MeSeat({ device, s, hint, clock, handId, board }: { device: Device; s: SeatView; hint?: ReactNode; clock?: TurnClock; handId?: number | null; board: string[] }) {
   const p = spotPos(device, 1, true);
   const cards = s.cards ?? [];
   const d = device === "desktop";
+  // My cards land face down and turn over when I touch them, by themselves after a while, or at
+  // once when it is my turn. Without a hand id (replays) they are simply face up.
+  const [openFor, setOpenFor] = useState<number | null>(readOpenHand);
+  const real = cards.length > 0 && cards.every((c) => c !== "??");
+  const open = handId == null || openFor === handId || !real;
+  const turnUp = useCallback(() => {
+    setOpenFor(handId ?? null);
+    keepOpenHand(handId);
+  }, [handId]);
+  if (!open && s.state === "turn") setOpenFor(handId ?? null);
+  useEffect(() => {
+    if (open) return;
+    const timer = setTimeout(turnUp, AUTO_TURN_MS);
+    return () => clearTimeout(timer);
+  }, [open, turnUp]);
+  const premium = open && real && handId != null && isPremiumStart(cards);
+  const superb = premium && cards[0][0] === cards[1][0] && "AK".includes(cards[0][0]);
+  // What I hold right now, named on my cards while the hand runs ("Đôi J", "Thùng già A"); two
+  // pair or better lights up, a straight or better turns gold.
+  const live = open && real && handId != null && s.state !== "folded" ? liveHand(cards, board) : null;
+  const strength = live ? (compareCategory(live.category, "straight") >= 0 ? " is-strong" : compareCategory(live.category, "two_pair") >= 0 ? " is-good" : "") : "";
+  const label = s.hand ?? (premium && board.length === 0 ? `${superb ? "Bài siêu đẹp!" : "Bài đẹp!"}${live ? ` · ${live.name}` : ""}` : live?.name);
   return (
     <div className={`me me-${device} st-${s.state}`} style={at(p)} data-seat={s.seat} role="group" aria-label={`Ghế ${s.seat}: ${s.name} (bạn)`}>
       {s.delta && <span className={`delta delta-${s.delta.kind}`}>{s.delta.text}</span>}
-      <span className="me-cards" data-seat-cards={s.seat}>
+      <span
+        className={`me-cards${open ? "" : " is-closed"}${premium ? " is-premium" : ""}`}
+        data-seat-cards={s.seat}
+        // once open it stays focusable (-1), so a keyboard user's focus is not dropped
+        {...(open ? { tabIndex: -1 } : { role: "button", tabIndex: 0, "aria-label": "Lật bài của bạn", onClick: turnUp, onKeyDown: (e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), turnUp()) })}
+      >
         {cards.length > 0 ? (
-          cards.map((c, i) => <PlayingCard key={i} card={c} w={d ? 84 : 54} rotate={i === 0 ? -6 : 6} className="me-card" />)
+          cards.map((c, i) => <FlipCard key={`${handId ?? "x"}-${i}`} card={c} faceUp={open} w={d ? 84 : 54} rotate={i === 0 ? -6 : 6} className={`me-card me-flip-${i}`} />)
         ) : (
           <span className="me-nocards">{s.state === "folded" ? "Đã bỏ bài" : "Chưa có bài"}</span>
         )}
-        {s.hand && <span className="me-hand">{s.hand}</span>}
+        {!open && <span className="me-peek">Chạm để xem bài</span>}
+        {open && label && (
+          // keyed: a better hand pops in again
+          <span key={label} className={`me-hand${!s.hand && premium && board.length === 0 ? " me-premium" : ""}${s.hand ? "" : strength}`}>
+            {label}
+          </span>
+        )}
+        {premium && <Confetti count={superb ? 30 : 18} small spread={superb ? 1.1 : 0.8} className="me-sparkle" />}
       </span>
       <span className="me-plate">
         <span className="me-av" data-av={s.seat}>
@@ -275,7 +345,9 @@ function MeSeat({ device, s, hint, clock }: { device: Device; s: SeatView; hint?
           <b>
             {s.name} <em>Bạn</em>
           </b>
-          <span className="stack">{fmt(s.stack ?? 0)}</span>
+          <span className="stack">
+            <Rolling value={s.stack ?? 0} />
+          </span>
         </span>
         {d && hint && <span className="me-hint">{hint}</span>}
       </span>
@@ -308,11 +380,13 @@ export type StageProps = {
   /** Board cards not drawn yet (an animation deals them in). */
   boardHidden?: number;
   onSit?: (seat: number) => void;
+  /** The live hand: my cards then land face down and turn over on a touch (none in a replay). */
+  meHand?: number | null;
   children?: ReactNode;
   className?: string;
 };
 
-export function Stage({ device, seats, board, boardHi, runouts, rabbit, pot, potLabel, mark, badge, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, children, className = "" }: StageProps) {
+export function Stage({ device, seats, board, boardHi, runouts, rabbit, pot, potLabel, mark, badge, clock, meHint, showPot = true, fx = {}, boardHidden = 0, onSit, meHand, children, className = "" }: StageProps) {
   const g = GEO[device];
   const me = seats.find((s) => s.isMe);
   const button = seats.find((s) => s.isButton);
@@ -337,16 +411,17 @@ export function Stage({ device, seats, board, boardHi, runouts, rabbit, pot, pot
       <Board device={device} cards={board} hi={boardHi} hidden={boardHidden} runouts={runouts} rabbit={rabbit} />
       {seats.filter((s) => (s.bet ?? 0) > 0).map((s) => <Bet key={s.seat} device={device} s={s} />)}
       {button && (
-        <span className="dealer" style={at(dealerPos(device, button.spot, button.isMe))} aria-label="Nút dealer">
+        // placed with translate (not left/top), so its slide to the next button seat stays on the GPU
+        <span className="dealer" style={dealerAt(dealerPos(device, button.spot, button.isMe))} aria-label="Nút dealer">
           D
         </span>
       )}
       {seats
         .filter((s) => !s.isMe)
         .map((s) => (
-          <SeatPod key={s.seat} device={device} s={s} cx={g.c.x} clock={s.state === "turn" ? clock : undefined} fx={fx} onSit={onSit} />
+          <SeatPod key={s.seat} device={device} s={s} cx={g.c.x} clock={s.state === "turn" ? clock : undefined} turning={fx.unflipped?.has(s.seat) ?? false} onSit={onSit} />
         ))}
-      {me && <MeSeat device={device} s={me} hint={meHint} clock={me.state === "turn" ? clock : undefined} />}
+      {me && <MeSeat device={device} s={me} hint={meHint} clock={me.state === "turn" ? clock : undefined} handId={meHand} board={fx.boardUp == null ? board : board.slice(0, fx.boardUp)} />}
       {children}
     </div>
   );

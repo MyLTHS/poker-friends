@@ -22,7 +22,7 @@ import sevenDeuceFixture from "../../../docs/api/fixtures/server/valid/hand.comp
 import snapshotFixture from "../../../docs/api/fixtures/server/valid/table.snapshot.between-hands.json";
 import startedFixture from "../../../docs/api/fixtures/server/valid/hand.started.json";
 import deadlineFixture from "../../../docs/api/fixtures/server/valid/turn.deadline.json";
-import { initialModel, reduce, type PreActionKind, type TableAction, type TableModel } from "./reducer";
+import { initialModel, nextOffset, reduce, type PreActionKind, type TableAction, type TableModel } from "./reducer";
 
 // Fixtures from docs/api/: Lym's view of hand 41 (snapshot v11, hand.started v12, turn v13, raise v14).
 const snapshot = snapshotFixture as unknown as TableSnapshotMessage;
@@ -271,7 +271,7 @@ describe("my seat", () => {
       ...snapshot,
       payload: { table: { ...snapshot.payload.table, you: { player_id: "9", seat: null } } },
     };
-    const occupant = { seat: 7, player_id: "9", display_name: "Khách", stack: 0, sitting_out: false, connected: true };
+    const occupant = { seat: 7, player_id: "9", display_name: "Khách", stack: 0, sitting_out: false, connected: true, leaving: false };
     const sat: ServerMessage = { ...snapshot, type: "seat.updated", hand_id: null, version: 12, payload: { seat: 7, occupant } };
     let model = run([{ type: "socket.open" }, server(watching), server(sat)]);
     expect(model.table?.you.seat).toBe(7);
@@ -409,5 +409,20 @@ describe("pre-action (chọn trước)", () => {
     expect(choose(null, choose("check", waiting())).preAction).toBeNull();
     const mine = run([server(started)], connected()); // hand.started: Lym acts first
     expect(choose("check_fold", mine).preAction).toBeNull();
+  });
+});
+
+
+describe("server clock offset", () => {
+  it("takes the first reading as it is, then keeps the largest (the shortest trip)", () => {
+    expect(nextOffset({ lastVersion: null, clockOffsetMs: 0 }, -300)).toBe(-300);
+    expect(nextOffset({ lastVersion: 3, clockOffsetMs: 1000 }, 1100)).toBe(1100);
+    // a slower message reads it short: the kept value only eases down a little
+    expect(nextOffset({ lastVersion: 3, clockOffsetMs: 1000 }, 700)).toBe(995);
+  });
+
+  it("follows a jump of over two seconds at once (the local clock was set)", () => {
+    expect(nextOffset({ lastVersion: 3, clockOffsetMs: 1000 }, -1500)).toBe(-1500);
+    expect(nextOffset({ lastVersion: 3, clockOffsetMs: 1000 }, 3500)).toBe(3500);
   });
 });

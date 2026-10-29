@@ -3,7 +3,7 @@
 // Time on the table: the turn clock follows the server's deadline (corrected by the measured
 // server/local offset), never the local clock alone; the ring is redrawn every animation frame
 // without re-rendering React.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChatMessage } from "@/api/protocol";
 
@@ -32,7 +32,8 @@ export function Countdown({ deadline, frozenAt }: { deadline: number; frozenAt?:
 export function useRecent(messages: ChatMessage[], offsetMs: number, ms: number): ChatMessage[] {
   const [now, setNow] = useState(() => Date.now());
   const serverNow = now + offsetMs;
-  const recent = messages.filter((m) => serverNow - Date.parse(m.sent_at) < ms);
+  // the same array between those moments, so what is built from it is not rebuilt
+  const recent = useMemo(() => messages.filter((m) => serverNow - Date.parse(m.sent_at) < ms), [messages, serverNow, ms]);
   const next = Math.min(...recent.map((m) => Date.parse(m.sent_at) + ms - serverNow));
   // A new line: read the clock again right away. Then wake up when the oldest bubble expires.
   useEffect(() => {
@@ -67,11 +68,16 @@ export function LiveRing({ size, clock, gap = 2, stroke = 4 }: { size: number; c
 
   useEffect(() => {
     let frame = 0;
+    let drawn = -1;
     const draw = () => {
       const left = clock.frozenAt ?? Math.max(0, (clock.deadline - Date.now()) / 1000);
       const frac = clock.total > 0 ? Math.min(1, left / clock.total) : 0;
-      fg.current?.setAttribute("stroke-dasharray", `${(c * frac).toFixed(2)} ${c.toFixed(2)}`);
-      ring.current?.classList.toggle("is-low", left <= 5);
+      // the ring moves a few pixels a second: repaint only when it moved half a pixel
+      if (Math.abs(c * frac - drawn) >= 0.5 || left <= 0) {
+        drawn = c * frac;
+        fg.current?.setAttribute("stroke-dasharray", `${drawn.toFixed(2)} ${c.toFixed(2)}`);
+        ring.current?.classList.toggle("is-low", left <= 5);
+      }
       if (clock.frozenAt === undefined && left > 0) frame = requestAnimationFrame(draw);
     };
     draw();
@@ -91,10 +97,14 @@ export function LiveBar({ clock }: { clock: TurnClock }) {
   const bar = useRef<HTMLElement>(null);
   useEffect(() => {
     let frame = 0;
+    let drawn = -1;
     const draw = () => {
       const left = clock.frozenAt ?? Math.max(0, (clock.deadline - Date.now()) / 1000);
       const frac = clock.total > 0 ? Math.min(1, left / clock.total) : 0;
-      if (bar.current) bar.current.style.transform = `scaleX(${frac.toFixed(4)})`;
+      if (bar.current && (Math.abs(frac - drawn) >= 0.002 || left <= 0)) {
+        drawn = frac;
+        bar.current.style.transform = `scaleX(${frac.toFixed(4)})`;
+      }
       if (clock.frozenAt === undefined && left > 0) frame = requestAnimationFrame(draw);
     };
     draw();

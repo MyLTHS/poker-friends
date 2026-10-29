@@ -13,7 +13,8 @@
       "display_name": "An",
       "stack": 945,
       "sitting_out": true,
-      "connected": true
+      "connected": true,
+      "leaving": false
     }
   }
 }

@@ -211,7 +211,7 @@ export function reduce(model: TableModel, action: TableAction): TableModel {
         showing: null,
       };
     case "server": {
-      const next = firePreAction(onServer({ ...model, clockOffsetMs: Date.parse(action.message.server_time) - action.receivedAt }, action.message));
+      const next = firePreAction(onServer({ ...model, clockOffsetMs: nextOffset(model, Date.parse(action.message.server_time) - action.receivedAt) }, action.message));
       const suspended = next.table?.room.status === "suspended";
       const suspendedAt = suspended ? (model.table?.room.status === "suspended" ? model.suspendedAt : action.receivedAt) : null;
       const celebrationAt = next.celebration ? (next.celebration === model.celebration ? model.celebrationAt : action.receivedAt) : null;
@@ -334,6 +334,16 @@ function firePreAction(model: TableModel): TableModel {
   return onIntent(cleared, { type: "act", kind, commandId: pre.commandId });
 }
 
+/** Server minus local time. Each message reads it short by its trip through the network, so the
+ *  largest reading is the closest: keep it, so deadlines do not jitter with every message. It
+ *  eases down a little with each message (a local clock set forward settles in); a jump of over
+ *  2 s (the local clock was set back, or a first reading) is taken as it is. */
+export function nextOffset(model: Pick<TableModel, "lastVersion" | "clockOffsetMs">, seen: number): number {
+  if (model.lastVersion === null || Math.abs(seen - model.clockOffsetMs) > 2000) return seen;
+  return Math.max(model.clockOffsetMs - OFFSET_EASE_MS, seen);
+}
+const OFFSET_EASE_MS = 5;
+
 function onIntent(model: TableModel, intent: Extract<TableAction, { type: "act" }>): TableModel {
   const hand = model.table?.hand;
   if (model.pending && hand && model.pending.message.hand_id === hand.hand_id) {
@@ -400,8 +410,13 @@ function onCardsShown(model: TableModel, message: CardsShownMessage): TableModel
   if (before.some((h) => h.player_id === shown.player_id)) return model;
   const mine = shown.player_id === model.table?.you.player_id;
   const entry: LogEntry = { kind: "reveal", seat: shown.seat, cards: shown.cards };
+  // Someone else's cards turn over where they sit (mine are already face up in front of me), as
+  // long as that hand is still the one on the table.
+  const onTable = model.table?.hand?.hand_id === message.hand_id && model.table.hand.complete;
+  const fx: Cue[] = mine || !onTable ? [] : [{ kind: "reveal", seat: shown.seat, id: (model.fx.at(-1)?.id ?? 0) + 1 }];
   return {
     ...model,
+    fx: [...model.fx, ...fx].slice(-FX_KEPT),
     shown: { handId: message.hand_id, hands: [...before, shown] },
     showing: mine ? null : model.showing,
     log: model.table ? [...model.log, entry].slice(-LOG_KEPT) : model.log,
@@ -501,7 +516,8 @@ function applyState(model: TableModel, event: StateEvent): TableModel {
     case "hand.started":
       return {
         ...model,
-        table: { ...table, hand: event.payload.hand, turn: null },
+        // the countdown that led here is over (the server does not send room.updated for it)
+        table: { ...table, room: { ...table.room, next_hand_at: null }, hand: event.payload.hand, turn: null },
         lastAction: null,
         results: null,
         showdown: null,

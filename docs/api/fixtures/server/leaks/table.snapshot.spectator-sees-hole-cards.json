@@ -21,7 +21,10 @@
         "bomb_pot_every": 0,
         "bomb_pot_amount": 0,
         "run_it_twice": false,
-        "rabbit_hunt": true
+        "rabbit_hunt": true,
+        "hand_pause_seconds": 10,
+        "running": true,
+        "next_hand_at": null
       },
       "you": {
         "player_id": "4",
@@ -34,7 +37,8 @@
           "display_name": "Lym",
           "stack": 1000,
           "sitting_out": false,
-          "connected": true
+          "connected": true,
+          "leaving": false
         },
         {
           "seat": 3,
@@ -42,7 +46,8 @@
           "display_name": "An",
           "stack": 1000,
           "sitting_out": false,
-          "connected": true
+          "connected": true,
+          "leaving": false
         },
         {
           "seat": 5,
@@ -50,7 +55,8 @@
           "display_name": "Bình",
           "stack": 1000,
           "sitting_out": false,
-          "connected": true
+          "connected": true,
+          "leaving": false
         }
       ],
       "hand": {

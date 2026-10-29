@@ -4,16 +4,32 @@ Everything that differs between environments comes from environment variables
 (see .env.example). Defaults are for local development only.
 """
 
+import math
 import os
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def env_bool(name: str, default: bool = False) -> bool:
     return os.environ.get(name, str(default)).lower() in {"1", "true", "yes"}
+
+
+def env_float(name: str) -> float | None:
+    """Seconds from the environment: a finite number, 0 or more. None when unset or empty."""
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        seconds = math.nan
+    if not math.isfinite(seconds) or seconds < 0:
+        raise ImproperlyConfigured(f"{name} must be a number of seconds, 0 or more (not {value!r})")
+    return seconds
 
 
 def env_list(name: str, default: str = "") -> list[str]:
@@ -177,6 +193,13 @@ ACCOUNTS_TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "0"))
 # New guest accounts per client IP per hour. Leave it at 20; only the E2E server raises it, because
 # the whole suite makes its guests from one address (web/playwright.config.ts).
 ACCOUNTS_GUESTS_PER_IP_HOUR = int(os.environ.get("GUESTS_PER_IP_HOUR", "20"))
+
+# Only the E2E server sets these (web/playwright.config.ts): rooms that deal without the owner
+# pressing Start, a short countdown before the first hand and a short pause between hands. Unset in
+# real use: the owner starts, 10 s, then the room's hand_pause_seconds.
+ROOMS_START_RUNNING = env_bool("ROOMS_START_RUNNING")
+TABLE_START_COUNTDOWN_SECONDS = env_float("TABLE_START_COUNTDOWN_SECONDS")
+TABLE_HAND_PAUSE_SECONDS = env_float("TABLE_HAND_PAUSE_SECONDS")
 
 # Links in emails and the end of the Google flow point at the web app, not at Django.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")

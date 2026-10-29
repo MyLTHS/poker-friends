@@ -1,12 +1,13 @@
 // Table sounds, made on the spot with Web Audio (no sound files, nothing licensed): a card flick
-// per card dealt, a soft chime when it becomes my turn, a tick when my clock runs low, chips
-// clinking to the pot's winner (a brighter jingle when that is me), and a brass fanfare for 7-2.
+// per card dealt (hole cards and board cards), a chip click for a bet, a soft chime when it
+// becomes my turn, a tick when my clock runs low, chips clinking to the pot's winner (a brighter
+// jingle when that is me), a fanfare for a full house or better, and a brass fanfare for 7-2.
 // Off by default; the choice (on/off + volume) is kept in localStorage, every access guarded
 // (private windows and blocked storage throw).
 import type { CueBody } from "./cues";
 import { readJson, writeJson } from "./prefs";
 
-export type SoundName = "deal" | "turn" | "hurry" | "pot" | "win" | "seven";
+export type SoundName = "deal" | "chip" | "turn" | "hurry" | "pot" | "win" | "big" | "seven";
 
 export type SoundPrefs = { on: boolean; volume: number };
 
@@ -36,6 +37,9 @@ export function soundsForCues(cues: CueBody[], mySeat: number | null): { name: S
   const out: { name: SoundName; count?: number }[] = [];
   for (const cue of cues) {
     if (cue.kind === "deal") out.push({ name: "deal", count: Math.min(cue.order.length * 2, 12) });
+    else if (cue.kind === "board") out.push({ name: "deal", count: cue.to - cue.from });
+    else if (cue.kind === "bet") out.push({ name: "chip" });
+    else if (cue.kind === "big") out.push({ name: "big" });
     else if (cue.kind === "award") {
       const mine = mySeat !== null && cue.pots.some((p) => p.winners.some((w) => w.seat === mySeat));
       out.push({ name: mine ? "win" : "pot" });
@@ -59,6 +63,16 @@ export function recipe(name: SoundName, count = 1): Voice[] {
   switch (name) {
     case "deal":
       return Array.from({ length: Math.max(1, count) }, (_, i) => ({ at: i * 0.09, dur: 0.05, gain: 0.5, noise: 2600 + (i % 3) * 400 }));
+    case "chip":
+      return [
+        { at: 0, dur: 0.05, gain: 0.16, tone: "triangle", freq: note(27) },
+        { at: 0.045, dur: 0.06, gain: 0.12, tone: "triangle", freq: note(31) },
+      ];
+    case "big":
+      return [
+        ...[0, 4, 7, 12].map((n, i) => ({ at: i * 0.11, dur: 0.22, gain: 0.18, tone: "square" as const, freq: note(n + 3) })),
+        ...[3, 7, 10, 15].map((n) => ({ at: 0.46, dur: 1.1, gain: 0.12, tone: "sawtooth" as const, freq: note(n) })),
+      ];
     case "turn":
       return [
         { at: 0, dur: 0.35, gain: 0.32, tone: "sine", freq: note(7) }, // E5

@@ -318,6 +318,10 @@
         },
         "connected": {
           "type": "boolean"
+        },
+        "leaving": {
+          "description": "The player asked to leave (DELETE seats/me/) during a hand they are in: they play it out, are dealt no new hand, and the seat is freed (occupant null) when it ends, before any countdown. POST seats/me/stay/ takes it back.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -326,7 +330,8 @@
         "display_name",
         "stack",
         "sitting_out",
-        "connected"
+        "connected",
+        "leaving"
       ],
       "additionalProperties": false
     },
@@ -396,6 +401,27 @@
         "rabbit_hunt": {
           "description": "A hand over before the river shows the board cards that would have come (hand.completed rabbit_cards).",
           "type": "boolean"
+        },
+        "hand_pause_seconds": {
+          "description": "The break between two hands, in seconds (the result stays on the table).",
+          "type": "integer",
+          "minimum": 6,
+          "maximum": 20
+        },
+        "running": {
+          "description": "The owner pressed Start (and not Pause since): hands are dealt. A new room is paused.",
+          "type": "boolean"
+        },
+        "next_hand_at": {
+          "description": "When the next hand will be dealt: the countdown after Start (or when a running room gets two players) or the pause after a hand. null when nothing is counting down; hand.started ends it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServerTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -412,7 +438,10 @@
         "bomb_pot_every",
         "bomb_pot_amount",
         "run_it_twice",
-        "rabbit_hunt"
+        "rabbit_hunt",
+        "hand_pause_seconds",
+        "running",
+        "next_hand_at"
       ],
       "additionalProperties": false
     },

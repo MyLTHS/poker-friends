@@ -19,7 +19,8 @@ export interface paths {
         put?: never;
         /**
          * Tạo phòng
-         * @description Người gọi (kể cả khách) thành chủ phòng. Phòng mới ở trạng thái `open`, chưa ai ngồi. Ai vào
+         * @description Người gọi (kể cả khách) thành chủ phòng. Phòng mới ở trạng thái `open`, chưa ai ngồi, và tạm
+         *     dừng (`running: false`): chủ phòng bấm Bắt đầu (`startRoom`) thì mới chia bài. Ai vào
          *     ghế mà chưa có chip trong phòng thì nhận ngay `starting_stack` (không cần chủ phòng); hết chip
          *     thì tự mua thêm bằng `rebuy`. Chủ phòng vẫn cấp thêm hoặc trừ bớt bằng `grantChips`. Phòng
          *     private chỉ người có link mời (`invite_token`) mới thấy. Giới hạn 10 phòng/giờ mỗi người.
@@ -158,6 +159,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rooms/{room_id}/start/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chủ phòng bấm Bắt đầu
+         * @description Chỉ chủ phòng. Phòng mới (và mọi phòng có từ trước bản này) ở trạng thái tạm dừng
+         *     (`running: false`): ngồi vào bàn chưa chia bài. Bắt đầu thì `running: true`; khi không có ván,
+         *     có người đang xem bàn và có từ 2 người chơi được (có chip, không nghỉ), bàn đếm ngược 10
+         *     giây (`next_hand_at`) rồi chia. Sau đó các ván tự nối tiếp, mỗi lần nghỉ
+         *     `hand_pause_seconds`. Chưa đủ người thì chờ: ai làm đủ người (ngồi, có chip, quay lại) là
+         *     đếm 10 giây. Cả bàn nhận `room.updated`. Đang chạy rồi thì giữ nguyên (không rút ngắn đồng
+         *     hồ đang đếm); nếu bàn đang đứng (không ván, không đếm, đủ người) thì đếm lại 10 giây.
+         *     Phòng đã đóng hoặc sắp đóng: `room_closed`; tạm dừng vì lỗi: `room_suspended`.
+         */
+        post: operations["startRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/pause/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chủ phòng bấm Tạm dừng
+         * @description Chỉ chủ phòng. `running: false` và huỷ đếm ngược (`next_hand_at: null`). Ván đang dở vẫn
+         *     chơi hết, sau đó không chia tiếp cho tới khi bấm Bắt đầu. Cả bàn nhận `room.updated`. Đang
+         *     tạm dừng rồi thì không đổi gì, trả nguyên trạng. Phòng đã đóng hoặc sắp đóng:
+         *     `room_closed`; tạm dừng vì lỗi: `room_suspended`.
+         */
+        post: operations["pauseRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rooms/{room_id}/invite/": {
         parameters: {
             query?: never;
@@ -195,7 +250,8 @@ export interface paths {
          * Vào ghế (dự kiến B4)
          * @description Người gọi ngồi vào một ghế trống. Chưa có chip trong phòng (lần đầu, hoặc rời ghế lúc hết chip)
          *     thì nhận ngay `starting_stack` của phòng (một bút toán `grant`, `stack` trong kết quả đã tính);
-         *     còn chip thì giữ nguyên, không cấp thêm. Được chia bài từ ván kế tiếp.
+         *     còn chip thì giữ nguyên, không cấp thêm. Được chia bài từ ván kế tiếp, khi phòng đang chạy
+         *     (`running`, chủ phòng đã bấm Bắt đầu).
          *     Cả bàn nhận `seat.updated` qua WebSocket. Phòng private cần quyền xem (`room_not_found`);
          *     người đã bị kick nhận `kicked`; phòng đã đóng nhận `room_closed`; phòng tạm dừng nhận
          *     `room_suspended`. Chưa đăng nhập thì server tạo khách và đăng nhập luôn (tối đa 20 khách/giờ
@@ -222,10 +278,44 @@ export interface paths {
         post?: never;
         /**
          * Rời ghế (dự kiến B4)
-         * @description Không được rời khi còn trong ván đang chạy (`player_in_hand`); hãy sit-out qua WebSocket
-         *     rồi rời sau. Chip vẫn thuộc phòng, vào lại vẫn còn. Cả bàn nhận `seat.updated`.
+         * @description Không ở trong ván đang chạy (giữa hai ván, hoặc không được chia ván này: ngồi xuống sau khi
+         *     chia, đang nghỉ, hết chip): rời ngay (204), cả bàn nhận `seat.updated` với `occupant: null`.
+         *
+         *     Đang ở trong ván đang chạy (kể cả đã fold): chơi tiếp tới hết ván (202). Ghế giữ nguyên,
+         *     `leaving: true`, cả bàn nhận `seat.updated`. Hết ván, ngay sau `hand.completed` và trước khi
+         *     đếm ngược hay chia ván sau, server cho đứng dậy: cả bàn nhận `seat.updated` với
+         *     `occupant: null`. Người đang chờ rời không được chia ván mới và không tính vào "đủ 2 người".
+         *     Gọi lại khi đang chờ: vẫn 202, không đổi gì. Huỷ: `POST .../seats/me/stay/`. Server khởi
+         *     động lại, hay ván bị admin huỷ (`void_hand`), vẫn giữ và làm như vậy.
+         *
+         *     Chip vẫn thuộc phòng, vào lại vẫn còn. Lỗi (409): `not_seated`, `room_suspended`.
          */
         delete: operations["leaveSeat"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rooms/{room_id}/seats/me/stay/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ở lại, huỷ rời ghế sau ván
+         * @description Huỷ `DELETE .../seats/me/` đã gọi trong ván: `leaving: false`, cả bàn nhận `seat.updated`,
+         *     người đó ngồi tiếp và được chia các ván sau như thường. Không đang chờ rời thì không đổi gì,
+         *     vẫn 200. Không có body. Lỗi (409): `not_seated` (không ngồi ở phòng này, kể cả khi ván đã
+         *     xong và ghế đã được trả), `room_suspended`.
+         */
+        post: operations["stayInSeat"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -759,6 +849,11 @@ export interface components {
              */
             rabbit_hunt?: boolean;
             /**
+             * @description Số giây nghỉ giữa hai ván (kết quả ván vừa xong còn trên bàn).
+             * @default 10
+             */
+            hand_pause_seconds?: number;
+            /**
              * @description Phòng private không hiện ở lobby; chỉ chủ phòng và người có link mời thấy.
              * @default false
              */
@@ -802,6 +897,7 @@ export interface components {
             bomb_pot_amount?: number;
             run_it_twice?: boolean;
             rabbit_hunt?: boolean;
+            hand_pause_seconds?: number;
         };
         JoinRoomRequest: {
             invite_token: string;
@@ -821,6 +917,11 @@ export interface components {
         };
         TakeSeatRequest: {
             seat: components["schemas"]["SeatNumber"];
+        };
+        /** @description Trả lời 202 của `leaveSeat` (người gọi đang trong ván đang chạy, rời khi ván xong). */
+        LeavingAfterHand: {
+            /** @constant */
+            leaving: true;
         };
         /** @description Cùng nội dung với `payload.table` và `version` của `table.snapshot` trên WebSocket. */
         TableSnapshot: {
@@ -1019,6 +1120,11 @@ export interface components {
         RoomId: number;
         /** Chips */
         Chips: number;
+        /**
+         * ServerTime
+         * @description UTC instant in ISO 8601 with a trailing Z, e.g. 2026-10-27T14:03:05.120Z.
+         */
+        ServerTime: string;
         /** RoomInfo */
         RoomInfo: {
             room_id: components["schemas"]["RoomId"];
@@ -1042,6 +1148,12 @@ export interface components {
             run_it_twice: boolean;
             /** @description A hand over before the river shows the board cards that would have come (hand.completed rabbit_cards). */
             rabbit_hunt: boolean;
+            /** @description The break between two hands, in seconds (the result stays on the table). */
+            hand_pause_seconds: number;
+            /** @description The owner pressed Start (and not Pause since): hands are dealt. A new room is paused. */
+            running: boolean;
+            /** @description When the next hand will be dealt: the countdown after Start (or when a running room gets two players) or the pause after a hand. null when nothing is counting down; hand.started ends it. */
+            next_hand_at: components["schemas"]["ServerTime"] | null;
         };
         /**
          * PlayerId
@@ -1061,17 +1173,14 @@ export interface components {
             stack: components["schemas"]["Chips"];
             sitting_out: boolean;
             connected: boolean;
+            /** @description The player asked to leave (DELETE seats/me/) during a hand they are in: they play it out, are dealt no new hand, and the seat is freed (occupant null) when it ends, before any countdown. POST seats/me/stay/ takes it back. */
+            leaving: boolean;
         };
         /**
          * Version
          * @description Room event counter. Every state event adds exactly 1; replies carry the current value.
          */
         Version: number;
-        /**
-         * ServerTime
-         * @description UTC instant in ISO 8601 with a trailing Z, e.g. 2026-10-27T14:03:05.120Z.
-         */
-        ServerTime: string;
         /**
          * HandId
          * @description Database id of the hand (Hand.pk), not the hand number within the room.
@@ -1559,6 +1668,58 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    startRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cấu hình và trạng thái phòng sau khi bấm */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomInfo"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    pauseRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cấu hình và trạng thái phòng sau khi bấm */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomInfo"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     rotateInvite: {
         parameters: {
             query?: never;
@@ -1632,12 +1793,48 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Đang trong ván đang chạy, sẽ rời khi ván xong */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeavingAfterHand"];
+                };
+            };
             /** @description Đã rời ghế */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    stayInSeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                room_id: components["parameters"]["RoomId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ghế sau khi huỷ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeatOccupant"];
+                };
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];

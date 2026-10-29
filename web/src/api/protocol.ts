@@ -217,6 +217,18 @@ export interface RoomInfo {
    * A hand over before the river shows the board cards that would have come (hand.completed rabbit_cards).
    */
   rabbit_hunt: boolean;
+  /**
+   * The break between two hands, in seconds (the result stays on the table).
+   */
+  hand_pause_seconds: number;
+  /**
+   * The owner pressed Start (and not Pause since): hands are dealt. A new room is paused.
+   */
+  running: boolean;
+  /**
+   * When the next hand will be dealt: the countdown after Start (or when a running room gets two players) or the pause after a hand. null when nothing is counting down; hand.started ends it.
+   */
+  next_hand_at: ServerTime | null;
 }
 /**
  * Who sits in a seat. stack is the room balance from the ledger: during a hand it is the balance before that hand; the live stack is in HandView.
@@ -228,6 +240,10 @@ export interface SeatOccupant {
   stack: Chips;
   sitting_out: boolean;
   connected: boolean;
+  /**
+   * The player asked to leave (DELETE seats/me/) during a hand they are in: they play it out, are dealt no new hand, and the seat is freed (occupant null) when it ends, before any countdown. POST seats/me/stay/ takes it back.
+   */
+  leaving: boolean;
 }
 /**
  * The hand as one receiver may see it: HandEngine.view_for(receiver) plus hand_id and hand_no. Spectators get view_for(None).

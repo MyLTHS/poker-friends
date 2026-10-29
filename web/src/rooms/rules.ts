@@ -68,6 +68,8 @@ export function bombAmountText(typed: string | null, bigBlind: string): string {
 
 export const SEAT_CHOICES = [2, 3, 4, 5, 6, 7, 8, 9];
 export const THINK_CHOICES = [15, 20, 30, 45, 60];
+/** Seconds of rest between two hands (Room.hand_pause_seconds, 6–20 on the server). */
+export const PAUSE_CHOICES = [6, 8, 10, 15, 20];
 export const SEVEN_CHOICES = [25, 50, 100];
 
 /** What a new room gets unless changed: 10/20, 2.000 chips each, 9 seats, 20 s, no 7-2 bonus,
@@ -238,6 +240,7 @@ export const ruleKeys = [
   "small_blind",
   "big_blind",
   "think_time_seconds",
+  "hand_pause_seconds",
   "seven_deuce_bonus",
   "starting_stack",
   "ante",

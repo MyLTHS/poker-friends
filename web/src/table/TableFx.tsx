@@ -6,9 +6,9 @@
 // came from; what no longer exists (gathered bets, the paid pot, folded cards) flies as a ghost
 // that removes itself. New cues finish the running ones first, a snapshot (epoch) finishes all,
 // a hidden tab skips them, and reduced motion turns movements into fades (ghosts are skipped).
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 
-import { ChipStack, DURATION, EASE, PlayingCard, STAGGER, fmt, play, prefersReducedMotion } from "@/ui";
+import { BEAT, ChipStack, Confetti, DURATION, EASE, PlayingCard, STAGGER, fmt, play, prefersReducedMotion } from "@/ui";
 
 import type { Cue } from "./cues";
 import { GEO, betPos, spotPos, type Device, type Pt } from "./geometry";
@@ -30,7 +30,16 @@ type Ghost = {
 export type FxApi = {
   /** Seats whose shown cards still face down (showdown in progress). */
   unflipped: Set<number>;
+  /** Board cards turned face up so far while new ones turn over; null = all of them. */
+  boardUp: number | null;
 };
+
+/** How long a full house or better holds the table before the pot moves. */
+export const BIG_HAND_MS = 1800;
+/** Board cards lie face down this long after landing, before they turn. */
+const BOARD_REST = 140;
+/** A win burst stays this long (its pieces fade within --dur-confetti). */
+const BURST_MS = 1500;
 
 /** Centre of an element in stage pixels. */
 function centre(el: Element, stage: Element, device: Device): Pt {
@@ -57,10 +66,37 @@ function arrive(el: HTMLElement, from: Pt, at: Pt, opts: { lift?: number; scale?
 /** Where a seat sits on the stage: its spot, and whether it is my own seat. */
 export type SeatPlace = { spot: number; me: boolean };
 
+/** What flies over the stage right now. Kept in a small store of its own so that a chip landing
+ *  or a burst fading redraws only the effects layer, not the whole table. */
+type Scene = { ghosts: Ghost[]; bursts: { key: number; at: Pt }[]; big: { key: number; title: string } | null };
+const EMPTY_SCENE: Scene = { ghosts: [], bursts: [], big: null };
+
+function createScene() {
+  let state = EMPTY_SCENE;
+  const subs = new Set<() => void>();
+  return {
+    get: () => state,
+    set(next: (s: Scene) => Scene) {
+      const after = next(state);
+      if (after === state) return;
+      state = after;
+      for (const notify of subs) notify();
+    },
+    subscribe(notify: () => void) {
+      subs.add(notify);
+      return () => {
+        subs.delete(notify);
+      };
+    },
+  };
+}
+type SceneStore = ReturnType<typeof createScene>;
+
 export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoch: number; device: Device; placeOf: (seat: number) => SeatPlace | undefined }) {
   const layer = useRef<HTMLDivElement>(null);
-  const [ghosts, setGhosts] = useState<Ghost[]>([]);
+  const [scene] = useState(createScene);
   const [unflipped, setUnflipped] = useState<Set<number>>(() => new Set());
+  const [boardUp, setBoardUp] = useState<number | null>(null);
   const played = useRef<number>(cues.at(-1)?.id ?? 0);
   const running = useRef(new Set<Animation>());
   const timers = useRef<{ id: ReturnType<typeof setTimeout>; run: () => void }[]>([]);
@@ -69,13 +105,13 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
 
   const stage = () => layer.current?.closest(".stage") ?? null;
 
-  const track = (a: Animation | null) => {
+  const track = useCallback((a: Animation | null) => {
     if (!a) return;
     running.current.add(a);
     const done = () => running.current.delete(a);
     a.addEventListener("finish", done);
     a.addEventListener("cancel", done);
-  };
+  }, []);
 
   const later = (ms: number, run: () => void) => {
     const entry = { id: setTimeout(() => {
@@ -100,9 +136,10 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
     }
     for (const a of [...running.current]) a.finish();
     running.current.clear();
-    setGhosts([]);
+    scene.set((sc) => (sc === EMPTY_SCENE ? sc : EMPTY_SCENE));
     setUnflipped((u) => (u.size ? new Set() : u));
-  }, []);
+    setBoardUp(null);
+  }, [scene]);
 
   useLayoutEffect(() => {
     if (lastEpoch.current !== epoch) {
@@ -114,6 +151,21 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
     const fresh = cues.filter((c) => c.id > played.current);
     if (fresh.length === 0) return;
     played.current = fresh.at(-1)!.id;
+    // Cards shown after the hand turn over beside what is still playing.
+    if (fresh.every((c) => c.kind === "reveal")) {
+      for (const c of fresh) {
+        if (c.kind !== "reveal") continue;
+        setUnflipped((u) => new Set(u).add(c.seat));
+        later(60, () =>
+          setUnflipped((u) => {
+            const next = new Set(u);
+            next.delete(c.seat);
+            return next;
+          }),
+        );
+      }
+      return;
+    }
     finishAll();
     const root = stage();
     if (!root || (typeof document !== "undefined" && document.hidden)) return;
@@ -130,7 +182,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
           const n = cue.order.length;
           cue.order.forEach((seat, i) => {
             const box = root.querySelector(`[data-seat-cards="${seat}"]`);
-            const cards = box ? [...box.querySelectorAll<HTMLElement>(":scope > .pc")] : [];
+            const cards = box ? [...box.querySelectorAll<HTMLElement>(":scope > .pc, :scope > .pc-flip")] : [];
             cards.forEach((card, round) => {
               track(play(card, arrive(card, g.c, centre(card, root, device), { lift: 16, scale: 0.6, fade: true }), { duration: DURATION.deal, easing: EASE.out, delay: t + (round * n + i) * STAGGER.deal }));
             });
@@ -157,15 +209,32 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
               if (at) ghost({ kind: "chips", amount: b.amount, from: betPos(device, at.spot, at.me), to: g.pot, delay: t + i * STAGGER.chips, duration: DURATION.chip, easing: EASE.settle, lift: 0, fadeOut: true, small: !d });
             });
           }
-          t += DURATION.chip + (cue.bets.length - 1) * STAGGER.chips;
+          t += DURATION.chip + (cue.bets.length - 1) * STAGGER.chips + BEAT;
           break;
         }
         case "board": {
+          // The new cards slide out face down, then turn over one after the other.
+          const n = cue.to - cue.from;
+          const turnAt = t + (n - 1) * STAGGER.deal + DURATION.deal + BOARD_REST;
           for (let i = cue.from; i < cue.to; i++) {
             const el = root.querySelector<HTMLElement>(`[data-board="${i}"]`);
-            if (el) track(play(el, arrive(el, g.pot, centre(el, root, device), { lift: 12, scale: 0.7, fade: true }), { duration: DURATION.deal, easing: EASE.out, delay: t + (i - cue.from) * STAGGER.deal }));
+            if (!el) continue;
+            const k = i - cue.from;
+            track(play(el, arrive(el, g.pot, centre(el, root, device), { lift: 12, scale: 0.7, fade: true }), { duration: DURATION.deal, easing: EASE.out, delay: t + k * STAGGER.deal }));
+            if (reduced) continue;
+            if (k === 0) setBoardUp(cue.from);
+            el.classList.add("pc-back", "fx-back");
+            const base = el.style.transform || "";
+            const flipAt = turnAt + k * STAGGER.boardFlip;
+            // fill none: until its turn the card keeps sliding in under the first animation
+            track(play(el, [{ transform: `${base} scaleX(1)` }, { transform: `${base} scaleX(0.04)`, offset: 0.5 }, { transform: `${base} scaleX(1)` }], { duration: DURATION.boardFlip, easing: EASE.standard, delay: flipAt, fill: "none" }));
+            const up = i + 1;
+            later(flipAt + DURATION.boardFlip / 2, () => {
+              el.classList.remove("pc-back", "fx-back");
+              setBoardUp(up >= cue.to ? null : up);
+            });
           }
-          t += (cue.to - cue.from - 1) * STAGGER.deal + DURATION.deal;
+          t = reduced ? t + (n - 1) * STAGGER.deal + DURATION.deal + BEAT : turnAt + (n - 1) * STAGGER.boardFlip + DURATION.boardFlip + BEAT;
           break;
         }
         case "showdown": {
@@ -179,17 +248,41 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
               }),
             ),
           );
-          t += (cue.order.length - 1) * STAGGER.showdown + DURATION.flip;
+          t += (cue.order.length - 1) * STAGGER.showdown + DURATION.flip + BEAT;
+          break;
+        }
+        case "big": {
+          // The seat glows and the title bursts over the felt; the pot waits for it.
+          const seatEl = root.querySelector(`[data-seat="${cue.seat}"]`);
+          const key = ++seq.current;
+          later(t, () => {
+            seatEl?.classList.add("fx-big-seat");
+            scene.set((sc) => ({ ...sc, big: { key, title: cue.title } }));
+          });
+          later(t + BIG_HAND_MS + 1600, () => {
+            seatEl?.classList.remove("fx-big-seat");
+            scene.set((sc) => (sc.big?.key === key ? { ...sc, big: null } : sc));
+          });
+          t += reduced ? 0 : BIG_HAND_MS;
           break;
         }
         case "award": {
           // Deltas and the winner banner wait for the chips to arrive.
-          const end = t + cue.pots.length * DURATION.collect;
+          const end = t + cue.pots.length * (DURATION.collect + BEAT);
           if (!reduced) {
             cue.pots.forEach((pot, i) => {
               for (const { seat, amount } of pot.winners) {
                 const at = placeOf(seat);
-                if (at) ghost({ kind: "pot", amount, from: g.pot, to: spotPos(device, at.spot, at.me), delay: t + i * DURATION.collect, duration: DURATION.collect, easing: EASE.out, lift: 0, fadeOut: true, small: !d });
+                if (!at) continue;
+                const to = spotPos(device, at.spot, at.me);
+                const lands = t + i * (DURATION.collect + BEAT);
+                ghost({ kind: "pot", amount, from: g.pot, to, delay: lands, duration: DURATION.collect, easing: EASE.out, lift: d ? 46 : 28, fadeOut: true, small: !d });
+                // a little gold burst where the chips land (the main pot only)
+                if (i === 0) {
+                  const key = ++seq.current;
+                  later(lands + DURATION.collect * 0.8, () => scene.set((sc) => ({ ...sc, bursts: [...sc.bursts, { key, at: to }] })));
+                  later(lands + DURATION.collect * 0.8 + BURST_MS, () => scene.set((sc) => ({ ...sc, bursts: sc.bursts.filter((b) => b.key !== key) })));
+                }
               }
             });
             holdClass("fx-hold-result", end);
@@ -198,10 +291,11 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
           break;
         }
         case "seven":
+        case "reveal":
           break;
       }
     }
-    if (newGhosts.length) setGhosts(newGhosts);
+    if (newGhosts.length) scene.set((sc) => ({ ...sc, ghosts: newGhosts }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cues, epoch, device]);
 
@@ -213,17 +307,37 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
     };
   }, []);
 
-  const done = useCallback((key: number) => setGhosts((all) => all.filter((g) => g.key !== key)), []);
-
-  const layerEl = (
-    <div ref={layer} className="fx-layer" aria-hidden>
-      {ghosts.map((gh) => (
-        <GhostPiece key={gh.key} ghost={gh} onDone={done} track={track} />
-      ))}
-    </div>
-  );
-  return { layer: layerEl, fx: { unflipped } satisfies FxApi };
+  const layerEl = <FxLayer scene={scene} device={device} layerRef={layer} track={track} />;
+  return { layer: layerEl, fx: { unflipped, boardUp } satisfies FxApi };
 }
+
+/** The effects layer: flying chips and cards, win bursts, the big-hand title. Subscribed to the
+ *  scene store, so its own updates never re-render the table around it. */
+const FxLayer = memo(function FxLayer({ scene, device, layerRef, track }: { scene: SceneStore; device: Device; layerRef: RefObject<HTMLDivElement | null>; track: (a: Animation | null) => void }) {
+  const { ghosts, bursts, big } = useSyncExternalStore(scene.subscribe, scene.get, scene.get);
+  // A finished flight leaves the scene; when the last one lands the list empties at once.
+  const done = useCallback((key: number) => scene.set((sc) => ({ ...sc, ghosts: sc.ghosts.filter((g) => g.key !== key) })), [scene]);
+  return (
+    <>
+      <div ref={layerRef} className="fx-layer" aria-hidden>
+        {ghosts.map((gh) => (
+          <GhostPiece key={gh.key} ghost={gh} onDone={done} track={track} />
+        ))}
+        {bursts.map((b) => (
+          <span key={b.key} className="fx-burst" style={{ left: b.at.x, top: b.at.y }}>
+            <Confetti count={20} small spread={0.7} />
+          </span>
+        ))}
+      </div>
+      {big && (
+        <div key={big.key} className="fx-big" style={{ left: GEO[device].c.x, top: GEO[device].c.y }} role="status">
+          <Confetti count={44} spread={1.6} />
+          <b className="fx-big-title">{big.title}</b>
+        </div>
+      )}
+    </>
+  );
+});
 
 function GhostPiece({ ghost, onDone, track }: { ghost: Ghost; onDone: (key: number) => void; track: (a: Animation | null) => void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -235,8 +349,10 @@ function GhostPiece({ ghost, onDone, track }: { ghost: Ghost; onDone: (key: numb
     // The easing shapes the flight only (keyframe easing); the short fade at the end is linear,
     // so an "out" curve does not swallow the whole trip.
     const fly = ghost.kind === "cards" ? 1 : 0.84;
+    // A lift arcs the flight: up over the middle, then down onto the seat.
     const frames: Keyframe[] = [
       { transform: `translate(${dx}px, ${dy}px)`, opacity: 1, easing: ghost.easing },
+      ...(ghost.lift ? [{ transform: `translate(${dx / 2}px, ${dy / 2 - ghost.lift}px) scale(1.12)`, offset: fly / 2 }] : []),
       { transform: "translate(0px, 0px)", opacity: ghost.kind === "cards" ? 0 : 1, offset: fly },
     ];
     if (fly < 1) frames.push({ transform: "translate(0px, 0px)", opacity: 0 });

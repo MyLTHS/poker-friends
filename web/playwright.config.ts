@@ -29,6 +29,11 @@ const djangoEnv = {
   DJANGO_DEBUG: "true",
   // Every spec makes its guests from this one address; the real limit (20 an hour) is unit-tested.
   GUESTS_PER_IP_HOUR: "200",
+  // Rooms deal without the owner pressing "Bắt đầu" (start.spec.ts pauses one to press it), after
+  // a 1 s countdown; 4 s between hands leaves time for "Ngửa bài" after a hand.
+  ROOMS_START_RUNNING: "1",
+  TABLE_START_COUNTDOWN_SECONDS: "1",
+  TABLE_HAND_PAUSE_SECONDS: "4",
   ...(MEMBERS_ONLY ? { GUESTS_ALLOWED: "false" } : {}),
 };
 

@@ -83,10 +83,27 @@ export function LiveTableScreen({ roomId, openInvite = false }: { roomId: number
     const result = await rooms.leaveSeat(roomId);
     return result.ok ? null : errorText(result.error, result.retryAfter);
   }, [rooms, roomId]);
+  const onStay = useCallback(async () => {
+    const result = await rooms.stay(roomId);
+    return result.ok ? null : errorText(result.error, result.retryAfter);
+  }, [rooms, roomId]);
   const onRebuy = useCallback(async () => {
     const result = await rooms.rebuy(roomId);
     return result.ok ? null : errorText(result.error, result.retryAfter);
   }, [rooms, roomId]);
+  const control = useMemo(
+    () => ({
+      onStart: async () => {
+        const result = await rooms.start(roomId);
+        return result.ok ? null : errorText(result.error, result.retryAfter);
+      },
+      onPause: async () => {
+        const result = await rooms.pause(roomId);
+        return result.ok ? null : errorText(result.error, result.retryAfter);
+      },
+    }),
+    [rooms, roomId],
+  );
 
   if (state === "ready") {
     return (
@@ -98,8 +115,10 @@ export function LiveTableScreen({ roomId, openInvite = false }: { roomId: number
         loadChat={loadChat}
         onTakeSeat={onTakeSeat}
         onLeaveSeat={onLeaveSeat}
+        onStay={onStay}
         onRebuy={onRebuy}
         owner={detail?.is_owner ? owner : undefined}
+        control={detail?.is_owner ? control : undefined}
         invite={invite}
         startWithInvite={inviteFirst}
         replayHref={(handId) => `/hands/${handId}`}
