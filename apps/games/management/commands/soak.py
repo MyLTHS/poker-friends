@@ -33,7 +33,15 @@ from apps.games import contract
 from apps.games.engine.hand import HandEngine
 from apps.games.management.commands._options import add_bomb_pot_arguments, bomb_pot_amount
 from apps.games.management.commands.create_demo_room import seat_guest_players
-from apps.games.models import MAX_SEATS, MIN_HAND_PAUSE, Hand, LedgerEntry, LedgerKind, Room
+from apps.games.models import (
+    MAX_HAND_PAUSE,
+    MAX_SEATS,
+    MIN_HAND_PAUSE,
+    Hand,
+    LedgerEntry,
+    LedgerKind,
+    Room,
+)
 
 # docs/api/ws-protocol.md section 4: these move ``version`` by exactly one.
 STATE_EVENTS = {
@@ -297,6 +305,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if not 2 <= options["players"] <= MAX_SEATS:
             raise CommandError(f"--players must be between 2 and {MAX_SEATS}.")
+        if not MIN_HAND_PAUSE <= options["hand_pause"] <= MAX_HAND_PAUSE:
+            # What a room may have (Room.hand_pause_seconds); the database would refuse it.
+            raise CommandError(
+                f"--hand-pause must be between {MIN_HAND_PAUSE} and {MAX_HAND_PAUSE} seconds."
+            )
         room = Room.objects.create(
             name=f"Soak {timezone.now():%Y-%m-%d %H:%M:%S}",
             small_blind=options["small_blind"],

@@ -371,10 +371,18 @@ class TestNeverDealtWhileLeaving:
             await fold_to_the_end(room, conns, started["hand_id"])
             assert (await seats_seen_by(a, room))[str(b.pk)]["leaving"] is True
 
-            messages = await drain(watcher, wait=0.6)  # the pause after the hand runs out
-            assert by_type(messages, "hand.completed")
+            messages = await drain(watcher, wait=0.6)  # longer than the pause would have been
+            completed = [m["type"] for m in messages].index("hand.completed")
             assert not by_type(messages, "hand.started")
-            assert by_type(messages, "room.updated")[-1]["payload"]["room"]["next_hand_at"] is None
+            # No hand can follow, so no pause is announced after this one: next_hand_at stays null.
+            announced = [
+                m
+                for m in by_type(messages[completed:], "room.updated")
+                if m["payload"]["room"]["next_hand_at"]
+            ]
+            assert announced == []
+            table = await actor_module.get_actor(room.pk)
+            assert table._room_info()["next_hand_at"] is None
             again = await connect(room, a)  # someone (re)connecting starts no countdown either
             assert not by_type(await drain(again, wait=0.4), "room.updated")
             assert not by_type(await drain(watcher), "room.updated")
@@ -382,5 +390,62 @@ class TestNeverDealtWhileLeaving:
             broken["on"] = False
             assert (await leave(b, room)).status_code == 204  # in no hand now: at once
             assert not await RoomSeat.objects.filter(room=room, user=b).aexists()
+
+        run_async(body)
+
+
+class TestSeatRows:
+    def test_sitting_down_again_clears_what_an_old_row_said(self):
+        room = make_room()
+        a = make_user("alice")
+
+        async def body():
+            watcher = await connect(room, a)  # the table is up: it has read its seats already
+            # A row the table no longer knows (a stand up whose delete was lost, say), still
+            # marked sitting out and leaving.
+            await RoomSeat.objects.acreate(
+                room=room, user=a, seat=5, sitting_out=True, leaving=True
+            )
+            taken = await apost(await alogged_in(a), f"/api/rooms/{room.pk}/seats/", {"seat": 3})
+            assert taken.status_code == 201
+            row = await RoomSeat.objects.aget(room=room, user=a)
+            assert (row.seat, row.sitting_out, row.leaving) == (3, False, False)
+
+            await watcher.disconnect()
+            await actor_module.reset_registry_for_tests()  # the server restarts: it reads the row
+            mine = (await seats_seen_by(a, room))[str(a.pk)]
+            assert (mine["seat"], mine["sitting_out"], mine["leaving"]) == (3, False, False)
+
+        run_async(body)
+
+    def test_a_stand_up_the_database_refuses_keeps_the_seat(self, monkeypatch):
+        room = make_room()
+        a = make_user("alice")
+        seat(room, a, 1)
+        broken = {"on": False}
+        real_adelete = QuerySet.adelete
+
+        async def adelete(self):
+            if broken["on"] and self.model is RoomSeat:
+                raise DatabaseError("the database went away")
+            return await real_adelete(self)
+
+        monkeypatch.setattr(QuerySet, "adelete", adelete)
+
+        async def body():
+            watcher = await connect(room, a)
+            await drain(watcher)
+            broken["on"] = True
+            with pytest.raises(DatabaseError):
+                await leave(a, room)  # in no hand: an immediate stand up, which fails
+            # Still seated, at the table as in the database: the row goes first, then the seat.
+            assert str(a.pk) in await seats_seen_by(a, room)
+            assert await RoomSeat.objects.filter(room=room, user=a).aexists()
+            assert not by_type(await drain(watcher), "seat.updated")
+
+            broken["on"] = False
+            assert (await leave(a, room)).status_code == 204
+            assert not await RoomSeat.objects.filter(room=room).aexists()
+            assert str(a.pk) not in await seats_seen_by(a, room)
 
         run_async(body)

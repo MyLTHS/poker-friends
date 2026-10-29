@@ -348,6 +348,8 @@ class OwnerAction(AppendOnlyModel):
         KICK = "kick", "Kick"
         CLOSE = "close", "Close room"
         INVITE = "invite", "Rotate invite link"
+        START = "start", "Start room"
+        PAUSE = "pause", "Pause room"
 
     room = models.ForeignKey(Room, on_delete=models.PROTECT, related_name="owner_actions")
     user = models.ForeignKey(User, on_delete=models.PROTECT, related_name="owner_actions")

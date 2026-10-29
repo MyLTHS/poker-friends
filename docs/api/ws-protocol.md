@@ -503,7 +503,8 @@ Bắt đầu, `POST /api/rooms/{id}/start/`; phòng mới thì tạm dừng). `r
   đếm ngược **10 giây** rồi chia. Xảy ra khi bấm Bắt đầu, khi người thứ hai ngồi xuống (hoặc có chip,
   hoặc quay lại), và khi server vừa khởi động lại.
 - Hết một ván: nghỉ `room.hand_pause_seconds` giây (6–20, mặc định 10, chủ phòng chọn) rồi chia ván sau. Không
-  có gì làm ván sau tới sớm hơn.
+  có gì làm ván sau tới sớm hơn. Hết ván mà không còn đủ điều kiện ở mục trên (tạm dừng, thiếu người,
+  không ai xem): không nghỉ, không hẹn, `next_hand_at` vẫn `null`; đủ lại thì đếm 10 giây.
 - Tới giờ mà không còn đủ người: không chia, `next_hand_at: null` (`room.updated`); đủ người lại thì
   đếm 10 giây lại.
 - `hand.started` là hết đếm (không có `room.updated` riêng cho việc này): từ đó `next_hand_at` cũ

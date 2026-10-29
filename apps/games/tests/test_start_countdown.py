@@ -5,18 +5,21 @@ START_COUNTDOWN_SECONDS down before the first hand, and pauses hand_pause_second
 Tests shorten the countdowns through TableActor.start_countdown / next_hand_delay.
 """
 
+import asyncio
 from datetime import datetime
 
 import pytest
+from django.db import DatabaseError
 
 from apps.games import actor as actor_module
-from apps.games.models import Room
+from apps.games.models import Hand, OwnerAction, Room, RoomSeat
 
 from .test_actor import (  # noqa: F401
     _slow_next_hand,
     by_type,
     connect,
     drain,
+    heads_up_room,
     make_room,
     make_user,
     run_async,
@@ -46,6 +49,11 @@ def paused_room(**kwargs) -> tuple[Room, object, object, object]:
 
 def countdown(monkeypatch, seconds: float) -> None:
     monkeypatch.setattr(actor_module.TableActor, "start_countdown", seconds)
+
+
+def countdowns(messages: list[dict]) -> list[dict]:
+    """The room.updated events that announce a deal (next_hand_at set)."""
+    return [m for m in by_type(messages, "room.updated") if m["payload"]["room"]["next_hand_at"]]
 
 
 class TestStartAndPause:
@@ -166,6 +174,92 @@ class TestStartAndPause:
 
         run_async(body)
 
+    def test_a_timer_that_fires_while_the_table_is_busy_never_deals_after_pause_and_start(
+        self, monkeypatch
+    ):
+        # Start's 0.2 s timer fires while the table is busy, so its _StartHand waits in the queue
+        # behind a Pause and a new Start (5 s): only the epoch tells it is void.
+        countdown(monkeypatch, 0.2)
+        room, owner, a, b = paused_room()
+        handled = []  # (the timer's epoch, the table's epoch) for each _StartHand handled
+        real_on_start_hand = actor_module.TableActor._on_start_hand
+
+        async def on_start_hand(self, item):
+            handled.append((item.epoch, self._deal_epoch))
+            await real_on_start_hand(self, item)
+
+        monkeypatch.setattr(actor_module.TableActor, "_on_start_hand", on_start_hand)
+
+        async def body():
+            ca = await connect(room, a)
+            await connect(room, b)
+            table = await actor_module.get_actor(room.pk)
+            await table.start()  # deals in 0.2 s
+            busy = asyncio.get_running_loop().create_future()
+            table._queue.put_nowait(actor_module._Call(lambda: asyncio.sleep(0.4), busy))
+            countdown(monkeypatch, 5)
+            await asyncio.gather(table.pause(), table.start(), busy)
+            assert not by_type(await drain(ca, wait=1.0), "hand.started")
+            # The old timer did fire, after the new Start: there was something to ignore.
+            assert [timer for timer, now in handled if timer != now]
+            assert table._next_hand_at is not None  # the new 5 s countdown still runs
+
+        run_async(body)
+
+    def test_start_on_a_running_room_counts_down_when_nothing_is_scheduled(self, monkeypatch):
+        countdown(monkeypatch, 30)
+        room, owner, a, b = paused_room()
+
+        async def body():
+            ca = await connect(room, a)
+            await connect(room, b)
+            client = await alogged_in(owner)
+            await apost(client, f"/api/rooms/{room.pk}/start/")
+            table = await actor_module.get_actor(room.pk)
+
+            async def lose_the_countdown():
+                table._cancel_deal()  # whatever went wrong: running, ready, nothing scheduled
+
+            await table._call(lose_the_countdown)
+            await drain(ca)
+            countdown(monkeypatch, 0.2)
+            info = (await apost(client, f"/api/rooms/{room.pk}/start/")).json()
+            assert info["running"] is True and info["next_hand_at"] is not None
+            messages = await drain(ca, wait=0.6)
+            assert countdowns(messages) and by_type(messages, "hand.started")
+
+        run_async(body)
+
+    def test_start_and_pause_are_in_the_owner_log_when_they_change_something(self, monkeypatch):
+        countdown(monkeypatch, 30)
+        room, owner, a, b = paused_room()
+        staff = make_user("admin")
+        staff.is_staff = staff.is_superuser = True
+        staff.save()
+
+        async def body():
+            mine, theirs = await alogged_in(owner), await alogged_in(staff)
+            for client, path in (
+                (mine, "start"),
+                (mine, "start"),  # running already: nothing changes, nothing logged
+                (mine, "pause"),
+                (mine, "pause"),
+                (theirs, "start"),
+            ):
+                response = await apost(client, f"/api/rooms/{room.pk}/{path}/")
+                assert response.status_code == 200, path
+
+        run_async(body)
+        log = OwnerAction.objects.filter(room=room).order_by("id")
+        assert list(log.values_list("user_id", "by_staff", "kind", "details")) == [
+            (owner.pk, False, "start", {}),
+            (owner.pk, False, "pause", {}),
+            (staff.pk, True, "start", {}),
+        ]
+        page = logged_in(staff).get("/admin/games/owneraction/")
+        assert page.status_code == 200
+        assert "Start room" in page.content.decode() and "Pause room" in page.content.decode()
+
     def test_a_closed_room_cannot_start(self):
         room, owner, a, b = paused_room(status=Room.Status.CLOSED)
 
@@ -256,8 +350,105 @@ class TestWhenToDeal:
             conn = ca if first == str(a.pk) else cb
             await send_act(conn, room, started["hand_id"], "fold-first-hand", "fold")
             messages = await drain(conn, wait=0.5)
-            assert by_type(messages, "hand.completed")
+            completed = [m["type"] for m in messages].index("hand.completed")
             assert not by_type(messages, "hand.started")  # no next hand, even with no pause
+            assert countdowns(messages[completed:]) == []  # nor a pause announced for one
+            assert (await actor_module.get_actor(room.pk))._room_info()["next_hand_at"] is None
+
+        run_async(body)
+
+    def test_sitting_back_in_counts_down_when_it_makes_two_players(self, monkeypatch):
+        countdown(monkeypatch, 0.2)
+        room, a, b = heads_up_room()
+        RoomSeat.objects.filter(room=room, user=b).update(sitting_out=True)
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            assert not by_type(await drain(ca, wait=0.4), "room.updated")  # one player only
+            await cb.send_json_to(
+                {
+                    "protocol_version": 1,
+                    "type": "command.sit_in",
+                    "room_id": room.pk,
+                    "command_id": "back-in-0001",
+                    "payload": {},
+                }
+            )
+            messages = await drain(ca, wait=0.5)
+            assert countdowns(messages) and by_type(messages, "hand.started")
+            await drain(cb)
+
+        run_async(body)
+
+    def test_chips_for_a_player_with_none_count_down_when_they_make_two(self, monkeypatch):
+        countdown(monkeypatch, 0.2)
+        room = make_room()
+        owner, a, b = make_user("owner"), make_user("alice"), make_user("bob")
+        room.owner = owner
+        room.save()
+        seat(room, a, 1)
+        RoomSeat.objects.create(room=room, user=b, seat=2)  # seated, every chip lost
+
+        async def body():
+            ca = await connect(room, a)
+            await connect(room, b)
+            assert not by_type(await drain(ca, wait=0.4), "room.updated")  # one player only
+            url = f"/api/rooms/{room.pk}/chips/"
+            granted = await apost(
+                await alogged_in(owner), url, {"player_id": str(b.pk), "amount": 50}
+            )
+            assert granted.status_code == 200
+            messages = await drain(ca, wait=0.5)
+            assert countdowns(messages) and by_type(messages, "hand.started")
+
+        run_async(body)
+
+    def test_a_hand_the_database_refuses_is_counted_down_again(self, monkeypatch):
+        countdown(monkeypatch, 0.2)
+        room, a, b = heads_up_room()
+        real_create = Hand.objects.acreate
+        refused = []
+
+        async def create(**kwargs):
+            if not refused:
+                refused.append(kwargs["hand_no"])
+                raise DatabaseError("the database went away")
+            return await real_create(**kwargs)
+
+        monkeypatch.setattr(Hand.objects, "acreate", create)
+
+        async def body():
+            ca = await connect(room, a)
+            await connect(room, b)
+            messages = await drain(ca, wait=0.6)
+            # The first countdown, the deal the database refused, a fresh countdown, the hand.
+            first, again = countdowns(messages)
+            [started] = by_type(messages, "hand.started")
+            assert messages.index(first) < messages.index(again) < messages.index(started)
+            assert started["payload"]["hand"]["hand_no"] == 1  # the refused deal left nothing
+
+        run_async(body)
+        assert refused == [1]
+        assert list(Hand.objects.filter(room=room).values_list("hand_no", flat=True)) == [1]
+
+    def test_the_e2e_pause_setting_shortens_the_pause_between_hands(self, monkeypatch, settings):
+        monkeypatch.setattr(actor_module.TableActor, "next_hand_delay", None)  # no test override
+        settings.TABLE_HAND_PAUSE_SECONDS = 0.1
+        room, a, b = heads_up_room()  # hand_pause_seconds: 10
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            conn = ca if started["payload"]["hand"]["actor"] == str(a.pk) else cb
+            await send_act(conn, room, started["hand_id"], "fold-first-hand", "fold")
+            messages = await drain(conn, wait=0.5)
+            completed = by_type(messages, "hand.completed")[-1]
+            [pause] = countdowns(messages)
+            seconds = when(pause["payload"]["room"]["next_hand_at"]) - when(
+                completed["server_time"]
+            )
+            assert seconds.total_seconds() < 0.5  # 0.1 s, not the room's 10
+            assert by_type(messages, "hand.started")  # the second hand, already
 
         run_async(body)
 
@@ -312,6 +503,28 @@ def test_e2e_settings_shorten_the_countdown_and_the_pause(settings):
     settings.TABLE_START_COUNTDOWN_SECONDS = 1.0
     assert _seconds(None, "TABLE_START_COUNTDOWN_SECONDS", 10) == 1.0
     assert _seconds(0, "TABLE_START_COUNTDOWN_SECONDS", 10) == 0
+    with pytest.raises(AttributeError):  # a misspelled name fails instead of the real time
+        _seconds(None, "TABLE_START_COUNTDOWN_SECOND", 10)
+
+
+def test_e2e_seconds_from_the_environment_must_be_a_number_zero_or_more(monkeypatch):
+    from django.core.exceptions import ImproperlyConfigured
+
+    from config.settings import env_float
+
+    name = "TABLE_HAND_PAUSE_SECONDS"
+    monkeypatch.delenv(name, raising=False)
+    assert env_float(name) is None
+    for unset in ("", "  "):
+        monkeypatch.setenv(name, unset)
+        assert env_float(name) is None
+    for value, seconds in (("0", 0.0), ("0.5", 0.5), (" 2 ", 2.0)):
+        monkeypatch.setenv(name, value)
+        assert env_float(name) == seconds
+    for wrong in ("nan", "inf", "-inf", "1e999", "-1", "-0.5", "abc", "2s"):
+        monkeypatch.setenv(name, wrong)
+        with pytest.raises(ImproperlyConfigured, match=name):
+            env_float(name)
 
 
 def test_the_e2e_server_makes_rooms_that_deal_without_start(settings):
