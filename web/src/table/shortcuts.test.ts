@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LegalActions } from "@/api/protocol";
 
-import { globalCommand, isTyping, ownsArrows, readKeysOn, turnCommand, writeKeysOn } from "./shortcuts";
+import { globalCommand, isTyping, ownsArrows, readKeysOn, SHORTCUTS, turnCommand, writeKeysOn } from "./shortcuts";
 
 const key = (k: string, mods: Partial<KeyboardEvent> = {}) => ({ key: k, shiftKey: false, ctrlKey: false, metaKey: false, altKey: false, ...mods });
 
@@ -20,11 +20,26 @@ describe("turnCommand", () => {
     expect(turnCommand(key("r"), shoveOrFold, 0)).toBeNull();
   });
 
-  it("picks quick sizes 1–4 only when they exist", () => {
-    expect(turnCommand(key("1"), facing, 4)).toEqual({ kind: "preset", index: 0 });
-    expect(turnCommand(key("4"), facing, 4)).toEqual({ kind: "preset", index: 3 });
+  it("picks quick sizes 1–6 only when they exist", () => {
+    expect(turnCommand(key("1"), facing, 6)).toEqual({ kind: "preset", index: 0 });
+    expect(turnCommand(key("4"), facing, 6)).toEqual({ kind: "preset", index: 3 });
+    expect(turnCommand(key("5"), facing, 6)).toEqual({ kind: "preset", index: 4 });
+    expect(turnCommand(key("6"), facing, 6)).toEqual({ kind: "preset", index: 5 });
+    expect(turnCommand(key("6"), facing, 5)).toBeNull();
     expect(turnCommand(key("3"), facing, 2)).toBeNull();
-    expect(turnCommand(key("1"), shoveOrFold, 4)).toBeNull();
+    expect(turnCommand(key("1"), shoveOrFold, 6)).toBeNull();
+  });
+
+  it("takes a digit typed with Shift (AZERTY) but no key past 6", () => {
+    expect(turnCommand(key("6", { shiftKey: true }), facing, 6)).toEqual({ kind: "preset", index: 5 });
+    expect(turnCommand(key("7"), facing, 6)).toBeNull();
+    expect(turnCommand(key("0"), facing, 6)).toBeNull();
+    expect(turnCommand(key(""), facing, 6)).toBeNull();
+  });
+
+  it("lists the quick-size keys in the help as 1–6", () => {
+    const sizes = SHORTCUTS.find((s) => s.text.includes("mức tố nhanh"));
+    expect(sizes?.keys).toEqual(["1–6"]);
   });
 
   it("nudges the amount with the arrows, five blinds with Shift", () => {

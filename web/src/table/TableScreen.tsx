@@ -25,7 +25,7 @@ import { ConnStrip, PausedCard, ReconnectCard } from "./Overlays";
 import { runoutLines, winnerLines } from "./handName";
 import { bombPotHand, isBombPot, stakesText } from "./houseRules";
 import { canPreAct, canShowCards, facingBet, shownHands } from "./reducer";
-import { describeAction, raisePresets, tableView, type RunoutView, type SeatView } from "./seatView";
+import { describeAction, raisePresets, raiseSizing, tableView, type RunoutView, type SeatView } from "./seatView";
 import { SevenDeuceStage, SevenLedger, SevenMedal } from "./SevenDeuce";
 import {
   ChatComposer,
@@ -304,7 +304,8 @@ export function TableScreen({
     ? {
         device,
         legal,
-        presets: raisePresets(hand, legal),
+        presets: raisePresets(hand, legal, room.big_blind),
+        sizing: raiseSizing(hand, legal, room.big_blind),
         step: room.big_blind,
         facingBet: hand.players.some((p) => p.bet > 0),
         clock: myClock,

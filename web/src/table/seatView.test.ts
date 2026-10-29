@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { HandStartedMessage, HandView, TableSnapshotMessage, TableState } from "@/api/protocol";
+import type { HandStartedMessage, HandView, LegalActions, TableSnapshotMessage, TableState } from "@/api/protocol";
 import betweenFixture from "../../../docs/api/fixtures/server/valid/table.snapshot.between-hands.json";
 import midHandFixture from "../../../docs/api/fixtures/server/valid/table.snapshot.mid-hand.json";
 import spectatorFixture from "../../../docs/api/fixtures/server/valid/table.snapshot.spectator.json";
 import startedFixture from "../../../docs/api/fixtures/server/valid/hand.started.json";
 
 import { GEO, SPOTS_FOR, dealerPos, fitScale, spotOf, spotPos } from "./geometry";
-import { actionLabel, blindSeats, dealOrder, raisePresets, showdownOrder, tableView } from "./seatView";
+import { actionLabel, blindSeats, dealOrder, raisePresets, raiseSizing, showdownOrder, sizeCaption, tableView, type Preset } from "./seatView";
 
 const midHand = (midHandFixture as unknown as TableSnapshotMessage).payload.table;
 const spectator = (spectatorFixture as unknown as TableSnapshotMessage).payload.table;
@@ -222,13 +222,134 @@ describe("labels and presets", () => {
     expect(actionLabel({ player_id: "2", seat: 3, kind: "fold", amount: null, timeout: true }, p)).toBe("Hết giờ · bỏ");
   });
 
-  it("clamps ½ pot, ¾ pot, pot and all-in into the server's raise range", () => {
-    const presets = raisePresets(started, started.legal_actions!);
-    expect(presets.map((p) => p.label)).toEqual(["½ pot", "¾ pot", "Pot", "All-in"]);
-    for (const p of presets) {
-      expect(p.amount).toBeGreaterThanOrEqual(started.legal_actions!.min_raise_to!);
-      expect(p.amount).toBeLessThanOrEqual(started.legal_actions!.max_raise_to!);
+});
+
+describe("raisePresets", () => {
+  const labels = (presets: Preset[]) => presets.map((p) => p.label);
+  const amounts = (presets: Preset[]) => presets.map((p) => p.amount);
+  const withBets = (hand: HandView, bets: number[]): HandView => ({ ...hand, players: hand.players.map((p, i) => ({ ...p, bet: bets[i] })) as HandView["players"] });
+  // started: 5/10, Lym (button) first to act: call 10, raise 20–1000; the blinds put in 15
+  const preflop = started;
+  // flop: Lym bet 50 into 65, Bình to act: call 50, raise 100–970
+  const flop = midHand.hand!;
+  // flop checked to Bình: 120 in the middle, no bet yet
+  const checkedTo: HandView = { ...withBets(flop, [0, 0, 0]), pots: [{ amount: 120, eligible: ["3", "1"] }] };
+  const free: LegalActions = { can_fold: false, can_check: true, call_amount: 0, min_raise_to: 10, max_raise_to: 970 };
+
+  it("before the flop, nobody in above the big blind: Min, 2,5 / 3 / 4 BB, pot and all-in, smallest first", () => {
+    const presets = raisePresets(preflop, preflop.legal_actions!, 10);
+    expect(labels(presets)).toEqual(["Min", "2,5 BB", "3 BB", "Pot", "4 BB", "All-in"]);
+    // pot-sized: call 10 (pot 25), then raise by 25 -> 35
+    expect(amounts(presets)).toEqual([20, 25, 30, 35, 40, 1000]);
+  });
+
+  it("the big blind's option after limps is still unopened; of two equal sizes the first listed stays", () => {
+    const limped = withBets(preflop, [10, 10, 10]);
+    const option: LegalActions = { can_fold: false, can_check: true, call_amount: 0, min_raise_to: 20, max_raise_to: 1000 };
+    // pot-sized: 10 + 30 = 40, the same as 4 BB
+    const presets = raisePresets(limped, option, 10);
+    expect(labels(presets)).toEqual(["Min", "2,5 BB", "3 BB", "4 BB", "All-in"]);
+    expect(amounts(presets)).toEqual([20, 25, 30, 40, 1000]);
+  });
+
+  it("facing a bet: Min, 2,5× and 3× the bet, pot and all-in", () => {
+    const presets = raisePresets(flop, flop.legal_actions!, 10);
+    expect(labels(presets)).toEqual(["Min", "2,5×", "3×", "Pot", "All-in"]);
+    // pot-sized: call 50 (pot 165), then raise by 165 -> 215
+    expect(amounts(presets)).toEqual([100, 125, 150, 215, 970]);
+  });
+
+  it("facing a raise before the flop: multiples of that raise, not big blinds", () => {
+    // Lym limped, An raised to 30, Bình called the big blind only: back to Lym
+    const reraised = withBets(preflop, [10, 30, 10]);
+    const legal: LegalActions = { can_fold: true, can_check: false, call_amount: 20, min_raise_to: 50, max_raise_to: 1000 };
+    const presets = raisePresets(reraised, legal, 10);
+    expect(labels(presets)).toEqual(["Min", "2,5×", "3×", "Pot", "All-in"]);
+    expect(amounts(presets)).toEqual([50, 75, 90, 100, 1000]);
+  });
+
+  it("after the flop with no bet yet: Min, ⅓ / ½ / ⅔ pot, pot and all-in", () => {
+    const presets = raisePresets(checkedTo, free, 10);
+    expect(labels(presets)).toEqual(["Min", "⅓ pot", "½ pot", "⅔ pot", "Pot", "All-in"]);
+    expect(amounts(presets)).toEqual([10, 40, 60, 80, 120, 970]);
+  });
+
+  it("drops a size that lands on Min: Min wins", () => {
+    const small: HandView = { ...checkedTo, pots: [{ amount: 24, eligible: ["3", "1"] }] };
+    // ⅓ pot = 8, under the minimum bet of 10
+    const presets = raisePresets(small, free, 10);
+    expect(labels(presets)).toEqual(["Min", "½ pot", "⅔ pot", "Pot", "All-in"]);
+    expect(amounts(presets)).toEqual([10, 12, 16, 24, 970]);
+  });
+
+  it("drops sizes only reached all in: All-in wins", () => {
+    const short = (max: number) => raisePresets(flop, { ...flop.legal_actions!, max_raise_to: max }, 10);
+    expect(labels(short(160))).toEqual(["Min", "2,5×", "3×", "All-in"]);
+    expect(amounts(short(160))).toEqual([100, 125, 150, 160]);
+    expect(short(120)).toEqual([
+      { label: "Min", amount: 100 },
+      { label: "All-in", amount: 120 },
+    ]);
+  });
+
+  it("only All-in when the smallest raise is already the whole stack", () => {
+    expect(raisePresets(flop, { ...flop.legal_actions!, min_raise_to: 100, max_raise_to: 100 }, 10)).toEqual([{ label: "All-in", amount: 100 }]);
+  });
+
+  it("nothing when no raise is allowed", () => {
+    expect(raisePresets(flop, { can_fold: true, can_check: false, call_amount: 50, min_raise_to: null, max_raise_to: null }, 10)).toEqual([]);
+  });
+
+  it("at most six, whole chips, ascending and inside the server's range, Min first and All-in last", () => {
+    // 2/5 blinds: 2,5 BB is 12,5 chips
+    const odd = withBets(preflop, [0, 2, 5]);
+    const cases: [HandView, LegalActions, number][] = [
+      [preflop, preflop.legal_actions!, 10],
+      [flop, flop.legal_actions!, 10],
+      [checkedTo, free, 10],
+      [odd, { can_fold: true, can_check: false, call_amount: 5, min_raise_to: 10, max_raise_to: 1000 }, 5],
+    ];
+    for (const [hand, legal, bigBlind] of cases) {
+      const presets = raisePresets(hand, legal, bigBlind);
+      const sizes = amounts(presets);
+      expect(presets.length).toBeLessThanOrEqual(6);
+      expect(presets[0]).toEqual({ label: "Min", amount: legal.min_raise_to });
+      expect(presets.at(-1)).toEqual({ label: "All-in", amount: legal.max_raise_to });
+      expect(sizes.every(Number.isInteger)).toBe(true);
+      expect(sizes.every((a, i) => i === 0 || a > sizes[i - 1])).toBe(true);
+      expect(new Set(labels(presets)).size).toBe(presets.length);
     }
-    expect(presets.at(-1)!.amount).toBe(1000);
+    expect(amounts(raisePresets(odd, cases[3][1], 5))).toEqual([10, 13, 15, 17, 20, 1000]);
+  });
+});
+
+describe("sizeCaption", () => {
+  it("says the amount in big blinds and the raise as a share of the pot after calling", () => {
+    const sizing = raiseSizing(started, started.legal_actions!, 10);
+    expect(sizing).toEqual({ bigBlind: 10, topBet: 10, potAfterCall: 25 });
+    expect(sizeCaption(30, sizing)).toBe("3 BB · 80% pot");
+    expect(sizeCaption(25, sizing)).toBe("2,5 BB · 60% pot");
+    // the Pot button reads 100%
+    expect(sizeCaption(35, sizing)).toBe("3,5 BB · 100% pot");
+  });
+
+  it("after the flop with no bet: the bet over the pot", () => {
+    const flop = midHand.hand!;
+    const checkedTo: HandView = { ...flop, pots: [{ amount: 120, eligible: ["3", "1"] }], players: flop.players.map((p) => ({ ...p, bet: 0 })) as HandView["players"] };
+    const sizing = raiseSizing(checkedTo, { can_fold: false, can_check: true, call_amount: 0, min_raise_to: 10, max_raise_to: 970 }, 10);
+    expect(sizing).toEqual({ bigBlind: 10, topBet: 0, potAfterCall: 120 });
+    expect(sizeCaption(60, sizing)).toBe("6 BB · 50% pot");
+    expect(sizeCaption(40, sizing)).toBe("4 BB · 33% pot");
+  });
+
+  it("one decimal at most, a dot between thousands", () => {
+    expect(sizeCaption(33, { bigBlind: 10, topBet: 0, potAfterCall: 100 })).toBe("3,3 BB · 33% pot");
+    expect(sizeCaption(296, { bigBlind: 100, topBet: 0, potAfterCall: 400 })).toBe("3 BB · 74% pot");
+    expect(sizeCaption(12_500, { bigBlind: 10, topBet: 0, potAfterCall: 1_000 })).toBe("1.250 BB · 1.250% pot");
+  });
+
+  it("leaves out a part it cannot work out", () => {
+    expect(sizeCaption(30, { bigBlind: 0, topBet: 0, potAfterCall: 60 })).toBe("50% pot");
+    expect(sizeCaption(30, { bigBlind: 10, topBet: 0, potAfterCall: 0 })).toBe("3 BB");
   });
 });

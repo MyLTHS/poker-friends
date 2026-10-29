@@ -241,22 +241,69 @@ export function tableView(table: TableState, extras: ViewExtras = {}): TableView
 
 export type Preset = { label: string; amount: number };
 
-/** Raise-to sizes for the quick buttons, clamped to the server's range (½ pot, ¾ pot, pot, all-in). */
-export function raisePresets(hand: HandView, legal: LegalActions): Preset[] {
+/** What a raise-to amount is measured against (the quick sizes, the caption under the amount). */
+export type RaiseSizing = {
+  /** The room's big blind. */
+  bigBlind: number;
+  /** The highest bet on this street: a raise goes to a total above it. */
+  topBet: number;
+  /** The pot once I have called: the collected pots, every bet on the table and my call. */
+  potAfterCall: number;
+};
+
+/** The top bet and the pot after my call, as the hand stands for my decision. */
+export function raiseSizing(hand: HandView, legal: LegalActions, bigBlind: number): RaiseSizing {
+  const topBet = Math.max(0, ...hand.players.map((p) => p.bet));
+  const pot = hand.pots.reduce((s, p) => s + p.amount, 0) + hand.players.reduce((s, p) => s + p.bet, 0);
+  return { bigBlind, topBet, potAfterCall: pot + legal.call_amount };
+}
+
+/**
+ * Raise-to sizes for the quick buttons, smallest first, at most six: Min, then by the situation
+ * - before the flop with nobody in above the big blind: 2,5 / 3 / 4 big blinds and the pot,
+ * - facing a bet or a raise: 2,5 and 3 times that bet and the pot,
+ * - after the flop with no bet yet: ⅓, ½, ⅔ of the pot and the pot,
+ * then All-in. A size the server's range turns into Min or All-in is dropped (Min and All-in stay),
+ * and of two equal sizes the first listed stays.
+ */
+export function raisePresets(hand: HandView, legal: LegalActions, bigBlind: number): Preset[] {
   if (legal.min_raise_to === null || legal.max_raise_to === null) return [];
   const min = legal.min_raise_to;
   const max = legal.max_raise_to;
-  const topBet = Math.max(...hand.players.map((p) => p.bet));
-  const pot = hand.pots.reduce((s, p) => s + p.amount, 0) + hand.players.reduce((s, p) => s + p.bet, 0);
-  // Pot-sized raise: call first, then raise by the pot that results.
-  const potAfterCall = pot + legal.call_amount;
-  const clamp = (v: number) => Math.min(max, Math.max(min, Math.round(v)));
-  return [
-    { label: "½ pot", amount: clamp(topBet + potAfterCall / 2) },
-    { label: "¾ pot", amount: clamp(topBet + (potAfterCall * 3) / 4) },
-    { label: "Pot", amount: clamp(topBet + potAfterCall) },
-    { label: "All-in", amount: max },
-  ];
+  if (max <= min) return [{ label: "All-in", amount: max }];
+  const { topBet, potAfterCall } = raiseSizing(hand, legal, bigBlind);
+  // Pot-sized raise: call first, then raise by (a share of) the pot that results.
+  const pot = (share: number) => topBet + potAfterCall * share;
+  const unopened = hand.board.length === 0 && topBet <= bigBlind;
+  const sizes: [string, number][] = unopened
+    ? [["2,5 BB", 2.5 * bigBlind], ["3 BB", 3 * bigBlind], ["4 BB", 4 * bigBlind], ["Pot", pot(1)]]
+    : legal.call_amount > 0
+      ? [["2,5×", 2.5 * topBet], ["3×", 3 * topBet], ["Pot", pot(1)]]
+      : [["⅓ pot", pot(1 / 3)], ["½ pot", pot(1 / 2)], ["⅔ pot", pot(2 / 3)], ["Pot", pot(1)]];
+  const between = sizes
+    .map(([label, size]) => ({ label, amount: Math.round(size) }))
+    .filter((p) => p.amount > min && p.amount < max)
+    .sort((a, b) => a.amount - b.amount); // stable: the first listed of two equal sizes comes first
+  const presets: Preset[] = [{ label: "Min", amount: min }];
+  for (const p of between) if (p.amount !== presets.at(-1)!.amount) presets.push(p);
+  presets.push({ label: "All-in", amount: max });
+  return presets;
+}
+
+/** Big blinds with one decimal at most, written the Vietnamese way: 2,5 / 3 / 1.250. */
+function inBlinds(amount: number, bigBlind: number): string {
+  const tenths = Math.round((amount / bigBlind) * 10);
+  const whole = fmt(Math.trunc(tenths / 10));
+  return tenths % 10 ? `${whole},${tenths % 10}` : whole;
+}
+
+/** The caption under the amount, "3 BB · 75% pot": the raise-to amount in big blinds, and what it
+ *  adds on top of the call as a share of the pot after calling (so the Pot button reads 100%). */
+export function sizeCaption(amount: number, sizing: RaiseSizing): string {
+  const parts: string[] = [];
+  if (sizing.bigBlind > 0) parts.push(`${inBlinds(amount, sizing.bigBlind)} BB`);
+  if (sizing.potAfterCall > 0) parts.push(`${fmt(Math.round((Math.max(0, amount - sizing.topBet) / sizing.potAfterCall) * 100))}% pot`);
+  return parts.join(" · ");
 }
 
 const VERB: Record<AppliedAction["kind"], string> = { fold: "bỏ bài", check: "check", call: "theo", raise: "tố lên" };

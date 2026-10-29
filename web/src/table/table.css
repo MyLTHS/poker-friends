@@ -4460,3 +4460,87 @@
     }
   }
 }
+
+/* Raise presets (raise-presets branch): up to six quick sizes, Min … All-in, in one row of up to
+   three or in two rows (ActionBar Presets data-cols, data-long); on the desktop, the caption under
+   the amount box ("3 BB · 75% pot"). */
+@layer components {
+  .d1 :is(.presets, .presets-m)[data-cols="1"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .d1 :is(.presets, .presets-m)[data-cols="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .d1 :is(.presets, .presets-m)[data-cols="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* desktop: in a narrower window (1280) the status column gives way before the sizes do */
+  .d1 .abar-status {
+    flex: 0 4 196px;
+    min-width: 118px;
+  }
+  .d1 .abar-raise {
+    flex: 1 1 300px;
+    min-width: 270px;
+    gap: 6px;
+  }
+  /* two rows of label + amount in about the height one row and its gap had */
+  .d1 .presets {
+    gap: 4px 5px;
+  }
+  .d1 .presets .preset {
+    height: 26px;
+    padding: 0 7px;
+    gap: 4px;
+  }
+  /* when it is tight the name gives way, never the amount */
+  .d1 .presets .preset span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: var(--fs-xs);
+    line-height: 1.3;
+  }
+  .d1 .presets .preset b {
+    flex: none;
+    font-size: var(--fs-md);
+  }
+  .d1 .presets[data-long] .preset b {
+    font-size: var(--fs-sm);
+  }
+  /* − slider + box, the caption right under the box. A long one runs left under the + but stops
+     where the slider's own min / max labels hang (… past that). */
+  .d1 .abar .slider-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) 28px 80px;
+    grid-template-rows: 30px auto;
+    gap: 2px 10px;
+  }
+  .d1 .abar .amount-box {
+    height: 30px;
+  }
+  .d1 .amount-note {
+    grid-column: 3 / -1;
+    justify-self: end;
+    max-width: calc(100% + 10px);
+    margin-left: -10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: var(--w-label) var(--fs-xs) / 1.3 var(--text);
+    color: var(--ivory-3);
+  }
+
+  /* phone: three across, two rows, the height the four sizes had; the amount a step smaller */
+  .d1 .presets-m {
+    gap: 6px 5px;
+  }
+  .d1 .presets-m[data-cols="3"] .preset b {
+    font-size: var(--fs-base);
+  }
+  .d1 .presets-m[data-long] .preset b {
+    font-size: var(--fs-sm);
+    letter-spacing: -0.02em;
+  }
+}

@@ -11,7 +11,7 @@ export type ShortcutCommand =
   | { kind: "call" }
   /** send the raise at the amount the bar shows */
   | { kind: "raise" }
-  /** pick a quick size (index into the bar's presets: ½ pot, ¾ pot, Pot, All-in) */
+  /** pick a quick size (index into the bar's presets, Min first, All-in last) */
   | { kind: "preset"; index: number }
   /** move the raise amount by this many big blinds */
   | { kind: "nudge"; steps: number }
@@ -38,7 +38,7 @@ export const SHORTCUTS: { keys: string[]; text: string }[] = [
   { keys: ["F"], text: "Bỏ bài" },
   { keys: ["C"], text: "Check, hoặc theo" },
   { keys: ["R"], text: "Tố / cược đúng mức đang chọn" },
-  { keys: ["1", "2", "3", "4"], text: "Chọn ½ pot, ¾ pot, Pot, All-in" },
+  { keys: ["1–6"], text: "Chọn mức tố nhanh, theo thứ tự từ Min tới All-in" },
   { keys: ["↑", "↓"], text: "Thêm / bớt một big blind (giữ Shift: năm)" },
   { keys: ["M"], text: "Bật / tắt âm thanh" },
   { keys: ["?"], text: "Mở bảng phím tắt này" },
@@ -95,8 +95,10 @@ export function turnCommand(e: KeyLike, legal: LegalActions, presets: number): S
     case "ArrowLeft":
       return canRaise ? { kind: "nudge", steps: e.shiftKey ? -5 : -1 } : null;
   }
-  // 1–4: the digit row, with or without Shift on keyboards that need it
-  const digit = "1234".indexOf(e.key);
-  if (digit >= 0) return canRaise && digit < presets ? { kind: "preset", index: digit } : null;
+  // 1–6: the digit row, with or without Shift on keyboards that need it
+  if (/^[1-6]$/.test(e.key)) {
+    const index = Number(e.key) - 1;
+    return canRaise && index < presets ? { kind: "preset", index } : null;
+  }
   return null;
 }

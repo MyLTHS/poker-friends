@@ -4,7 +4,7 @@
 // table.tsx TurnBar / IdleBar / TurnPanel). Every button and every bet size comes from the
 // server's legal_actions: the bar never decides what is legal, it only clamps a typed amount into
 // [min_raise_to, max_raise_to]. Animations never block it: a click is sent at once.
-import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Minus, Plus } from "lucide-react";
 
 import type { LegalActions } from "@/api/protocol";
@@ -13,7 +13,7 @@ import { fmt } from "@/ui";
 import { Countdown, LiveBar, type TurnClock } from "./clock";
 import type { Device } from "./geometry";
 import type { PreActionKind } from "./reducer";
-import type { Preset } from "./seatView";
+import { sizeCaption, type Preset, type RaiseSizing } from "./seatView";
 import { isTyping, ownsArrows, turnCommand } from "./shortcuts";
 
 export type ActKind = "fold" | "check" | "call" | "raise";
@@ -22,6 +22,8 @@ export type TurnProps = {
   device: Device;
   legal: LegalActions;
   presets: Preset[];
+  /** What the amount is measured against, for the caption under the amount box ("3 BB · 75% pot"). */
+  sizing: RaiseSizing;
   /** Step of the − / + buttons (the big blind). */
   step: number;
   /** Somebody has bet this street: the raise button says "Tố", otherwise "Cược". */
@@ -45,7 +47,7 @@ function useRaise(legal: LegalActions) {
   return { min, max, amount: clamp(amount, min, max), set };
 }
 
-function Slider({ raise, step, device, keys = false }: { raise: ReturnType<typeof useRaise>; step: number; device: Device; keys?: boolean }) {
+function Slider({ raise, step, device, keys = false, describedBy }: { raise: ReturnType<typeof useRaise>; step: number; device: Device; keys?: boolean; describedBy?: string }) {
   const frac = raise.max > raise.min ? (raise.amount - raise.min) / (raise.max - raise.min) : 1;
   const ic = device === "desktop" ? 14 : 16;
   return (
@@ -68,6 +70,7 @@ function Slider({ raise, step, device, keys = false }: { raise: ReturnType<typeo
           onChange={(e) => raise.set(Number(e.target.value))}
           aria-label="Mức tố"
           aria-valuetext={`${fmt(raise.amount)} chip`}
+          aria-describedby={describedBy}
         />
       </span>
       <button type="button" className="step-btn" aria-label="Tăng mức tố" aria-keyshortcuts={keys ? "ArrowUp" : undefined} onClick={() => raise.set(raise.amount + step)} disabled={raise.amount >= raise.max}>
@@ -77,7 +80,7 @@ function Slider({ raise, step, device, keys = false }: { raise: ReturnType<typeo
   );
 }
 
-function AmountBox({ raise }: { raise: ReturnType<typeof useRaise> }) {
+function AmountBox({ raise, describedBy }: { raise: ReturnType<typeof useRaise>; describedBy?: string }) {
   const [text, setText] = useState<string | null>(null);
   const commit = () => {
     if (text !== null && text.trim() !== "") raise.set(Number(text.replace(/\D/g, "")));
@@ -88,6 +91,7 @@ function AmountBox({ raise }: { raise: ReturnType<typeof useRaise> }) {
       className="amount-box"
       inputMode="numeric"
       aria-label="Số chip tố"
+      aria-describedby={describedBy}
       value={text ?? fmt(raise.amount)}
       onFocus={(e) => {
         setText(String(raise.amount));
@@ -101,8 +105,12 @@ function AmountBox({ raise }: { raise: ReturnType<typeof useRaise> }) {
 }
 
 function Presets({ presets, raise, className, keys = false }: { presets: Preset[]; raise: ReturnType<typeof useRaise>; className: string; keys?: boolean }) {
+  // Up to three sit in one row; four to six in two rows, read like text (keys 1–6 in that order).
+  const cols = presets.length <= 3 ? presets.length : Math.ceil(presets.length / 2);
+  // six-figure amounts (100.000 and up) take a smaller figure so three still fit across
+  const long = presets.some((p) => fmt(p.amount).length > 6);
   return (
-    <div className={className} role="group" aria-label="Mức tố nhanh">
+    <div className={className} data-cols={cols} data-long={long || undefined} role="group" aria-label="Mức tố nhanh">
       {presets.map((p, i) => (
         <button key={p.label} type="button" className={`preset${p.amount === raise.amount ? " is-active" : ""}`} onClick={() => raise.set(p.amount)} aria-pressed={p.amount === raise.amount} aria-keyshortcuts={keys ? String(i + 1) : undefined}>
           <span>{p.label}</span>
@@ -146,7 +154,7 @@ function Acts({ legal, raise, facingBet, enabled, keys = false, onAct }: { legal
   );
 }
 
-/** Keyboard on the desktop (shortcuts.ts): F fold, C check/call, R raise, 1–4 quick sizes, arrows
+/** Keyboard on the desktop (shortcuts.ts): F fold, C check/call, R raise, 1–6 quick sizes, arrows
  *  move the amount. Off while typing, while a dialog or the help is open, and for held-down keys. */
 function useShortcuts(enabled: boolean, legal: LegalActions, presets: Preset[], step: number, raise: ReturnType<typeof useRaise>, onAct: TurnProps["onAct"]) {
   const { amount, set } = raise;
@@ -175,9 +183,10 @@ const timeoutNote = (legal: LegalActions, short: boolean) =>
 
 /** Desktop: my turn. */
 export function TurnBar(props: TurnProps) {
-  const { legal, presets, step, facingBet, clock, enabled, keys = false, onAct } = props;
+  const { legal, presets, sizing, step, facingBet, clock, enabled, keys = false, onAct } = props;
   const raise = useRaise(legal);
   useShortcuts(enabled && keys, legal, presets, step, raise, onAct);
+  const noteId = useId();
   const canRaise = legal.min_raise_to !== null;
   return (
     <div className="abar" role="region" aria-label="Tới lượt bạn">
@@ -201,8 +210,11 @@ export function TurnBar(props: TurnProps) {
         <div className="abar-raise">
           <Presets presets={presets} raise={raise} className="presets" keys={keys} />
           <div className="slider-row">
-            <Slider raise={raise} step={step} device="desktop" keys={keys} />
-            <AmountBox raise={raise} />
+            <Slider raise={raise} step={step} device="desktop" keys={keys} describedBy={noteId} />
+            <AmountBox raise={raise} describedBy={noteId} />
+            <small id={noteId} className="amount-note">
+              {sizeCaption(raise.amount, sizing)}
+            </small>
           </div>
         </div>
       )}
