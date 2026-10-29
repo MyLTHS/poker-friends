@@ -1,9 +1,9 @@
 "use client";
 
 // The owner's panel (D1 "owner-panel"): chips for each seated player, kick, the rules (blinds,
-// think time, 7-2 bonus; applied from the next hand while one is running), the invite link and
-// closing the room. A standalone component: the room page opens it in a side sheet, and the live
-// table (C3) can mount <OwnerSheet> the same way.
+// think time, starting stack, ante, 7-2 bonus, bomb pot; applied from the next hand while one is
+// running), the invite link and closing the room. A standalone component: the room page opens it
+// in a side sheet, and the live table (C3) can mount <OwnerSheet> the same way.
 //
 // Needs a <ToastProvider> (from @/ui) above it, inside the .d1 root (RoomsShell has one; the
 // table screen must put one in): results are announced as toasts, errors show where they
@@ -20,7 +20,19 @@ import { createRoomsApi, inviteUrl, type RoomDetail, type RoomsApi, type SeatOcc
 import { Choices } from "./Choices";
 import { useOrigin, usePhone } from "./hooks";
 import { copyText } from "./RoomBits";
-import { blindsText, changedRules, checkRules, pendingText, serverFieldErrors, SEVEN_CHOICES, THINK_CHOICES, type EditableRules, type FieldErrors } from "./rules";
+import {
+  blindsText,
+  BOMB_EVERY_DEFAULT,
+  changedRules,
+  checkRules,
+  defaultBombAmount,
+  pendingText,
+  serverFieldErrors,
+  SEVEN_CHOICES,
+  THINK_CHOICES,
+  type EditableRules,
+  type FieldErrors,
+} from "./rules";
 import "./rooms.css";
 
 export type OwnerPanelProps = {
@@ -332,7 +344,18 @@ function PlayerRow({
   );
 }
 
-type RulesDraft = { small_blind: string; big_blind: string; think_time_seconds: number; sevenOn: boolean; seven: string; starting: string };
+type RulesDraft = {
+  small_blind: string;
+  big_blind: string;
+  think_time_seconds: number;
+  sevenOn: boolean;
+  seven: string;
+  starting: string;
+  ante: string;
+  bombOn: boolean;
+  bombEvery: string;
+  bombAmount: string;
+};
 
 const draftOf = (r: EditableRules): RulesDraft => ({
   small_blind: String(r.small_blind),
@@ -341,6 +364,11 @@ const draftOf = (r: EditableRules): RulesDraft => ({
   sevenOn: r.seven_deuce_bonus > 0,
   seven: String(r.seven_deuce_bonus || 50),
   starting: String(r.starting_stack),
+  ante: String(r.ante),
+  // switched on from off: every 5 hands, 2 big blinds each
+  bombOn: r.bomb_pot_every > 0,
+  bombEvery: String(r.bomb_pot_every || BOMB_EVERY_DEFAULT),
+  bombAmount: String(r.bomb_pot_amount || defaultBombAmount(r.big_blind)),
 });
 const toNumber = (text: string) => (text.trim() === "" ? NaN : Number(text));
 const digitsOnly = (text: string) => text.replace(/[^\d]/g, "").slice(0, 9);
@@ -364,6 +392,9 @@ function RulesForm({
     think_time_seconds: detail.pending?.think_time_seconds ?? room.think_time_seconds,
     seven_deuce_bonus: detail.pending?.seven_deuce_bonus ?? room.seven_deuce_bonus,
     starting_stack: detail.pending?.starting_stack ?? room.starting_stack,
+    ante: detail.pending?.ante ?? room.ante,
+    bomb_pot_every: detail.pending?.bomb_pot_every ?? room.bomb_pot_every,
+    bomb_pot_amount: detail.pending?.bomb_pot_amount ?? room.bomb_pot_amount,
   };
   const [draft, setDraft] = useState<RulesDraft>(() => draftOf(start));
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -375,12 +406,18 @@ function RulesForm({
     think_time_seconds: draft.think_time_seconds,
     seven_deuce_bonus: draft.sevenOn ? toNumber(draft.seven) : 0,
     starting_stack: toNumber(draft.starting),
+    // an empty ante box is no ante
+    ante: draft.ante.trim() === "" ? 0 : toNumber(draft.ante),
+    // switched on, 0 is not an answer; switched off, the amount stays as it was (not sent)
+    bomb_pot_every: draft.bombOn ? toNumber(draft.bombEvery) || NaN : 0,
+    bomb_pot_amount: draft.bombOn ? toNumber(draft.bombAmount) : start.bomb_pot_amount,
   };
   const body = changedRules(start, edit);
   const dirty = Object.keys(body).length > 0;
   const playing = room.status === "playing";
   const thinks = [...new Set([...THINK_CHOICES, start.think_time_seconds])].sort((a, b) => a - b);
   const blindChanged = edit.small_blind !== room.small_blind || edit.big_blind !== room.big_blind;
+  const bombError = errors.bomb_pot_every ?? errors.bomb_pot_amount;
 
   return (
     <form
@@ -467,6 +504,25 @@ function RulesForm({
             {errors.starting_stack ?? "Khi ngồi vào và khi Mua thêm"}
           </span>
         </section>
+        {/* laid out like the starting stack (os-stack), the bomb pot like the 7-2 bonus (os-seven) */}
+        <section className="owner-sec os-stack os-ante">
+          <h4 id="owner-ante">Ante</h4>
+          <span className={`input${errors.ante ? " is-error" : ""}`}>
+            <input
+              aria-labelledby="owner-ante"
+              inputMode="numeric"
+              value={draft.ante}
+              disabled={disabled}
+              aria-invalid={errors.ante ? true : undefined}
+              aria-describedby="owner-ante-hint"
+              onChange={(e) => set({ ante: digitsOnly(e.target.value) })}
+            />
+            <span className="input-trailing">chip</span>
+          </span>
+          <span id="owner-ante-hint" className={`owner-hint${errors.ante ? " is-error" : ""}`} role={errors.ante ? "alert" : undefined}>
+            {errors.ante ?? "Mỗi ván ai cũng góp trước · 0 là tắt"}
+          </span>
+        </section>
         <section className="owner-sec os-seven">
           <h4 id="owner-seven">Thưởng 7-2</h4>
           <span className="os-seven-row">
@@ -501,6 +557,47 @@ function RulesForm({
             <span id="owner-seven-error" className="owner-hint is-error" role="alert">
               {errors.seven_deuce_bonus}
             </span>
+          )}
+        </section>
+        <section className="owner-sec os-seven os-bomb">
+          <h4 id="owner-bomb">Bomb pot</h4>
+          <span className="os-seven-row">
+            <Toggle on={draft.bombOn} label="Bật bomb pot" disabled={disabled} onChange={(bombOn) => set({ bombOn })} />
+            {draft.bombOn && (
+              <>
+                <span className={`input${errors.bomb_pot_every ? " is-error" : ""}`}>
+                  <input
+                    aria-label="Bomb pot cứ mấy ván một lần"
+                    inputMode="numeric"
+                    value={draft.bombEvery}
+                    disabled={disabled}
+                    aria-invalid={errors.bomb_pot_every ? true : undefined}
+                    aria-describedby={bombError ? "owner-bomb-error" : undefined}
+                    onChange={(e) => set({ bombEvery: digitsOnly(e.target.value).slice(0, 4) })}
+                  />
+                  <span className="input-trailing">ván</span>
+                </span>
+                <span className={`input${errors.bomb_pot_amount ? " is-error" : ""}`}>
+                  <input
+                    aria-label="Bomb pot mỗi người góp"
+                    inputMode="numeric"
+                    value={draft.bombAmount}
+                    disabled={disabled}
+                    aria-invalid={errors.bomb_pot_amount ? true : undefined}
+                    aria-describedby={bombError ? "owner-bomb-error" : undefined}
+                    onChange={(e) => set({ bombAmount: digitsOnly(e.target.value) })}
+                  />
+                  <span className="input-trailing">chip</span>
+                </span>
+              </>
+            )}
+          </span>
+          {bombError ? (
+            <span id="owner-bomb-error" className="owner-hint is-error" role="alert">
+              {bombError}
+            </span>
+          ) : (
+            draft.bombOn && <span className="owner-hint is-desktop-only">Cứ mấy ván một lần, mỗi người góp bao nhiêu · không blind, lật flop luôn</span>
           )}
         </section>
       </div>
