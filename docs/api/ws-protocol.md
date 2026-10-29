@@ -178,6 +178,8 @@ Luật bàn của ván nằm ngay trong `HandView` (cấu hình phòng có thể
   người được chia bài bỏ `bomb_pot` (thiếu thì all-in, không lấy ante), không có blind, không có
   vòng cược trước flop: `hand.started` đã có 3 lá flop, người đầu tiên quyết định là người bên trái
   nút. Không có `action.applied` nào trước flop.
+- Khi ante hoặc bomb pot làm mọi người (trừ nhiều nhất một người) all-in, không ai còn cược được:
+  `hand.started` đã là ván xong (`complete: true`, đủ 5 lá), `hand.completed` theo ngay sau.
 
 | Bài | Ai thấy |
 |---|---|

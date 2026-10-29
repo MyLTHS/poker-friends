@@ -572,7 +572,12 @@ class TableActor:
             self.session._button_seat = previous_button
             raise
         await self._broadcast("hand.started", lambda viewer: {"hand": self._hand_view(viewer)})
-        await self._schedule_turn()
+        if engine.is_complete:
+            # Nobody can bet: all in on the antes or the bomb pot but one player, at most. The
+            # board was dealt to the end with the hand, which is settled at once.
+            await self._complete_hand()
+        else:
+            await self._schedule_turn()
 
     def _schedule_next_hand(self) -> None:
         # Until _StartHand arrives, nothing else (a new connection, a seat) starts the next hand
