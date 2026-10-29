@@ -1026,8 +1026,9 @@ class TableActor:
             raise Reject("player_in_hand")
         seat = self._seat_of(player_id) if player_id in self.session.seats.values() else None
         if seat is not None:
-            self.session.stand_up(player_id)
+            # the row first: a failed delete leaves the seat as it was, not freed in memory only
             await RoomSeat.objects.filter(room=self.room, user_id=user_id).adelete()
+            self.session.stand_up(player_id)
         await RoomBan.objects.aget_or_create(room=self.room, user_id=user_id)
         await RoomMember.objects.filter(room=self.room, user_id=user_id).adelete()
         # Drop their connections first so they get nothing more, then close them.
