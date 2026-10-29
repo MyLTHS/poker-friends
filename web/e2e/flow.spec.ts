@@ -1,8 +1,8 @@
 // C5: the whole evening in two browsers. Every step a player takes goes through the pages: the
-// owner creates a private room, sends the invite link, a friend with no account opens it; both
-// sit (the chips come with the seats, no owner needed), one hand is played to the end
-// with the C key, and the history lists that hand with its replay. REST is only used to make the
-// owner a guest and to read the result for checking.
+// owner creates a private room and lands at its table with the invite link, a friend with no
+// account opens it and types a name; both sit (the chips come with the seats, no owner needed),
+// one hand is played to the end with the C key, and the history lists that hand with its replay.
+// REST is only used to make the owner a guest and to read the result for checking.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -23,39 +23,42 @@ test("private room → invite link → friend joins → both sit with chips → 
   const ownerSeen = watchActions(owner);
   await guestPage(owner, `Chu${RUN}`);
 
-  // 1. Create a private room from the lobby.
+  // 1. Create a private room from the lobby: straight to its table, the invite link open.
   await owner.goto("/rooms");
-  await owner.getByRole("link", { name: "Tạo phòng" }).first().click();
+  await owner.getByRole("link", { name: "Tạo bàn" }).first().click();
   await expect(owner).toHaveURL(/\/rooms\/new$/);
-  await owner.getByLabel("Tên phòng").fill("Tối thứ Sáu");
+  await owner.getByLabel("Tên bàn").fill("Tối thứ Sáu");
+  await owner.getByText("Thêm tuỳ chọn").click();
   await owner.getByRole("radio", { name: "2", exact: true }).click();
   // The hand deals the moment the friend sits (the seats come with chips): 60 s to act leaves
-  // time to walk from the room page to the table.
+  // the test time to find whose turn it is.
   await owner.getByRole("radio", { name: "60", exact: true }).click();
   await owner.getByRole("radio", { name: /Riêng/ }).click();
-  await owner.getByRole("button", { name: "Tạo phòng & lấy link mời" }).click();
-  await expect(owner).toHaveURL(/\/rooms\/\d+$/);
-  const roomId = Number(new URL(owner.url()).pathname.split("/").pop());
-  await expect(owner.getByText("Riêng").first()).toBeVisible();
-  const invite = new URL((await owner.getByTestId("invite-link").getAttribute("title"))!);
-  await owner.getByRole("button", { name: "Ngồi đây" }).first().click();
-  await expect(owner.getByText("Đã ngồi ghế 1")).toBeVisible();
+  await owner.getByRole("button", { name: "Tạo bàn" }).click();
+  await expect(owner).toHaveURL(/\/rooms\/\d+\/table$/);
+  const roomId = Number(new URL(owner.url()).pathname.split("/")[2]);
+  expect((await api(owner, "GET", `/api/rooms/${roomId}/`)).is_private).toBe(true);
+  const inviteSheet = owner.getByRole("dialog", { name: "Mời bạn vào bàn" });
+  const invite = new URL((await inviteSheet.getByTestId("invite-link").getAttribute("title"))!);
+  await owner.keyboard.press("Escape");
+  await expect(inviteSheet).toBeHidden();
+  await owner.getByRole("button", { name: "Ngồi vào ghế 1" }).click();
+  const seated = async () => (await api(owner, "GET", `/api/rooms/${roomId}/snapshot/`)).table.seats.map((s: { seat: number }) => s.seat);
+  await expect.poll(seated).toEqual([1]);
 
-  // 2. The friend (no account) opens the link and sits.
+  // 2. The friend (no account) opens the link, types a name and sits at the table.
   const friendCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const friend = await friendCtx.newPage();
   const friendSeen = watchActions(friend);
   await friend.goto(invite.pathname + invite.search);
-  await expect(friend).toHaveURL(new RegExp(`/rooms/${roomId}$`));
-  await expect(friend.getByText("Bạn đã vào Tối thứ Sáu")).toBeVisible();
-  await friend.getByRole("button", { name: "Ngồi đây" }).first().click();
-  await expect(friend.getByText("Đã ngồi ghế 2")).toBeVisible();
+  await friend.getByLabel("Tên ở bàn").fill(`Khach${RUN}`);
+  await friend.getByRole("button", { name: "Vào chơi" }).click();
+  await expect(friend).toHaveURL(new RegExp(`/rooms/${roomId}/table$`));
+  await friend.getByRole("button", { name: "Ngồi vào ghế 2" }).click();
+  await expect.poll(seated).toEqual([1, 2]);
 
-  // 3. Both open the table. Each seat came with the room's starting stack (100 big blinds), so
-  // nobody waits for the owner.
-  await owner.getByRole("link", { name: /Về bàn|Vào bàn/ }).first().click();
-  await expect(owner).toHaveURL(new RegExp(`/rooms/${roomId}/table$`));
-  await friend.goto(`/rooms/${roomId}/table`);
+  // 3. Each seat came with the room's starting stack (100 big blinds), so nobody waits for the
+  // owner: the hand deals as soon as the friend sits.
   const room = await api(owner, "GET", `/api/rooms/${roomId}/`);
   expect(room.room.starting_stack).toBe(100 * room.room.big_blind);
 

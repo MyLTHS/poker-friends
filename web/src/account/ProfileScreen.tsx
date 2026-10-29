@@ -113,7 +113,7 @@ function ProfileRooms({ rooms }: { rooms: MyRooms | null | undefined }) {
   return (
     <div className="p-rooms">
       {rooms.rooms.map((r) => (
-        <Link key={r.roomId} href={`/rooms/${r.roomId}`} className="p-room">
+        <Link key={r.roomId} href={`/rooms/${r.roomId}/table`} className="p-room">
           <span className="p-room-mini" aria-hidden>
             <i />
           </span>

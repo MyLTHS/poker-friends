@@ -44,7 +44,7 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
   useReloadWhenOnline(useCallback(() => void load(), [load]));
 
   const myId = me ? String(me.id) : null;
-  const sub = { title: "Lời / lỗ", sub: "Chip ảo · không phải tiền thật", back: `/rooms/${roomId}` };
+  const sub = { title: "Lời / lỗ", sub: "Chip ảo · không phải tiền thật", back: `/rooms/${roomId}/table` };
 
   if (state === null || "error" in state) {
     return (
@@ -98,7 +98,7 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
 
   const ledger =
     summary.length === 0 ? (
-      <EmptyState title="Chưa ai được cấp chip" text="Chủ phòng cấp chip cho người ngồi vào bàn, rồi lời/lỗ hiện ở đây." />
+      <EmptyState title="Chưa ai ngồi vào bàn" text="Ai bấm một ghế trống là có chip đầu vào; lời/lỗ của họ hiện ở đây." />
     ) : phone ? (
       <ul className="m-ledger">
         {summary.map((r) => (
@@ -215,7 +215,7 @@ export function HistoryScreen({ roomId }: { roomId: number }) {
         </section>
       </div>
       <p className="page-foot">
-        <Link href={`/rooms/${roomId}`} className="link">
+        <Link href={`/rooms/${roomId}/table`} className="link">
           <ArrowLeft size={13} aria-hidden /> Về {detail.room.name}
         </Link>
       </p>

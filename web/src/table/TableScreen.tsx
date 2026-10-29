@@ -8,7 +8,7 @@ import "./table.css";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Coffee, Crown, Hourglass } from "lucide-react";
+import { Coffee, Coins, Crown, Hourglass } from "lucide-react";
 
 import type { ChatMessage, PlayerResult, SeatOccupant, TableState } from "@/api/protocol";
 import { FeedbackDialog } from "@/feedback/FeedbackDialog";
@@ -44,6 +44,7 @@ import { useTableFx, type SeatPlace } from "./TableFx";
 import { SettingsModal, ShortcutHelp, SoundCues, useKeysPref, useTableSound } from "./TableSettings";
 import { globalCommand, isTyping } from "./shortcuts";
 import { useAuthRefusal } from "./authRefusal";
+import { noChipsText, offersRebuy } from "./rebuy";
 import { useTableSocket } from "./useTableSocket";
 
 const newCommandId = () => crypto.randomUUID();
@@ -68,12 +69,18 @@ export type TableScreenProps = {
   onTakeSeat?: (seat: number) => Promise<string | null>;
   /** Leave my seat (keep watching). */
   onLeaveSeat?: () => Promise<string | null>;
+  /** Out of chips: take the room's starting stack again ("Mua thêm"); resolves with an error text, or null. */
+  onRebuy?: () => Promise<string | null>;
   /** Room owner: renders the owner's sheet (rooms/OwnerPanel) over the table. */
   owner?: (slot: OwnerSlot) => ReactNode;
   /** "Mời bạn" in the top bar: renders the invite dialog (rooms/LiveTableScreen) over the table. */
   invite?: (slot: InviteSlot) => ReactNode;
+  /** Open the invite dialog as the table first shows (a room just created). */
+  startWithInvite?: boolean;
   /** Replay of a finished hand. */
   replayHref?: (handId: number) => string;
+  /** The room's win/loss page, linked from the top bar. */
+  historyHref?: string;
 };
 
 /** What the owner's sheet gets from the table. */
@@ -82,7 +89,21 @@ export type OwnerSlot = { open: boolean; onClose: () => void; seats: SeatOccupan
 /** What the invite dialog gets from the table. */
 export type InviteSlot = { open: boolean; onClose: () => void };
 
-export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = MOCK_HELP, loadChat, onTakeSeat, onLeaveSeat, owner, invite, replayHref }: TableScreenProps) {
+export function TableScreen({
+  url,
+  backHref = "/",
+  backLabel = "Sảnh",
+  help = MOCK_HELP,
+  loadChat,
+  onTakeSeat,
+  onLeaveSeat,
+  onRebuy,
+  owner,
+  invite,
+  startWithInvite = false,
+  replayHref,
+  historyHref,
+}: TableScreenProps) {
   const { model, dispatch, retry, reconnectNow, reload } = useTableSocket(url);
   const refusal = useAuthRefusal(retry.final && !!retry.auth);
   const device = useDevice();
@@ -90,10 +111,19 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
   const [drawer, setDrawer] = useState(false);
   const [seen, setSeen] = useState(0);
   const [seatError, setSeatError] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<"owner" | "invite" | "settings" | "help" | "feedback" | null>(null);
+  const [rebuying, setRebuying] = useState(false);
+  const [dialog, setDialog] = useState<"owner" | "invite" | "settings" | "help" | "feedback" | null>(startWithInvite && invite ? "invite" : null);
   const sound = useTableSound();
   const [keysOn, setKeysOn] = useKeysPref();
   const { table } = model;
+  // A seat error is about the moment it happened: a new hand clears it, so an old "Rời ghế" refusal
+  // never stands where "Mua thêm" should be.
+  const handKey = table?.hand?.hand_id ?? null;
+  const [errorHand, setErrorHand] = useState(handKey);
+  if (errorHand !== handKey) {
+    setErrorHand(handKey);
+    setSeatError(null);
+  }
   const closeDialog = useCallback(() => setDialog(null), []);
 
   // Keys that work any time on the desktop table: ? help, M sound (my turn's keys: ActionBar).
@@ -322,15 +352,22 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
     </p>
   );
 
-  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, isOwner: !!owner });
-  // The owner seated with no chips grants them to themselves: the owner's sheet, one tap away.
-  // Not while their all-in is still being played; yes on a finished hand they lost it all in (the
+  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, canRebuy: !!onRebuy });
+  // Any seated player with no chips buys back in (the room's starting stack), owner included. Not
+  // while their all-in is still being played; yes on a finished hand they lost it all in (the
   // table keeps that hand on screen until the next one, which may never come heads-up).
-  const grantMine = owner && me && (me.stack ?? 0) === 0 && !inHand(you.player_id) ? () => setDialog("owner") : undefined;
-  const grantButton = (block: boolean) =>
-    grantMine && (
-      <Button kind="primary" block={block} icon={<Crown size={16} strokeWidth={2} aria-hidden />} onClick={grantMine}>
-        Cấp chip cho mình
+  const rebuy =
+    onRebuy && me && offersRebuy(table, me.stack ?? 0)
+      ? async () => {
+          setRebuying(true);
+          setSeatError(await onRebuy());
+          setRebuying(false);
+        }
+      : undefined;
+  const rebuyButton = (block: boolean) =>
+    rebuy && (
+      <Button kind="primary" block={block} busy={rebuying} disabled={!online} icon={<Coins size={16} strokeWidth={2} aria-hidden />} onClick={rebuy}>
+        Mua thêm
       </Button>
     );
 
@@ -372,7 +409,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
           {seatError && <span className="ip-error" role="alert">{seatError}</span>}
           <Spectators device="mobile" spectators={model.spectators} />
           <div className="ip-actions">
-            {grantButton(true)}
+            {rebuyButton(true)}
             {isSeated && (
               <Button kind="quiet" block icon={<Coffee size={16} />} onClick={toggleSit} aria-pressed={sittingOut} disabled={!online}>
                 {sittingOut ? "Quay lại chơi" : "Nghỉ ván sau"}
@@ -410,7 +447,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
                   Mất kết nối · đang thử lại
                 </span>
               ) : (
-                <MobileTools watchers={model.spectators.length} unread={unread} onChat={() => openDrawer(true)} owner={owner ? () => setDialog("owner") : undefined} onInvite={invite ? () => setDialog("invite") : undefined} onMore={() => setDialog("settings")} />
+                <MobileTools watchers={model.spectators.length} unread={unread} onChat={() => openDrawer(true)} owner={owner ? () => setDialog("owner") : undefined} onInvite={invite ? () => setDialog("invite") : undefined} historyHref={historyHref} onMore={() => setDialog("settings")} />
               )
             }
           />
@@ -450,9 +487,13 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
                 từ thưởng 7-2
               </span>
             </span>
-          ) : grantMine && !seatError ? (
-            // before the winner's banner: busted, the owner's next move is to grant chips
-            grantButton(false)
+          ) : rebuy ? (
+            // before the winner's banner: busted, the next move is to buy back in (a failed try
+            // says why beside the button, which stays to try again)
+            <span className="idle-rebuy">
+              {rebuyButton(false)}
+              {seatError && <span className="idle-msg is-quiet">{seatError}</span>}
+            </span>
           ) : idle.win ? (
             <span className="idle-msg">
               <Crown size={18} strokeWidth={2} />
@@ -513,6 +554,7 @@ export function TableScreen({ url, backHref = "/", backLabel = "Sảnh", help = 
             onSitToggle={toggleSit}
             owner={owner ? { open: dialog === "owner", onOpen: () => setDialog("owner") } : undefined}
             onInvite={invite ? () => setDialog("invite") : undefined}
+            historyHref={historyHref}
             onSettings={() => setDialog("settings")}
             leave={isSeated ? leave : undefined}
           />
@@ -613,7 +655,7 @@ function idleContent({
   sittingOut,
   clock,
   celebration,
-  isOwner,
+  canRebuy,
 }: {
   table: TableState;
   me: SeatView | undefined;
@@ -624,7 +666,8 @@ function idleContent({
   sittingOut: boolean;
   clock: TurnClock | undefined;
   celebration: boolean;
-  isOwner: boolean;
+  /** "Mua thêm" is offered (the live table; the mock server has none) */
+  canRebuy: boolean;
 }): Idle {
   const { hand, room } = table;
   const seated = table.seats.length;
@@ -647,12 +690,11 @@ function idleContent({
       winSub: shownSub || (showdown ? "sau khi lật bài" : winners.length ? "khi cả bàn bỏ bài" : undefined),
     };
   }
-  // Seated but not dealt in: say why (no chips, sitting out, or simply next hand).
+  // Seated but not dealt in: say why (no chips, sitting out, or simply next hand). A seat comes
+  // with the room's starting stack, so no chips means lost them all: "Mua thêm" sits next to it.
   const noChips = !!me && (me.stack ?? 0) === 0;
   const seatedWait = noChips
-    ? isOwner
-      ? "Chưa có chip" // the button "Cấp chip cho mình" sits right next to it
-      : "Chưa có chip — nhờ chủ phòng cấp chip"
+    ? noChipsText(canRebuy)
     : sittingOut
       ? "Đang nghỉ — bấm “Nghỉ ván sau” để quay lại"
       : "Bạn đã ngồi — vào từ ván sau";

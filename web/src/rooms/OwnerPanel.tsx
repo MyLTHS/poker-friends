@@ -98,7 +98,7 @@ export function OwnerPanel({ detail, seats, inHand, onChanged, rooms, noticeInHe
           Người chơi & chip <small>{players.length ? `${players.length} người đang ngồi` : "chưa ai ngồi"}</small>
         </h4>
         {players.length === 0 ? (
-          <p className="owner-empty">Chưa ai ngồi. Cấp chip khi bạn bè đã vào ghế.</p>
+          <p className="owner-empty">Chưa ai ngồi. Ai ngồi vào ghế là có chip đầu vào.</p>
         ) : (
           <ul className="owner-players">
             {players.map((p) => (
@@ -332,7 +332,7 @@ function PlayerRow({
   );
 }
 
-type RulesDraft = { small_blind: string; big_blind: string; think_time_seconds: number; sevenOn: boolean; seven: string };
+type RulesDraft = { small_blind: string; big_blind: string; think_time_seconds: number; sevenOn: boolean; seven: string; starting: string };
 
 const draftOf = (r: EditableRules): RulesDraft => ({
   small_blind: String(r.small_blind),
@@ -340,6 +340,7 @@ const draftOf = (r: EditableRules): RulesDraft => ({
   think_time_seconds: r.think_time_seconds,
   sevenOn: r.seven_deuce_bonus > 0,
   seven: String(r.seven_deuce_bonus || 50),
+  starting: String(r.starting_stack),
 });
 const toNumber = (text: string) => (text.trim() === "" ? NaN : Number(text));
 const digitsOnly = (text: string) => text.replace(/[^\d]/g, "").slice(0, 9);
@@ -362,6 +363,7 @@ function RulesForm({
     big_blind: detail.pending?.big_blind ?? room.big_blind,
     think_time_seconds: detail.pending?.think_time_seconds ?? room.think_time_seconds,
     seven_deuce_bonus: detail.pending?.seven_deuce_bonus ?? room.seven_deuce_bonus,
+    starting_stack: detail.pending?.starting_stack ?? room.starting_stack,
   };
   const [draft, setDraft] = useState<RulesDraft>(() => draftOf(start));
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -372,6 +374,7 @@ function RulesForm({
     big_blind: toNumber(draft.big_blind),
     think_time_seconds: draft.think_time_seconds,
     seven_deuce_bonus: draft.sevenOn ? toNumber(draft.seven) : 0,
+    starting_stack: toNumber(draft.starting),
   };
   const body = changedRules(start, edit);
   const dirty = Object.keys(body).length > 0;
@@ -445,6 +448,24 @@ function RulesForm({
             disabled={disabled}
           />
           <span className="owner-hint is-desktop-only">Mỗi lượt, không có thời gian cộng</span>
+        </section>
+        <section className="owner-sec os-stack">
+          <h4 id="owner-stack">Chip đầu vào</h4>
+          <span className={`input${errors.starting_stack ? " is-error" : ""}`}>
+            <input
+              aria-labelledby="owner-stack"
+              inputMode="numeric"
+              value={draft.starting}
+              disabled={disabled}
+              aria-invalid={errors.starting_stack ? true : undefined}
+              aria-describedby="owner-stack-hint"
+              onChange={(e) => set({ starting: digitsOnly(e.target.value) })}
+            />
+            <span className="input-trailing">chip</span>
+          </span>
+          <span id="owner-stack-hint" className={`owner-hint${errors.starting_stack ? " is-error" : ""}`} role={errors.starting_stack ? "alert" : undefined}>
+            {errors.starting_stack ?? "Khi ngồi vào và khi Mua thêm"}
+          </span>
         </section>
         <section className="owner-sec os-seven">
           <h4 id="owner-seven">Thưởng 7-2</h4>

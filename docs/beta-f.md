@@ -23,8 +23,8 @@ Một buổi chơi **2 giờ** mà:
 2. **Cắm sạc, tắt chế độ ngủ, mạng ổn định.** Máy Mac chính là server.
 3. Ngay trước giờ: `scripts/play-online.sh up`. Tự mở link trên điện thoại (xoay ngang) và trên máy
    tính, đánh thử một ván với tài khoản khách.
-4. **Tạo phòng và cấp chip.** Bạn là chủ phòng. Ghi lại mỗi người được cấp bao nhiêu chip, để cuối
-   buổi đối chiếu.
+4. **Tạo bàn.** Bấm **Tạo bàn** là vào thẳng bàn, có sẵn link mời. Ai ngồi vào ghế cũng tự có
+   chip đầu vào, hết thì bấm **Mua thêm**: lời/lỗ của từng người nằm ở trang **Lời / lỗ** của bàn.
 5. Gửi cho nhóm **ba điều**: link, cách xoay ngang điện thoại, và câu "gặp gì lạ thì bấm Gửi phản
    hồi hoặc nhắn mình ngay, kèm giờ".
 
@@ -35,8 +35,8 @@ Sửa giờ, link và tên phòng rồi dán vào nhóm chat:
 > Tối nay 21h chơi poker chip ảo nhé, không tiền thật 🃏
 > 1. Mở link: https://xxx.trycloudflare.com (link chỉ dùng tối nay)
 > 2. Điện thoại thì **xoay ngang** máy.
-> 3. Lần đầu bấm "Đăng ký" (email, tên, mật khẩu) là vào chơi luôn. Các buổi sau chỉ cần "Đăng nhập".
-> 4. Vào phòng bằng link mời mình gửi riêng.
+> 3. Mở link mời mình gửi riêng, gõ tên, bấm "Vào chơi".
+> 4. Bấm một ghế trống là có chip, hết chip thì bấm "Mua thêm".
 > Gặp gì lạ thì bấm **Gửi phản hồi** hoặc nhắn mình kèm giờ nhé!
 
 Link mời phòng (có mã bí mật) thì gửi trong nhóm kín, đừng đăng công khai.
@@ -56,7 +56,7 @@ Link mời phòng (có mã bí mật) thì gửi trong nhóm kín, đừng đăn
 ## Hết buổi
 
 1. **Trước khi tắt**, kiểm sổ chip trong lúc server còn chạy. Dòng cuối phải là `OK: ...`. Đối
-   chiếu thêm với số chip đã cấp lúc đầu.
+   chiếu thêm với trang **Lời / lỗ** của bàn.
 
    ```bash
    docker compose -p poker-home -f docker-compose.prod.yml -f docker-compose.home.yml --env-file .env.home exec backend python manage.py check_ledger

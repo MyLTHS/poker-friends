@@ -5,7 +5,7 @@
 // who is watching. Chat goes through the table's own socket (chat.send → chat.message).
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ChevronLeft, Coffee, Crown, Ellipsis, Eye, LogOut, MessageCircle, Send, Settings, Smile, UserPlus, X } from "lucide-react";
+import { ChartNoAxesColumn, ChevronLeft, Coffee, Crown, Ellipsis, Eye, LogOut, MessageCircle, Send, Settings, Smile, UserPlus, X } from "lucide-react";
 
 import type { ChatMessage, Spectator } from "@/api/protocol";
 import { Avatar, IconButton, fmt } from "@/ui";
@@ -58,6 +58,7 @@ export function TableTools({
   onSitToggle,
   owner,
   onInvite,
+  historyHref,
   onSettings,
   leave,
 }: {
@@ -70,6 +71,8 @@ export function TableTools({
   owner?: { open: boolean; onOpen: () => void };
   /** opens the invite dialog (link of this room for friends) */
   onInvite?: () => void;
+  /** the room's win/loss page (/rooms/<id>/history) */
+  historyHref?: string;
   onSettings: () => void;
   leave?: { onLeave: () => void; label: string };
 }) {
@@ -96,6 +99,12 @@ export function TableTools({
           <Crown size={15} strokeWidth={1.9} aria-hidden />
           <span className="tbar-label">Chủ phòng</span>
         </button>
+      )}
+      {historyHref && (
+        <Link className="tbar-btn" href={historyHref} aria-label="Lời / lỗ">
+          <ChartNoAxesColumn size={15} strokeWidth={1.9} aria-hidden />
+          <span className="tbar-label">Lời / lỗ</span>
+        </Link>
       )}
       <IconButton label="Cài đặt bàn" aria-haspopup="dialog" onClick={onSettings}>
         <Settings size={17} strokeWidth={1.9} aria-hidden />
@@ -133,6 +142,7 @@ export function MobileTools({
   onChat,
   owner,
   onInvite,
+  historyHref,
   onMore,
 }: {
   watchers: number;
@@ -140,6 +150,7 @@ export function MobileTools({
   onChat: () => void;
   owner?: () => void;
   onInvite?: () => void;
+  historyHref?: string;
   onMore: () => void;
 }) {
   // id: the chat drawer gives focus back to this button when it closes
@@ -161,6 +172,11 @@ export function MobileTools({
         <IconButton label="Bảng chủ phòng" aria-haspopup="dialog" onClick={owner}>
           <Crown size={19} strokeWidth={1.9} aria-hidden />
         </IconButton>
+      )}
+      {historyHref && (
+        <Link className="iconbtn" href={historyHref} aria-label="Lời / lỗ" title="Lời / lỗ">
+          <ChartNoAxesColumn size={19} strokeWidth={1.9} aria-hidden />
+        </Link>
       )}
       <IconButton label="Thêm tuỳ chọn" aria-haspopup="dialog" onClick={onMore}>
         <Ellipsis size={20} strokeWidth={2} aria-hidden />

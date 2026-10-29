@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { Eye, Link2, Lock, Plus, RotateCw, Search } from "lucide-react";
+import { Eye, Lock, Plus, RotateCw } from "lucide-react";
 
 import { errorText } from "@/account/messages";
-import { Button, ButtonLink, EmptyState, ErrorState, Loading, MiniTable, PageHead, Panel, SkeletonCard, Tabs, TextField } from "@/ui";
+import { Button, ButtonLink, EmptyState, ErrorState, Loading, MiniTable, PageHead, Panel, SkeletonCard } from "@/ui";
 
 import { createRoomsApi, type LobbyRoom, type RoomsApi } from "./api";
-import { useClientValue, useMe, usePhone, useReloadWhenOnline } from "./hooks";
-import { filterCount, filterRooms, inviteToken, isMine, roomCta, type LobbyFilter } from "./lobby";
-import { PasteInvite, RoomBadges } from "./RoomBits";
+import { needsName, useClientValue, useMe, usePhone, useReloadWhenOnline } from "./hooks";
+import { isMine, roomCta } from "./lobby";
+import { NameGate } from "./NameGate";
+import { RoomBadges } from "./RoomBits";
 import { RoomsShell } from "./RoomsShell";
 import { blindsText } from "./rules";
 
@@ -36,55 +37,57 @@ function dayPart(now: Date) {
 
 const nowClock = () => new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
 
-/** /rooms — the lobby (D1 "lobby"): rooms the viewer may see, search, filters, invite link. */
+/** A room's page is its table (/rooms/<id> comes here too). */
+const tableHref = (r: LobbyRoom) => `/rooms/${r.room.room_id}/table`;
+
+/**
+ * /rooms — the lobby (D1 "lobby"), as plain as Poker Now: one "Tạo bàn" button and the rooms the
+ * viewer may see, each opening its table. A visitor nobody knows yet says their name first
+ * (NameGate): asking for the list would make them a guest with a random name.
+ */
 export function LobbyScreen() {
   const api = useMemo(() => createRoomsApi(), []);
-  const { me } = useMe();
+  const { me, guestsAllowed, signedIn } = useMe();
   const phone = usePhone();
   const [load, setLoad] = useState<Load>(null);
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<LobbyFilter>("all");
-  const [pasteOpen, setPasteOpen] = useState(false);
   // The server (and hydration) say "Sảnh"; the day part is the browser's clock.
   const eyebrow = useClientValue(() => `Sảnh · ${dayPart(new Date())}`, "Sảnh");
+  const known = me !== undefined && !needsName(me, guestsAllowed);
 
   const fetchRooms = useCallback((quiet: boolean) => api.lobby().then((result) => setLoad((prev) => next(prev, result, quiet))), [api]);
   useEffect(() => {
+    if (!known) return;
     void fetchRooms(false);
     const timer = window.setInterval(() => void fetchRooms(true), 20000);
     return () => window.clearInterval(timer);
-  }, [fetchRooms]);
-  const online = useReloadWhenOnline(useCallback(() => void fetchRooms(false), [fetchRooms]));
+  }, [fetchRooms, known]);
+  const online = useReloadWhenOnline(
+    useCallback(() => {
+      if (known) void fetchRooms(false);
+    }, [fetchRooms, known]),
+  );
+
+  if (needsName(me, guestsAllowed)) {
+    return (
+      <RoomsShell active="lobby" me={me}>
+        <NameGate onDone={signedIn} />
+      </RoomsShell>
+    );
+  }
 
   const myName = me?.username ?? null;
   const rooms = load && "rooms" in load ? load.rooms : [];
-  const shown = filterRooms(rooms, { query, filter, myName });
   const seatedTotal = rooms.reduce((a, r) => a + r.seated, 0);
-  const counts = phone ? `${rooms.length} phòng · ${seatedTotal} người` : `${rooms.length} phòng · ${seatedTotal} người đang ngồi`;
-
-  const counted = !phone && load !== null && "rooms" in load;
-  const tabs = [
-    { value: "all" as const, label: "Tất cả", count: counted ? rooms.length : undefined },
-    { value: "public" as const, label: "Công khai", count: counted ? filterCount(rooms, "public", myName) : undefined },
-    { value: "mine" as const, label: "Của tôi", count: counted ? filterCount(rooms, "mine", myName) : undefined },
-    ...(phone ? [] : [{ value: "open" as const, label: "Còn ghế" }]),
-  ];
-  const tabsEl = <Tabs id="lobby-filter" label="Lọc phòng" items={tabs} value={filter} onChange={setFilter} fill={phone} />;
-  const search = (
-    <TextField
-      className="search"
-      aria-label="Tìm phòng"
-      type="search"
-      placeholder={phone ? "Tìm phòng hoặc chủ phòng…" : "Tìm theo tên phòng hoặc chủ phòng…"}
-      icon={<Search size={17} strokeWidth={1.9} aria-hidden />}
-      value={query}
-      onChange={(e) => setQuery(e.target.value)}
-    />
+  const counts = phone ? `${rooms.length} bàn · ${seatedTotal} người` : `${rooms.length} bàn · ${seatedTotal} người đang ngồi`;
+  const create = (
+    <ButtonLink kind="primary" size="lg" href="/rooms/new" icon={<Plus size={18} strokeWidth={2.4} aria-hidden />}>
+      Tạo bàn
+    </ButtonLink>
   );
 
   const body =
     load === null ? (
-      <Loading label="Đang tải danh sách phòng…" className={phone ? "room-list" : "room-grid"}>
+      <Loading label="Đang tải danh sách bàn…" className={phone ? "room-list" : "room-grid"}>
         {[0, 1, 2, 3].map((i) => (
           <SkeletonCard key={i} compact={phone} />
         ))}
@@ -92,7 +95,7 @@ export function LobbyScreen() {
     ) : "error" in load ? (
       <Panel phone={phone} className="state-panel is-center">
         <ErrorState
-          title="Không tải được danh sách phòng"
+          title="Không tải được danh sách bàn"
           text={online ? load.error : "Máy đang mất mạng. Có mạng lại là sảnh tự tải lại."}
           actions={
             <Button kind="primary" size={phone ? "sm" : "md"} icon={<RotateCw size={15} strokeWidth={2.2} aria-hidden />} onClick={() => (setLoad(null), void fetchRooms(false))}>
@@ -107,41 +110,18 @@ export function LobbyScreen() {
         <EmptyState
           art={<MiniTable seats={6} seated={0} w={phone ? 96 : 180} h={phone ? 58 : 104} />}
           badge={<Plus size={phone ? 15 : 18} strokeWidth={2.4} />}
-          title="Sảnh còn trống"
-          text="Chưa có phòng nào. Mở bàn đầu tiên rồi gửi link cho hội bạn."
-          actions={
-            <>
-              <ButtonLink kind="primary" size={phone ? "sm" : "md"} href="/rooms/new" icon={<Plus size={15} strokeWidth={2.4} aria-hidden />}>
-                Tạo phòng
-              </ButtonLink>
-              <Button kind="ghost" size={phone ? "sm" : "md"} icon={<Link2 size={15} aria-hidden />} onClick={() => (phone ? setPasteOpen(true) : document.getElementById("paste-invite")?.focus())}>
-                {phone ? "Dán link" : "Dán link mời"}
-              </Button>
-            </>
-          }
-        />
-      </Panel>
-    ) : shown.length === 0 ? (
-      <Panel phone={phone} className="state-panel is-center">
-        <EmptyState
-          title="Không có phòng nào khớp"
-          text={query ? `Không thấy phòng hay chủ phòng nào tên "${query}".` : "Thử bộ lọc khác."}
-          actions={
-            <Button kind="ghost" size="sm" onClick={() => (setQuery(""), setFilter("all"))}>
-              Xoá tìm và lọc
-            </Button>
-          }
+          title="Chưa có bàn nào — bấm Tạo bàn rồi gửi link cho bạn bè."
         />
       </Panel>
     ) : phone ? (
-      <div className="room-list" role="list" aria-label="Các phòng">
-        {shown.map((r, i) => (
+      <div className="room-list" role="list" aria-label="Các bàn">
+        {rooms.map((r, i) => (
           <RoomRow key={r.room.room_id} r={r} myName={myName} index={i} />
         ))}
       </div>
     ) : (
-      <div className="room-grid" role="list" aria-label="Các phòng">
-        {shown.map((r, i) => (
+      <div className="room-grid" role="list" aria-label="Các bàn">
+        {rooms.map((r, i) => (
           <RoomCard key={r.room.room_id} r={r} myName={myName} index={i} />
         ))}
       </div>
@@ -150,27 +130,14 @@ export function LobbyScreen() {
   if (phone) {
     return (
       <RoomsShell active="lobby" me={me} className="m-lobby">
-        <section className="m-col">
+        <div className="m-head">
           <div className="m-title">
             <h1>Chọn một bàn</h1>
             {load && "rooms" in load && <small>{counts}</small>}
           </div>
-          {body}
-        </section>
-        <aside className="m-col m-lobby-side">
-          <span className="eyebrow" suppressHydrationWarning>
-            {eyebrow}
-          </span>
-          {search}
-          {tabsEl}
-          <PhonePaste open={pasteOpen} onOpen={() => setPasteOpen(true)} />
-          <p className="m-note">
-            <Lock size={12} aria-hidden /> Phòng riêng chỉ hiện với chủ phòng và người có link mời.
-          </p>
-          <ButtonLink kind="primary" size="lg" block href="/rooms/new" icon={<Plus size={18} strokeWidth={2.4} aria-hidden />}>
-            Tạo phòng
-          </ButtonLink>
-        </aside>
+          {create}
+        </div>
+        {body}
       </RoomsShell>
     );
   }
@@ -180,23 +147,9 @@ export function LobbyScreen() {
         eyebrow={<span suppressHydrationWarning>{eyebrow}</span>}
         title="Chọn một bàn"
         sub={load && "rooms" in load ? counts : "Bàn của hội bạn, chip ảo."}
-        actions={
-          <ButtonLink kind="primary" size="lg" href="/rooms/new" icon={<Plus size={18} strokeWidth={2.4} aria-hidden />}>
-            Tạo phòng
-          </ButtonLink>
-        }
+        actions={create}
       />
-      <div className="toolbar">
-        {search}
-        {tabsEl}
-        <PasteInvite inputId="paste-invite" />
-      </div>
-      <div id={`lobby-filter-panel-${filter}`} role="tabpanel" aria-labelledby={`lobby-filter-tab-${filter}`}>
-        {body}
-      </div>
-      <p className="page-foot">
-        <Lock size={13} aria-hidden /> Phòng riêng chỉ hiện với chủ phòng và người có link mời.
-      </p>
+      {body}
       <MockServerLinks />
     </RoomsShell>
   );
@@ -208,8 +161,8 @@ function RoomCard({ r, myName, index }: { r: LobbyRoom; myName: string | null; i
   const router = useRouter();
   const cta = roomCta(r, myName);
   const mine = isMine(r, myName);
-  const href = `/rooms/${r.room.room_id}`;
-  // The whole card opens the room for a mouse; keyboards and screen readers use its button.
+  const href = tableHref(r);
+  // The whole card opens the table for a mouse; keyboards and screen readers use its button.
   return (
     <article
       className={`room-card${mine ? " is-mine" : ""}`}
@@ -263,7 +216,7 @@ function RoomRow({ r, myName, index }: { r: LobbyRoom; myName: string | null; in
   const cta = roomCta(r, myName);
   const mine = isMine(r, myName);
   return (
-    <Link href={`/rooms/${r.room.room_id}`} className={`room-row${mine ? " is-mine" : ""}`} role="listitem" style={enter(index)} aria-label={`${r.room.name}: ${cta.label}`}>
+    <Link href={tableHref(r)} className={`room-row${mine ? " is-mine" : ""}`} role="listitem" style={enter(index)} aria-label={`${r.room.name}: ${cta.label}`}>
       <MiniTable seats={r.room.max_seats} seated={r.seated} w={70} h={44} />
       <span className="rr-body">
         <span className="rr-top">
@@ -284,32 +237,6 @@ function RoomRow({ r, myName, index }: { r: LobbyRoom; myName: string | null; in
         {cta.short}
       </span>
     </Link>
-  );
-}
-
-/** The phone's dashed "Có link mời?" row: reads the clipboard when allowed, else opens a box. */
-function PhonePaste({ open, onOpen }: { open: boolean; onOpen: () => void }) {
-  const router = useRouter();
-  if (open) return <PasteInvite inputId="paste-invite" compact autoFocus />;
-  return (
-    <div className="paste-row">
-      <Link2 size={17} strokeWidth={1.9} aria-hidden />
-      <span>
-        <b>Có link mời?</b> Dán để vào thẳng bàn
-      </span>
-      <button
-        type="button"
-        className="paste-btn"
-        onClick={async () => {
-          const text = await navigator.clipboard?.readText().catch(() => "");
-          const token = text ? inviteToken(text) : null;
-          if (token) router.push(`/rooms/join?token=${encodeURIComponent(token)}`);
-          else onOpen();
-        }}
-      >
-        Dán
-      </button>
-    </div>
   );
 }
 

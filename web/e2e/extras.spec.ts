@@ -133,11 +133,12 @@ test("pre-actions play a hand to the showdown; the hand is named on the table an
   for (const [where, options] of [["desktop", DESKTOP], ["phone", phone({ width: 844, height: 390 })]] as const) {
     const page = await (await browser.newContext({ ...options, storageState: ownerState })).newPage();
     await page.goto("/rooms/new");
+    await page.getByText("Thêm tuỳ chọn").click();
     await expect(page.getByRole("radio", { name: /Công khai/ })).toHaveAttribute("aria-label", /^Công khai/);
     await expect(page.getByRole("radio", { name: /Riêng/ })).toHaveAttribute("aria-label", /^Riêng/);
     if (where === "desktop") await expect(page.getByRole("link", { name: "Huỷ" })).toHaveAttribute("aria-label", "Huỷ"); // the phone goes back from its bar
-    await expect(page.getByRole("button", { name: /Tạo phòng/ })).toHaveAttribute("aria-label", /^Tạo phòng/);
-    await page.goto(`/rooms/${id}`);
+    await expect(page.getByRole("button", { name: "Tạo bàn" })).toHaveAttribute("aria-label", "Tạo bàn");
+    await page.goto(`/rooms/${id}/table`);
     await page.getByRole("button", { name: "Bảng chủ phòng" }).click();
     await expect(page.getByRole("button", { name: "Đóng phòng" })).toHaveAttribute("aria-label", "Đóng phòng");
     await page.context().close();

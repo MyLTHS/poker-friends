@@ -24,10 +24,12 @@ async function api(page: Page, method: string, path: string, data?: unknown) {
   return response.status() === 204 ? null : response.json();
 }
 
+/** The login's first box: a name makes a guest (Poker Now style). Names are unique per run. */
 async function playAsGuest(page: Page) {
   await page.goto("/account");
-  await expect(page.getByRole("heading", { name: "Chào mừng trở lại" }).first()).toBeVisible();
-  await page.getByRole("button", { name: "Chơi ngay bằng khách" }).click();
+  await expect(page.getByRole("heading", { name: "Bạn tên gì?" }).first()).toBeVisible();
+  await page.getByLabel("Tên ở bàn").fill(`Khach${unique()}`);
+  await page.getByRole("button", { name: "Vào chơi" }).click();
   await expect(page.getByText("Thẻ khách")).toBeVisible();
 }
 
@@ -61,7 +63,7 @@ test.describe("account flows (the email links where there still are some)", () =
     await expect(page.getByRole("link", { name: /Bàn của khách/ })).toContainText("Còn 750 chip");
 
     await page.getByRole("button", { name: "Đăng xuất" }).click();
-    await expect(page.getByRole("heading", { name: "Chào mừng trở lại" }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Bạn tên gì?" }).first()).toBeVisible();
 
     // No email to verify first: the new account logs straight in, chips still there.
     await logIn(page, email, PASSWORD);
@@ -160,10 +162,10 @@ test("a wrong password shows the error on the form and moves the focus to it", a
   await logIn(page, `nobody-${unique()}@example.com`, "wrong-password-1");
   await expect(page.getByRole("alert").filter({ hasText: "Sai email hoặc mật khẩu." })).toBeVisible();
   await expect(page.locator(":focus")).toContainText("Sai email hoặc mật khẩu.");
-  await expect(page.getByRole("heading", { name: "Chào mừng trở lại" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bạn tên gì?" }).first()).toBeVisible();
 });
 
-test("only the last action's error shows: a refused guest after a wrong password", async ({ page }) => {
+test("only the last action's error shows: a refused name after a wrong password, and back", async ({ page }) => {
   await page.route("**/api/auth/guest/", (route) =>
     route.fulfill({ status: 429, headers: { "Retry-After": "120" }, json: { code: "rate_limited", message: "Too many." } }),
   );
@@ -171,9 +173,31 @@ test("only the last action's error shows: a refused guest after a wrong password
   await logIn(page, `nobody-${unique()}@example.com`, "wrong-password-1");
   await expect(page.getByRole("alert").filter({ hasText: "Sai email hoặc mật khẩu." })).toBeVisible();
 
-  await page.getByRole("button", { name: "Chơi ngay bằng khách" }).click();
+  await page.getByLabel("Tên ở bàn").fill(`Khach${unique()}`);
+  await page.getByRole("button", { name: "Vào chơi" }).click();
   await expect(page.locator(":focus")).toContainText("Bạn thử quá nhiều lần. Đợi khoảng 2 phút");
   await expect(page.getByText("Sai email hoặc mật khẩu.")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
+  await expect(page.getByText("Sai email hoặc mật khẩu.")).toBeVisible();
+  await expect(page.getByText("Bạn thử quá nhiều lần", { exact: false })).toHaveCount(0);
+});
+
+test("a name already used is said under the name box", async ({ browser, page }) => {
+  const taken = `Trung${unique()}`;
+  const other = await (await browser.newContext()).newPage();
+  await other.goto("/account");
+  await other.getByLabel("Tên ở bàn").fill(taken);
+  await other.getByRole("button", { name: "Vào chơi" }).click();
+  await expect(other.getByText("Thẻ khách")).toBeVisible();
+
+  await page.goto("/account");
+  const name = page.getByLabel("Tên ở bàn");
+  await name.fill(taken.toLowerCase());
+  await page.getByRole("button", { name: "Vào chơi" }).click();
+  await expect(name).toHaveAccessibleDescription("Tên này đã có người dùng, chọn tên khác.");
+  await expect(name).toBeFocused();
+  await other.context().close();
 });
 
 test("the signup and forgot forms wait for the CSRF cookie before sending", async ({ page }) => {
@@ -243,7 +267,7 @@ test("a broken reset link and a broken verify link say so", async ({ page }) => 
 
 /** The pages a visitor who is not logged in can open, and the heading that says it is ready. */
 const PAGES = [
-  { path: "/account", ready: "Chào mừng trở lại" },
+  { path: "/account", ready: "Tên ở bàn" },
   { path: "/account/signup", ready: "Tạo tài khoản" },
   { path: "/account/forgot", ready: "Quên mật khẩu?" },
   { path: "/account/reset?uid=1&token=not-a-token", ready: "Đặt mật khẩu mới" },
@@ -282,7 +306,7 @@ test.describe("accessibility", () => {
 
   test("autocomplete tells the password manager which password is which", async ({ page }) => {
     const expected: [string, [string, string][]][] = [
-      ["/account", [["Email", "email"], ["Mật khẩu", "current-password"]]],
+      ["/account", [["Tên ở bàn", "nickname"], ["Email", "email"], ["Mật khẩu", "current-password"]]],
       ["/account/signup", [["Email", "email"], ["Tên ở bàn", "nickname"], ["Mật khẩu", "new-password"]]],
       ["/account/forgot", [["Email", "email"]]],
       ["/account/reset?uid=1&token=x", [["Mật khẩu mới", "new-password"], ["Nhập lại", "new-password"]]],
@@ -331,15 +355,16 @@ test.describe("accessibility", () => {
   test("Tab goes through the login form in reading order", async ({ page }) => {
     await page.goto("/account");
     await hydrated(page);
-    await page.getByLabel("Email").focus();
+    await page.getByLabel("Tên ở bàn").focus();
     const google = (await page.getByRole("button", { name: "Tiếp tục với Google" }).count()) > 0;
     const order = [
+      page.getByRole("button", { name: "Vào chơi" }),
+      page.getByLabel("Email"),
       page.getByLabel("Mật khẩu", { exact: true }),
       page.getByRole("button", { name: "Hiện mật khẩu" }),
       page.getByRole("link", { name: "Quên mật khẩu?" }),
       page.getByRole("button", { name: "Đăng nhập", exact: true }),
       ...(google ? [page.getByRole("button", { name: "Tiếp tục với Google" })] : []),
-      page.getByRole("button", { name: "Chơi ngay bằng khách" }),
       page.getByRole("link", { name: "Đăng ký" }),
     ];
     for (const next of order) {
@@ -358,7 +383,8 @@ test.describe("landscape phone", () => {
     await page.goto("/account");
     await expect(page.locator(".m-hero")).toBeVisible();
     await expect(page.locator(".auth-hero")).toBeHidden();
-    await expect(page.getByRole("button", { name: "Đăng nhập", exact: true })).toBeInViewport();
+    // the name comes first: its button is on the first screen, the email login under it
+    await expect(page.getByRole("button", { name: "Vào chơi" })).toBeInViewport();
 
     await page.goto("/account/signup");
     await expect(page.locator(".appbar").getByText("Tạo tài khoản")).toBeVisible();

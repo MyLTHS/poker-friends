@@ -2,10 +2,24 @@ import jsQR from "jsqr";
 import { describe, expect, it } from "vitest";
 
 import type { LobbyRoom } from "./api";
+import type { Me } from "@/account/api";
+
 import { clock, ledgerTotals, netBarWidth, withPlayer, type HandSummary, type SummaryRow } from "./history";
+import { needsName } from "./hooks";
 import { filterCount, filterRooms, fold, inviteToken, roomCta } from "./lobby";
 import { qrModules } from "./qr";
-import { changedRules, checkRules, DEFAULT_RULES, fieldText, pendingText, rulesLine, serverFieldErrors, type RoomInfo } from "./rules";
+import {
+  changedRules,
+  checkRules,
+  DEFAULT_RULES,
+  fieldText,
+  MAX_STARTING_STACK,
+  pendingText,
+  rulesLine,
+  serverFieldErrors,
+  startingStackText,
+  type RoomInfo,
+} from "./rules";
 
 const info = (over: Partial<RoomInfo> = {}): RoomInfo => ({
   room_id: 1,
@@ -67,6 +81,35 @@ describe("lobby", () => {
   });
 });
 
+describe("name gate", () => {
+  const guest = { id: 7, username: "Lan", is_guest: true } as Me;
+  it("asks a visitor nobody knows for a name only when the server takes guests", () => {
+    expect(needsName(null, true)).toBe(true);
+    expect(needsName(null, false)).toBe(false); // members only: the login, as before
+    expect(needsName(null, undefined)).toBe(false); // config not known: the room call decides
+    expect(needsName(undefined, true)).toBe(false); // still asking who it is
+    expect(needsName(guest, true)).toBe(false);
+  });
+});
+
+describe("starting stack", () => {
+  it("follows the big blind (100 of them) until the player types one", () => {
+    expect(startingStackText(null, "20")).toBe("2000");
+    expect(startingStackText(null, "50")).toBe("5000");
+    expect(startingStackText(null, "")).toBe("");
+    expect(startingStackText(null, "200000")).toBe(String(MAX_STARTING_STACK)); // the server's cap
+    expect(startingStackText("1500", "50")).toBe("1500");
+    expect(startingStackText("", "50")).toBe(""); // emptied on purpose: stays empty
+  });
+
+  it("is checked like the server: a whole number from 1 to 10.000.000", () => {
+    expect(checkRules({ ...DEFAULT_RULES, name: "Bàn", starting_stack: 0 }).starting_stack).toBe("Ít nhất 1 chip.");
+    expect(checkRules({ ...DEFAULT_RULES, name: "Bàn", starting_stack: NaN }).starting_stack).toBe("Ít nhất 1 chip.");
+    expect(checkRules({ ...DEFAULT_RULES, name: "Bàn", starting_stack: MAX_STARTING_STACK + 1 }).starting_stack).toBe("Tối đa 10.000.000 chip.");
+    expect(checkRules({ ...DEFAULT_RULES, name: "Bàn" })).toEqual({});
+  });
+});
+
 describe("rules", () => {
   it("checks the server's limits before sending", () => {
     expect(checkRules({ ...DEFAULT_RULES, name: "Bàn" })).toEqual({});
@@ -86,11 +129,13 @@ describe("rules", () => {
     const room = info();
     expect(changedRules(room, { ...room, big_blind: 40, small_blind: 20 })).toEqual({ small_blind: 20, big_blind: 40 });
     expect(changedRules(room, room)).toEqual({});
+    expect(changedRules(room, { ...room, starting_stack: 5000 })).toEqual({ starting_stack: 5000 });
   });
 
   it("describes the rules and the change waiting for the next hand", () => {
     expect(rulesLine({ ...DEFAULT_RULES })).toBe("10/20 · 9 ghế · 20s · 7-2: 50 · Riêng");
     expect(pendingText({ big_blind: 40, think_time_seconds: 15 }, info())).toBe("Ván sau: blind 10/40 · 15 giây");
+    expect(pendingText({ starting_stack: 5000 }, info())).toBe("Ván sau: chip đầu vào 5.000");
     expect(pendingText(null, info())).toBeNull();
   });
 });

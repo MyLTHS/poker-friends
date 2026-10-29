@@ -87,8 +87,15 @@ export function useOrigin(): string {
 /** The signed-in player (a guest counts): `undefined` while asking, `null` when nobody is. Also
  *  fetches /api/auth/config/ first, which sets the csrftoken cookie every POST needs, and says
  *  whether the server takes guests (`guestsAllowed`, undefined until known; false: members
- *  only). `reload` asks again (after an invite link made the visitor a guest). */
-export function useMe(): { me: Me | null | undefined; guestsAllowed: boolean | undefined; whenReady: () => Promise<void>; reload: () => void } {
+ *  only). `reload` asks again (after an invite link made the visitor a guest); `signedIn` takes
+ *  the player a form just logged in (the name gate) without asking. */
+export function useMe(): {
+  me: Me | null | undefined;
+  guestsAllowed: boolean | undefined;
+  whenReady: () => Promise<void>;
+  reload: () => void;
+  signedIn: (me: Me) => void;
+} {
   const auth = useMemo(() => createAuthApi(), []);
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [guestsAllowed, setGuestsAllowed] = useState<boolean | undefined>(undefined);
@@ -114,5 +121,9 @@ export function useMe(): { me: Me | null | undefined; guestsAllowed: boolean | u
     };
   }, [auth, whenReady, asked]);
   const reload = useCallback(() => setAsked((n) => n + 1), []);
-  return { me, guestsAllowed, whenReady, reload };
+  return { me, guestsAllowed, whenReady, reload, signedIn: setMe };
 }
+
+/** Nobody logged in and the server takes guests: ask for a name (rooms/NameGate.tsx) before any
+ *  room call, which would make the visitor a guest with a random name. `undefined`: not known yet. */
+export const needsName = (me: Me | null | undefined, guestsAllowed: boolean | undefined) => me === null && guestsAllowed === true;

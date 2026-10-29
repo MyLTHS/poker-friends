@@ -1,4 +1,4 @@
-// A room's rules (blinds, seats, think time, 7-2 bonus, visibility): the create form, its
+// A room's rules (blinds, starting stack, seats, think time, 7-2 bonus, visibility): the create form, its
 // preview, the owner's "change the rules" form, and the server's field errors in Vietnamese.
 
 import type { components } from "@/api/rest";
@@ -16,14 +16,31 @@ export type Rules = {
   max_seats: number;
   think_time_seconds: number;
   seven_deuce_bonus: number;
+  /** chips a seat comes with, and a "Mua thêm" gives back (server default 100 × big blind) */
+  starting_stack: number;
   is_private: boolean;
 };
+
+/** Same cap as the server (apps/games/models.py MAX_STARTING_STACK). */
+export const MAX_STARTING_STACK = 10_000_000;
+
+/** The server's default starting stack for a big blind: 100 of them, capped. NaN for no blind. */
+export const defaultStartingStack = (bigBlind: number) =>
+  Number.isInteger(bigBlind) && bigBlind > 0 ? Math.min(100 * bigBlind, MAX_STARTING_STACK) : NaN;
+
+/** The create form's "Chip đầu vào" box: what the player typed (`typed`, null when untouched),
+ *  else 100 big blinds of the blind being typed, so it follows the big blind ("" without one). */
+export function startingStackText(typed: string | null, bigBlind: string): string {
+  if (typed !== null) return typed;
+  const stack = defaultStartingStack(bigBlind.trim() === "" ? NaN : Number(bigBlind));
+  return Number.isNaN(stack) ? "" : String(stack);
+}
 
 export const SEAT_CHOICES = [2, 3, 4, 5, 6, 7, 8, 9];
 export const THINK_CHOICES = [15, 20, 30, 45, 60];
 export const SEVEN_CHOICES = [25, 50, 100];
 
-/** The design's sample room: 10/20, 9 seats, 20 s, 7-2 bonus 50, private. */
+/** The design's sample room: 10/20, 2.000 chips each, 9 seats, 20 s, 7-2 bonus 50, private. */
 export const DEFAULT_RULES: Rules = {
   name: "",
   small_blind: 10,
@@ -31,6 +48,7 @@ export const DEFAULT_RULES: Rules = {
   max_seats: 9,
   think_time_seconds: 20,
   seven_deuce_bonus: 50,
+  starting_stack: 2000,
   is_private: true,
 };
 
@@ -49,6 +67,8 @@ export function checkRules(rules: Rules): FieldErrors {
   if (!whole(rules.think_time_seconds) || rules.think_time_seconds < 5 || rules.think_time_seconds > 120)
     errors.think_time_seconds = "Từ 5 đến 120 giây.";
   if (!whole(rules.seven_deuce_bonus) || rules.seven_deuce_bonus < 0) errors.seven_deuce_bonus = "Số chip không âm.";
+  if (!whole(rules.starting_stack) || rules.starting_stack < 1) errors.starting_stack = "Ít nhất 1 chip.";
+  else if (rules.starting_stack > MAX_STARTING_STACK) errors.starting_stack = `Tối đa ${fmt(MAX_STARTING_STACK)} chip.`;
   return errors;
 }
 
@@ -96,7 +116,7 @@ export function rulesSummary(r: Rules): [string, string][] {
   ];
 }
 
-export const ruleKeys = ["small_blind", "big_blind", "think_time_seconds", "seven_deuce_bonus"] as const;
+export const ruleKeys = ["small_blind", "big_blind", "think_time_seconds", "seven_deuce_bonus", "starting_stack"] as const;
 export type EditableRules = Pick<RoomInfo, (typeof ruleKeys)[number]>;
 
 /** The PATCH body of the owner's rules form: only what changed, so a pending change of another
@@ -115,6 +135,7 @@ export function pendingText(pending: UpdateRoomRequest | null | undefined, room:
     parts.push(`blind ${blindsText({ small_blind: pending.small_blind ?? room.small_blind, big_blind: pending.big_blind ?? room.big_blind })}`);
   if (pending.think_time_seconds !== undefined) parts.push(`${pending.think_time_seconds} giây`);
   if (pending.seven_deuce_bonus !== undefined) parts.push(pending.seven_deuce_bonus > 0 ? `7-2: ${fmt(pending.seven_deuce_bonus)}` : "tắt 7-2");
+  if (pending.starting_stack !== undefined) parts.push(`chip đầu vào ${fmt(pending.starting_stack)}`);
   if (pending.name !== undefined) parts.push(`tên "${pending.name}"`);
   return parts.length ? `Ván sau: ${parts.join(" · ")}` : null;
 }
