@@ -46,12 +46,12 @@
           ]
         },
         "showdown": {
-          "description": "One row per player whose cards are face up after a showdown, by seat; [] when the hand was won by folds.",
+          "description": "One row per player whose cards are face up after a showdown, by seat, once per board when the hand was run twice (so up to 18); [] when the hand was won by folds.",
           "type": "array",
           "items": {
             "$ref": "../common.schema.json#/$defs/ShowdownHand"
           },
-          "maxItems": 9
+          "maxItems": 18
         },
         "runouts": {
           "description": "Both boards of a hand run twice, each with what it paid; null otherwise.",

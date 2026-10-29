@@ -10,6 +10,7 @@ import pytest
 from django.core.management import call_command
 
 from apps.games import actor as actor_module
+from apps.games import contract
 from apps.games.engine.hand import HandEngine, IllegalAction
 from apps.games.engine.simulate import run_simulation
 from apps.games.models import Hand
@@ -84,6 +85,19 @@ class TestRunItTwice:
         assert {row["board"] for row in rows} == {1, 2}
         on_two = {row["player_id"]: row["category"] for row in rows if row["board"] == 2}
         assert on_two["C"] == "three_of_a_kind"
+
+    def test_a_full_table_run_twice_still_fits_the_hand_completed_message(self):
+        # Nine players all in from a bomb pot: a showdown row per player per board, 18 in all.
+        nine = [(n, str(n), 100) for n in range(1, 10)]  # player ids as the server sends them
+        engine = build_hand(nine, button_seat=1, bomb_pot=100, run_it_twice=True)
+        assert engine.is_complete and engine.ran_twice
+        rows = engine.showdown_hands()
+        assert len(rows) == 18
+        fixture = contract.API_DIR / "fixtures/server/valid/hand.completed.showdown.json"
+        message = json.loads(fixture.read_text())
+        message["payload"]["showdown"] = rows
+        message["payload"]["runouts"] = engine.runouts()
+        assert contract.errors(message, "server") == []
 
     def test_an_all_in_on_the_flop_shares_the_flop(self):
         engine = heads_up(

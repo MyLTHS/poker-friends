@@ -968,7 +968,8 @@ export interface components {
             seven_deuce_winner: components["schemas"]["PlayerId"] | null;
             /**
              * @description Bộ bài của từng người còn ngửa bài sau showdown (như `hand.completed.payload.showdown`),
-             *     theo số ghế; `[]` nếu ván kết thúc vì mọi người bỏ bài (kể cả khi lật 7-2).
+             *     theo số ghế, mỗi board một lần khi ván chạy 2 lần (nên tối đa 18); `[]` nếu ván kết thúc vì
+             *     mọi người bỏ bài (kể cả khi lật 7-2).
              */
             showdown: components["schemas"]["ShowdownHand"][];
             /** @description Ván chạy 2 lần (`room.run_it_twice`) có hai board, mỗi board trả cho ai bao nhiêu (như `hand.completed.payload.runouts`); `null` nếu không. */

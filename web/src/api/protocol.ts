@@ -362,9 +362,9 @@ export interface HandCompletedMessage {
     results: [PlayerResult, PlayerResult, ...PlayerResult[]];
     seven_deuce: SevenDeuceAward | null;
     /**
-     * One row per player whose cards are face up after a showdown, by seat; [] when the hand was won by folds.
+     * One row per player whose cards are face up after a showdown, by seat, once per board when the hand was run twice (so up to 18); [] when the hand was won by folds.
      *
-     * @maxItems 9
+     * @maxItems 18
      */
     showdown: ShowdownHand[];
     /**

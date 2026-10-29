@@ -1481,7 +1481,9 @@ components:
           type: array
           description: |
             Bộ bài của từng người còn ngửa bài sau showdown (như `hand.completed.payload.showdown`),
-            theo số ghế; `[]` nếu ván kết thúc vì mọi người bỏ bài (kể cả khi lật 7-2).
+            theo số ghế, mỗi board một lần khi ván chạy 2 lần (nên tối đa 18); `[]` nếu ván kết thúc vì
+            mọi người bỏ bài (kể cả khi lật 7-2).
+          maxItems: 18
           items:
             $ref: "./schema/common.schema.json#/$defs/ShowdownHand"
         runouts:
