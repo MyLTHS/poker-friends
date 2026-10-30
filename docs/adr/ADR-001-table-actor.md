@@ -301,10 +301,15 @@ Vẫn một người ghi duy nhất:
   `Room.empty_since` và hẹn; có người ngồi thì xoá và huỷ. Hẹn giờ cũ bắn muộn không làm gì. Lúc
   actor mới khởi động (`_idle_at_start`) nó tính lại `empty_since` từ ghế trong DB và đóng ngay nếu
   đã quá giờ, trước mọi lệnh đang xếp hàng.
-- **Phòng chưa có actor** (tạo xong không ai mở, hay chưa ai đụng tới từ lúc khởi động lại): một
-  task quét (`sweep_idle_rooms`, mỗi 30 giây) trong chính process Daphne tìm phòng mở có
-  `empty_since` đã quá giờ và gọi `close_if_idle()` qua actor của phòng (nạp nếu cần). Không có
-  process thứ hai (cron, lệnh quản trị) đụng vào phòng: actor đang chạy sẽ không thấy thay đổi đó.
+- **Task quét** (`sweep_idle_rooms`, mỗi 30 giây) trong chính process Daphne tìm phòng mở có
+  `empty_since` đã quá giờ. Phòng có actor: hỏi actor (`close_if_idle()`, chờ tối đa 10 giây; actor
+  treo hay đã chết thì ghi log và sang phòng khác). Phòng **chưa có actor** (tạo xong không ai mở,
+  hay chưa ai đụng tới từ lúc khởi động lại): đóng thẳng trong DB, một transaction có điều kiện
+  (còn mở, vẫn quá giờ, không ghế, không ván dở) kèm dòng `auto_close`, trong lúc giữ khoá của bảng
+  actor nên `get_actor` không dựng actor cho phòng đó giữa chừng. Không có actor thì không có người
+  ghi nào bị qua mặt. Không nạp actor cho nó: nạp là khôi phục cả phòng và giữ actor của một phòng
+  đã đóng trong bộ nhớ tới hết đời process (sau deploy là mọi phòng trống cũ). Không có process thứ
+  hai (cron, lệnh quản trị) đụng vào phòng: actor đang chạy sẽ không thấy thay đổi đó.
 - **Task quét bắt đầu ở kết nối đầu tiên** (`config/asgi.py`, `StartIdleSweep`): Daphne không có
   sự kiện khởi động (lifespan), và vòng lặp asyncio chỉ chạy khi server đã phục vụ. Trước kết nối
   đầu tiên không ai thấy phòng nào; lobby cũng bỏ phòng đã quá giờ, nên không ai thấy phòng "lẽ ra

@@ -12,7 +12,7 @@ import asyncio
 from datetime import timedelta
 
 import pytest
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import Client
 from django.utils import timezone
@@ -105,9 +105,8 @@ class TestIdleClose:
         [entry] = auto_closes(room)
         assert entry.user is None and entry.by_staff is False
         assert entry.details["idle_seconds"] == 0.5
-        assert when(entry.details["empty_since"]) == room.empty_since.replace(
-            microsecond=room.empty_since.microsecond // 1000 * 1000
-        )
+        assert when(entry.details["empty_since"]) < timezone.now()
+        assert room.empty_since is None  # closed: cleared
 
     def test_sitting_down_in_time_cancels_it(self, monkeypatch):
         idle(monkeypatch, 0.5)
@@ -200,6 +199,7 @@ class TestIdleClose:
         async def body():
             assert await actor_module.sweep_idle_rooms() == 0
             table = await actor_module.get_actor(room.pk)
+            assert await table.close_if_idle() is False  # queued behind its start
             assert table.closed is False and table._room_info()["closes_at"] is None
 
         run_async(body)
@@ -520,3 +520,193 @@ class TestOwnerChangesSeatsAndPrivacy:
             TestContract.validate({"max_seats": 6, "is_private": True}, "UpdateRoomRequest")
 
         run_async(body)
+
+
+class TestReviewFixes:
+    """Review of the first version: the sweep never hangs or hoards actors, settings stay sane."""
+
+    def test_a_hung_actor_does_not_stop_the_sweep(self, monkeypatch, caplog):
+        idle(monkeypatch, 60)
+        monkeypatch.setattr(actor_module, "IDLE_SWEEP_ACTOR_TIMEOUT", 0.2)
+        past = timezone.now() - timedelta(hours=1)
+        hung = make_room()  # swept first (lower pk)
+        other = make_room(empty_since=past)
+
+        async def body():
+            table = await actor_module.get_actor(hung.pk)
+            await asyncio.sleep(0.05)
+            await Room.objects.filter(pk=hung.pk).aupdate(empty_since=past)
+            release = asyncio.Event()
+
+            async def stuck():
+                await release.wait()
+
+            busy = asyncio.ensure_future(table._call(stuck))
+            assert await actor_module.sweep_idle_rooms() == 1  # the other room
+            release.set()
+            await busy
+            # The sweep gave up on its question; the actor still answers the next one.
+            assert await asyncio.wait_for(table.close_if_idle(), 1) is False
+
+        run_async(body)
+        assert "no answer to the idle sweep" in caplog.text
+        assert Room.objects.get(pk=other.pk).status == Room.Status.CLOSED
+        assert Room.objects.get(pk=hung.pk).status == Room.Status.OPEN
+
+    def test_a_dead_actor_does_not_stop_the_sweep(self, monkeypatch, caplog):
+        idle(monkeypatch, 60)
+        past = timezone.now() - timedelta(hours=1)
+        dead, other = make_room(), make_room(empty_since=past)
+
+        async def body():
+            table = await actor_module.get_actor(dead.pk)
+            await asyncio.sleep(0.05)
+            await Room.objects.filter(pk=dead.pk).aupdate(empty_since=past)
+            table._task.cancel()
+            await asyncio.sleep(0)
+            assert await asyncio.wait_for(actor_module.sweep_idle_rooms(), 2) == 1
+
+        run_async(body)
+        assert "has stopped; not swept" in caplog.text
+        assert Room.objects.get(pk=other.pk).status == Room.Status.CLOSED
+
+    def test_a_failing_start_does_not_kill_the_actor(self, monkeypatch, caplog):
+        room = make_room()
+
+        async def broken(self, pause=True):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(actor_module.TableActor, "_between_hands", broken)
+
+        async def body():
+            table = await actor_module.get_actor(room.pk)
+            assert await asyncio.wait_for(table.close_if_idle(), 1) is False
+            assert not table._task.done()
+
+        run_async(body)
+        assert "resuming the table failed" in caplog.text
+
+    def test_the_sweep_loop_survives_a_failing_sweep(self, monkeypatch):
+        idle(monkeypatch, 0)
+        monkeypatch.setattr(actor_module, "IDLE_SWEEP_SECONDS", 0.05)
+        calls = []
+
+        async def flaky():
+            calls.append(1)
+            if len(calls) == 1:
+                raise DatabaseError("down")
+            return 0
+
+        monkeypatch.setattr(actor_module, "sweep_idle_rooms", flaky)
+
+        async def body():
+            actor_module.start_idle_sweeper()
+            await asyncio.sleep(0.3)
+            assert len(calls) >= 2
+            assert not actor_module._sweeper.done()
+
+        run_async(body)
+
+    def test_an_unloaded_room_is_closed_without_loading_its_actor(self):
+        past = timezone.now() - timedelta(minutes=6)
+        room = make_room(empty_since=past)
+        busy = make_room(empty_since=past)  # an unfinished hand, nobody seated: left alone
+        Hand.objects.create(room=busy, hand_no=1, button_seat=1, config={})
+
+        async def body():
+            assert await actor_module.sweep_idle_rooms() == 1
+            assert actor_module._actors == {}
+
+        run_async(body)
+        room.refresh_from_db()
+        assert room.status == Room.Status.CLOSED and room.empty_since is None
+        [entry] = auto_closes(room)
+        assert entry.user is None and entry.details["idle_seconds"] == 300
+        assert Room.objects.get(pk=busy.pk).status == Room.Status.OPEN
+        assert auto_closes(busy) == []
+
+    def test_a_failed_max_seats_save_is_not_left_pending(self, monkeypatch):
+        room, owner, a = owned_one_player()
+        bob = make_user("bob")
+
+        async def body():
+            table = await actor_module.get_actor(room.pk)
+            await asyncio.sleep(0.05)
+            original = Room.asave
+
+            async def broken(self, *args, **kwargs):
+                raise DatabaseError("down")
+
+            monkeypatch.setattr(Room, "asave", broken)
+            with pytest.raises(DatabaseError):
+                await table.update_settings({"max_seats": 4})
+            monkeypatch.setattr(Room, "asave", original)
+            assert "max_seats" not in table.pending
+            assert table.room.max_seats == 9 and table.session.max_seats == 9
+            sat = await apost(await alogged_in(bob), f"/api/rooms/{room.pk}/seats/", {"seat": 6})
+            assert sat.status_code == 201
+            client = await alogged_in(owner)
+            later = await apatch(client, f"/api/rooms/{room.pk}/", {"name": "Still fine"})
+            assert later.status_code == 200
+            # Whatever is pending counts too: never a max_seats below a taken seat.
+            table.pending["max_seats"] = 4
+            bad = await apatch(client, f"/api/rooms/{room.pk}/", {"name": "Again"})
+            assert bad.status_code == 400 and list(bad.json()["fields"]) == ["max_seats"]
+            table.pending.clear()
+
+        run_async(body)
+        room.refresh_from_db()
+        assert (room.name, room.max_seats) == ("Still fine", 9)
+
+    def test_no_settings_change_on_a_room_closed_when_its_actor_loaded(self):
+        room, owner, a = owned_one_player()
+        RoomSeat.objects.filter(room=room).delete()
+        Room.objects.filter(pk=room.pk).update(empty_since=timezone.now() - timedelta(hours=1))
+
+        async def body():
+            client = await alogged_in(owner)
+            response = await apatch(client, f"/api/rooms/{room.pk}/", {"name": "Late"})
+            assert response.status_code == 409 and response.json()["code"] == "room_closed"
+
+        run_async(body)
+        room.refresh_from_db()
+        assert room.status == Room.Status.CLOSED and room.name == "T"
+        kinds = list(OwnerAction.objects.filter(room=room).values_list("kind", flat=True))
+        assert kinds == [OwnerAction.Kind.AUTO_CLOSE]
+
+    def test_closing_during_a_hand_announces_no_idle_close(self, monkeypatch):
+        idle(monkeypatch, 60)
+        room, owner, a, b = owned_heads_up()
+
+        async def body():
+            ca, cb = await connect(room, a), await connect(room, b)
+            started, _ = await started_hand(ca, cb)
+            watcher = await connect(room, owner)
+            await leave(a, room)
+            await leave(b, room)
+            closed = await apost(await alogged_in(owner), f"/api/rooms/{room.pk}/close/")
+            assert closed.status_code == 202
+            await drain(watcher)
+            await fold_to_the_end(room, {str(a.pk): ca, str(b.pk): cb}, started["hand_id"])
+            messages = await drain(watcher, wait=0.5)
+            assert statuses(messages)[-1] == "closed"
+            assert set(closes_at(messages)) == {None}
+
+        run_async(body)
+        room.refresh_from_db()
+        assert room.status == Room.Status.CLOSED and room.empty_since is None
+        assert auto_closes(room) == []
+
+    def test_any_close_clears_empty_since(self, monkeypatch):
+        idle(monkeypatch, 60)
+        room, owner, a = owned_one_player()
+
+        async def body():
+            await leave(a, room)
+            assert (await Room.objects.aget(pk=room.pk)).empty_since is not None
+            closed = await apost(await alogged_in(owner), f"/api/rooms/{room.pk}/close/")
+            assert closed.status_code == 200
+
+        run_async(body)
+        room.refresh_from_db()
+        assert room.status == Room.Status.CLOSED and room.empty_since is None
