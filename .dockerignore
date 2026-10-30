@@ -1,18 +1,14 @@
-.venv
-.git
-__pycache__
-*.pyc
-.pytest_cache
-.ruff_cache
-.hypothesis
-db.sqlite3
-.env
-.env.*
-!.env.example
-web/
-backups/
-# Local-only folders: Claude worktrees (full repo copies, ~1 GB each) and editor/OS clutter.
-.claude/
-node_modules/
-.idea/
-**/.DS_Store
+# Backend image (Dockerfile): only what Django runs gets in. Everything else stays out, so the
+# build never copies local clutter (Claude worktrees, node_modules, backups, editor folders)
+# and every rebuild copies a few MB instead of the whole folder. The web image has its own list
+# (web/Dockerfile.dockerignore).
+*
+!apps
+# the WebSocket contract: apps/games/contract.py checks every table message against it
+!docs/api
+!config
+!manage.py
+!pyproject.toml
+!uv.lock
+**/__pycache__
+**/*.pyc

@@ -7,6 +7,13 @@
 # After that the whole game is the "poker-home" group in Docker Desktop: ▶ starts everything,
 # the tunnel included, and the link for friends is in the tunnel container's log.
 # Everything else (one Daphne, migrations, healthchecks) is the production file unchanged.
+# Same log cap as the production file (anchors do not cross files).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 name: poker-home
 
 services:
@@ -38,6 +45,7 @@ services:
   # Docker Desktop is enough; every start prints a new https://<words>.trycloudflare.com link in
   # this container's log. The backend accepts any *.trycloudflare.com host (.env.home).
   tunnel:
+    logging: *logging
     image: cloudflare/cloudflared:2026.10.0
     command: ["tunnel", "--no-autoupdate", "--url", "http://caddy:80"]
     restart: unless-stopped
@@ -49,6 +57,7 @@ services:
   # the 60 newest are kept. An empty database (the very first start) has nothing to back up.
   # pg_dump matches the database.
   autobackup:
+    logging: *logging
     image: postgres:17
     env_file: .env.home
     working_dir: /work

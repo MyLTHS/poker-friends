@@ -250,6 +250,16 @@ cmd_up() {
     printf '%s' "$url" | pbcopy && say "(Link đã được copy sẵn: chỉ cần dán.)"
   fi
   say "Cắm sạc, đừng gập máy. Hết buổi chạy: scripts/play-online.sh down"
+  tidy_docker
+}
+
+# Every rebuild leaves the previous images behind untagged (a few GB each) and grows the build
+# cache: drop this game's old images (their label is in the Dockerfiles) and keep the cache
+# under 3 GB, enough for the next rebuild to reuse its npm and uv layers. Never touches volumes
+# (the data) or images that are in use. Best effort: the game is already running.
+tidy_docker() {
+  docker image prune -f --filter label=org.poker-friends.app=true >/dev/null 2>&1 || true
+  docker builder prune -f --max-used-space 3GB >/dev/null 2>&1 || true
 }
 
 cmd_down() {

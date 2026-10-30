@@ -1,4 +1,6 @@
 FROM python:3.13-slim
+# scripts/play-online.sh removes old untagged images that carry this label after a rebuild.
+LABEL org.poker-friends.app=true
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /bin/uv
 
