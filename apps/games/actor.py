@@ -20,7 +20,8 @@ from channels.db import database_sync_to_async
 from channels.exceptions import ChannelFull
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from . import contract
@@ -191,6 +192,8 @@ ROOM_IDLE_CLOSE_SECONDS = 5 * 60
 # closes it on time; this catches rooms whose actor is not loaded (made and never opened,
 # untouched since a restart).
 IDLE_SWEEP_SECONDS = 30.0
+# The sweep waits this long for a loaded room's actor to answer, then goes on to the next room.
+IDLE_SWEEP_ACTOR_TIMEOUT = 10.0
 
 
 class TableActor:
@@ -232,6 +235,7 @@ class TableActor:
         self._last_hand: tuple[int, HandEngine] | None = None
         self._shown: list[dict[str, Any]] = []
         self._task = asyncio.create_task(self._run())
+        self._task.add_done_callback(self._task_ended)
 
     # ---- public: called from consumers/views, never touches the engine directly -----------
 
@@ -342,15 +346,13 @@ class TableActor:
     # ---- the one writer --------------------------------------------------------------------
 
     async def _run(self) -> None:
-        if self.hand is not None and self.session.current_hand.actor is not None:
-            await self._schedule_turn(self.resume_deadline)
-        elif self.hand is None and not self.suspended:
-            # Restarted between hands: whoever was waiting for a hand that is over by now
-            # (finished by _recover, voided by an admin) leaves, and owner changes still waiting
-            # apply. No hand just ended, so no pause before the next one.
-            await self._between_hands(pause=False)
-        if not self.suspended:
-            await self._idle_at_start()
+        try:
+            await self._resume()
+        except Exception:
+            # Never let the start kill the room's only writer: the queue still has to be served
+            # (a missing turn clock is set again by the next action, a countdown by the next
+            # seat or connection).
+            log.exception("room %s: resuming the table failed", self.room.pk)
         while True:
             item = await self._queue.get()
             try:
@@ -363,6 +365,24 @@ class TableActor:
                 future = getattr(item, "future", None)
                 if future is not None and not future.done():
                     future.set_exception(error)
+
+    async def _resume(self) -> None:
+        if self.hand is not None and self.session.current_hand.actor is not None:
+            await self._schedule_turn(self.resume_deadline)
+        elif self.hand is None and not self.suspended:
+            # Restarted between hands: whoever was waiting for a hand that is over by now
+            # (finished by _recover, voided by an admin) leaves, and owner changes still waiting
+            # apply. No hand just ended, so no pause before the next one.
+            await self._between_hands(pause=False)
+        if not self.suspended:
+            await self._idle_at_start()
+
+    def _task_ended(self, task: asyncio.Task) -> None:
+        """The writer's task only ends when stopped; anything else must be loud."""
+        if not task.cancelled() and task.exception() is not None:
+            log.critical(
+                "room %s: its table actor stopped", self.room.pk, exc_info=task.exception()
+            )
 
     async def _handle(self, item: Any) -> None:
         match item:
@@ -388,9 +408,11 @@ class TableActor:
                 try:
                     result = await item.fn()
                 except Exception as error:
-                    item.future.set_exception(error)
+                    if not item.future.done():  # the caller may have given up (a timeout)
+                        item.future.set_exception(error)
                 else:
-                    item.future.set_result(result)
+                    if not item.future.done():
+                        item.future.set_result(result)
 
     # ---- connections -------------------------------------------------------------------
 
@@ -1029,6 +1051,8 @@ class TableActor:
 
     async def _update_settings(self, changes: dict[str, Any]) -> None:
         self._refuse_if_suspended()
+        if self.closed:
+            raise Reject("room_closed")
         current = {key: getattr(self.room, key) for key in ROOM_SETTINGS}
         merged = {**current, **self.pending, **changes}
         if merged["small_blind"] >= merged["big_blind"]:
@@ -1036,17 +1060,19 @@ class TableActor:
         if merged["bomb_pot_every"] > 0 and merged["bomb_pot_amount"] == 0:
             raise Reject("validation_error", BOMB_POT_NEEDS_AMOUNT, "bomb_pot_amount")
         highest = max(self.session.seats, default=0)  # a seat being left still counts
-        if changes.get("max_seats", highest) < highest:
+        if merged["max_seats"] < highest:
             message = f"max_seats cannot be below {highest}: seat {highest} is taken"
             raise Reject("validation_error", message, "max_seats")
-        if self.hand is None:
-            self.pending.update(changes)
-            await self._apply_settings()
-            return
+        # IMMEDIATE_SETTINGS never wait in pending: saved now or not at all (a max_seats left
+        # pending could fall below a seat taken later, and the database would refuse it).
         now = {key: value for key, value in changes.items() if key in IMMEDIATE_SETTINGS}
         later = {key: value for key, value in changes.items() if key not in IMMEDIATE_SETTINGS}
-        if now:
+        if self.hand is None:
+            self.pending.update(later)
             await self._apply_settings(now)
+            return
+        if now:
+            await self._apply_settings(now, with_pending=False)
         if later:
             # Kept in the database too, so a restart before the hand ends does not lose them.
             await Room.objects.filter(pk=self.room.pk).aupdate(
@@ -1055,17 +1081,18 @@ class TableActor:
             self.pending.update(later)
             self.room.pending_settings = dict(self.pending)
 
-    async def _apply_settings(self, changes: dict[str, Any] | None = None) -> None:
-        """Store and use the owner's changes: the given ones (IMMEDIATE_SETTINGS during a hand),
-        else everything pending."""
-        from_pending = changes is None
-        if changes is None:
-            changes = dict(self.pending)
+    async def _apply_settings(
+        self, now: dict[str, Any] | None = None, with_pending: bool = True
+    ) -> None:
+        """Store and use the owner's changes in one save: ``now`` (IMMEDIATE_SETTINGS) and,
+        with_pending (no hand running), everything pending."""
+        staged = dict(self.pending) if with_pending else {}
+        changes = {**staged, **(now or {})}
         before = {key: getattr(self.room, key) for key in changes}
         for key, value in changes.items():
             setattr(self.room, key, value)
         fields = [*changes]
-        if from_pending:
+        if with_pending:
             self.room.pending_settings = {}
             fields.append("pending_settings")
         try:
@@ -1074,10 +1101,10 @@ class TableActor:
             # Not saved: memory goes back to what the database has.
             for key, value in before.items():
                 setattr(self.room, key, value)
-            if from_pending:
-                self.room.pending_settings = changes
+            if with_pending:
+                self.room.pending_settings = staged
             raise
-        if from_pending:
+        if with_pending:
             self.pending = {}
         self.session.max_seats = self.room.max_seats
         self.session.small_blind = self.room.small_blind
@@ -1137,11 +1164,14 @@ class TableActor:
 
     async def _finish_close(self) -> None:
         self._cancel_deal()
+        empty_since = self.room.empty_since
         self.room.status, self.room.closing = Room.Status.CLOSED, False
+        self.room.empty_since = None  # closed: no idle close to count towards
         try:
-            await self.room.asave(update_fields=["status", "closing"])
+            await self.room.asave(update_fields=["status", "closing", "empty_since"])
         except Exception:
             self.room.status, self.room.closing = Room.Status.OPEN, self.closing
+            self.room.empty_since = empty_since
             raise
         self.closing = False
         self._cancel_idle_close()
@@ -1163,7 +1193,9 @@ class TableActor:
         """After seats changed: Room.empty_since set when the last seated player is gone, cleared
         when someone sits down, and the idle close set or cancelled with it. Clients see
         closes_at change (room.updated)."""
-        if self.closed or (not self.session.seats) == (self.room.empty_since is not None):
+        if self.closed or self.closing:
+            return  # closing anyway: no closes_at announced just before "closed"
+        if (not self.session.seats) == (self.room.empty_since is not None):
             return
         since = None if self.session.seats else timezone.now()
         self.room.empty_since = since
@@ -1548,21 +1580,67 @@ _sweeper: asyncio.Task | None = None
 async def sweep_idle_rooms() -> int:
     """Close every open room nobody has been seated in for idle_close_seconds(); how many.
 
-    Each goes through its actor (loaded for it if need be, ADR-001), which checks again: a room
-    someone sat down in since, or a suspended one, stays open. The empty_since read here is
-    only a hint for which rooms to look at."""
+    A room whose actor is loaded is asked to close itself (it checks again: someone may have
+    sat down since). A room with no actor is closed in the database directly, under the
+    registry lock: there is no writer to bypass, and get_actor cannot make one meanwhile.
+    Loading an actor for it instead would run a full recovery and keep the actor of a closed,
+    empty room in memory for the life of the process: after a deploy, one per old empty room.
+    One room failing or hanging never stops the sweep."""
     due = timezone.now() - timedelta(seconds=idle_close_seconds())
     rooms = Room.objects.exclude(status=Room.Status.CLOSED).filter(empty_since__lte=due)
     closed = 0
-    for room_id in [pk async for pk in rooms.values_list("pk", flat=True)]:
+    for room_id in [pk async for pk in rooms.order_by("pk").values_list("pk", flat=True)]:
         try:
-            actor = await get_actor(room_id)
-            # Queued behind a new actor's start, which closes a room past due by itself.
-            await actor.close_if_idle()
-            closed += actor.closed
+            closed += await _sweep_room(room_id, due)
         except Exception:
             log.exception("room %s: idle sweep failed", room_id)
     return closed
+
+
+async def _sweep_room(room_id: int, due: datetime) -> bool:
+    async with _lock:
+        actor = _actors.get(room_id)
+        if actor is None:
+            return await _close_unloaded_room(room_id, due)
+    if actor._task.done():
+        log.error("room %s: its table actor has stopped; not swept", room_id)
+        return False
+    try:
+        await asyncio.wait_for(actor.close_if_idle(), IDLE_SWEEP_ACTOR_TIMEOUT)
+    except TimeoutError:
+        log.error("room %s: no answer to the idle sweep in %s s", room_id, IDLE_SWEEP_ACTOR_TIMEOUT)
+        return False
+    return actor.closed
+
+
+@database_sync_to_async
+def _close_unloaded_room(room_id: int, due: datetime) -> bool:
+    """The idle close for a room with no actor (callers hold _lock): closed only if it is
+    still open, empty since before ``due``, with no seat and no unfinished hand."""
+    with transaction.atomic():
+        room = (
+            Room.objects.select_for_update()
+            .exclude(status=Room.Status.CLOSED)
+            .filter(pk=room_id, empty_since__lte=due)
+            .filter(~Exists(RoomSeat.objects.filter(room=OuterRef("pk"))))
+            .filter(~Exists(Hand.objects.filter(room=OuterRef("pk"), completed_at=None)))
+            .first()
+        )
+        if room is None:
+            return False
+        empty_since = room.empty_since
+        Room.objects.filter(pk=room_id).update(
+            status=Room.Status.CLOSED, closing=False, empty_since=None
+        )
+        OwnerAction.objects.create(
+            room=room,
+            user=None,
+            by_staff=False,
+            kind=OwnerAction.Kind.AUTO_CLOSE,
+            details={"empty_since": iso(empty_since), "idle_seconds": idle_close_seconds()},
+        )
+    log.info("room %s closed: nobody seated since %s", room_id, iso(empty_since))
+    return True
 
 
 async def _sweep_forever() -> None:
@@ -1570,7 +1648,7 @@ async def _sweep_forever() -> None:
         try:
             await sweep_idle_rooms()
         except Exception:
-            log.exception("idle sweep failed")
+            log.exception("idle sweep failed")  # and again next time: never stop sweeping
         # Never longer than the idle time itself (the E2E server shortens it), at least 1 s.
         await asyncio.sleep(min(IDLE_SWEEP_SECONDS, max(1.0, idle_close_seconds())))
 
