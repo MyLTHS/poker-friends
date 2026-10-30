@@ -7,10 +7,19 @@
 #
 # Only Caddy is reachable from outside (ports 80/443). Postgres has no published port. No Redis:
 # with one Daphne process the channel layer stays in memory (docs/adr/ADR-001-table-actor.md).
+# Container logs are capped (3 files of 10 MB per service): Docker keeps them forever otherwise
+# and they grow for as long as the stack runs.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 name: poker-friends
 
 services:
   db:
+    logging: *logging
     image: postgres:17
     restart: unless-stopped
     env_file: .env
@@ -22,6 +31,7 @@ services:
       retries: 20
 
   backend:
+    logging: *logging
     # Exactly ONE Daphne process (docs/deploy.md "Bắt buộc" 1, ADR-001): each room's table
     # lives in this process's memory, so two processes would be two writers for one table.
     # container_name makes `--scale backend=2` fail instead of quietly starting a second one,
@@ -51,6 +61,7 @@ services:
         condition: service_healthy
 
   web:
+    logging: *logging
     image: poker-friends-web:${APP_VERSION:-local}
     build:
       context: .
@@ -73,6 +84,7 @@ services:
       retries: 20
 
   caddy:
+    logging: *logging
     image: caddy:2
     restart: unless-stopped
     ports:
@@ -96,6 +108,7 @@ services:
   # Not started by `up`. Has pg_dump/pg_restore of the same version as the database:
   #   docker compose -f docker-compose.prod.yml run --rm tools scripts/backup.sh
   tools:
+    logging: *logging
     image: postgres:17
     profiles: ["tools"]
     env_file: .env

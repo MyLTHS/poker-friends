@@ -3,6 +3,8 @@
 # the rest of the repository out. One stage on purpose: `next start` runs with the same
 # node_modules the build used.
 FROM node:24-slim
+# scripts/play-online.sh removes old untagged images that carry this label after a rebuild.
+LABEL org.poker-friends.app=true
 
 WORKDIR /app/web
 ENV NEXT_TELEMETRY_DISABLED=1
