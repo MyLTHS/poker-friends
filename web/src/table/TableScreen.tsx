@@ -594,7 +594,7 @@ export function TableScreen({
                   Mất kết nối · đang thử lại
                 </span>
               ) : (
-                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} />
+                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} onOwner={owner ? () => setDialog("owner") : undefined} />
               )
             }
           />
@@ -715,7 +715,7 @@ export function TableScreen({
           </>
         }
         right={
-          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} onExit={occupant?.leaving ? undefined : exitRoom} />
+          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} onOwner={owner ? () => setDialog("owner") : undefined} onExit={occupant?.leaving ? undefined : exitRoom} />
         }
       />
       <div className={`table-area${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`} {...probe}>

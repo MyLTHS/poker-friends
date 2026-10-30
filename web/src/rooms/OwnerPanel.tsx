@@ -1,6 +1,7 @@
 "use client";
 
-// The owner's panel (D1 "owner-panel"): chips for each seated player, kick, the rules (blinds,
+// The owner's panel (D1 "owner-panel"): chips for each seated player, kick, the room itself
+// (name, seats, public or private: applied at once), the rules (blinds,
 // think time, starting stack, ante, 7-2 bonus, bomb pot, run it twice, rabbit hunt; applied from
 // the next hand while one is running), the invite link and closing the room. A standalone component: the room page opens it
 // in a side sheet, and the live table (C3) can mount <OwnerSheet> the same way.
@@ -28,6 +29,7 @@ import {
   defaultBombAmount,
   pendingText,
   serverFieldErrors,
+  SEAT_CHOICES,
   SEVEN_CHOICES,
   PAUSE_CHOICES,
   THINK_CHOICES,
@@ -132,6 +134,15 @@ export function OwnerPanel({ detail, seats, inHand, onChanged, rooms, noticeInHe
         )}
         <span className="owner-hint is-desktop-only">Người đang trong ván thì đợi ván xong mới cấp/trừ chip được.</span>
       </section>
+
+      <RoomForm
+        key={JSON.stringify([room.name, room.max_seats, detail.is_private])}
+        detail={detail}
+        lowest={Math.max(2, ...players.map((p) => p.seat))}
+        disabled={closed}
+        busy={busy === "room"}
+        save={(body) => run("room", () => api.update(roomId, body), "Đã lưu phòng")}
+      />
 
       <RulesForm key={JSON.stringify([room, detail.pending])} detail={detail} disabled={closed} busy={busy === "rules"} save={(body, done) => run("rules", () => api.update(roomId, body), done)} />
 
@@ -378,6 +389,112 @@ const draftOf = (r: EditableRules): RulesDraft => ({
   rabbit_hunt: r.rabbit_hunt,
 });
 const toNumber = (text: string) => (text.trim() === "" ? NaN : Number(text));
+
+type RoomChanges = { name?: string; max_seats?: number; is_private?: boolean };
+
+/** The room itself: its name, how many seats, and who sees it in the lobby. Saved on its own and
+ *  applied at once (no hand is changed by it). `lowest`: the fewest seats the room can have, the
+ *  highest seat someone sits in. */
+function RoomForm({ detail, lowest, disabled, busy, save }: { detail: RoomDetail; lowest: number; disabled: boolean; busy: boolean; save: (body: RoomChanges) => Promise<Result<RoomDetail>> }) {
+  const room = detail.room;
+  const [name, setName] = useState(room.name);
+  const [seats, setSeats] = useState(room.max_seats);
+  const [isPrivate, setPrivate] = useState(detail.is_private);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [failure, setFailure] = useState<string | null>(null);
+  const body: RoomChanges = {
+    ...(name.trim() !== room.name ? { name: name.trim() } : {}),
+    ...(seats !== room.max_seats ? { max_seats: seats } : {}),
+    ...(isPrivate !== detail.is_private ? { is_private: isPrivate } : {}),
+  };
+  const dirty = Object.keys(body).length > 0;
+  const choices = [...new Set([...SEAT_CHOICES, room.max_seats])].filter((n) => n >= lowest).sort((a, b) => a - b);
+  const reset = () => (setName(room.name), setSeats(room.max_seats), setPrivate(detail.is_private), setErrors({}), setFailure(null));
+  return (
+    <form
+      className="owner-rules owner-room"
+      aria-label="Phòng"
+      noValidate
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setFailure(null);
+        const found: FieldErrors = {};
+        if (!name.trim()) found.name = "Đặt cho phòng một cái tên.";
+        else if (name.trim().length > 100) found.name = "Tên dài tối đa 100 chữ.";
+        setErrors(found);
+        if (Object.keys(found).length) return;
+        const result = await save(body);
+        if (!result.ok) {
+          const fields = serverFieldErrors(result.error.fields as Record<string, string[]> | undefined);
+          setErrors(fields);
+          if (!Object.keys(fields).length) setFailure(errorText(result.error, result.retryAfter));
+        }
+      }}
+    >
+      <div className="owner-two">
+        <section className="owner-sec os-name">
+          <h4 id="owner-name">Tên phòng</h4>
+          <span className={`input${errors.name ? " is-error" : ""}`}>
+            <input
+              aria-labelledby="owner-name"
+              value={name}
+              maxLength={100}
+              disabled={disabled}
+              aria-invalid={errors.name ? true : undefined}
+              aria-describedby={errors.name ? "owner-name-error" : undefined}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </span>
+          {errors.name && (
+            <span id="owner-name-error" className="owner-hint is-error" role="alert">
+              {errors.name}
+            </span>
+          )}
+        </section>
+        <section className="owner-sec os-seats">
+          <h4 id="owner-seats">Số ghế</h4>
+          <Choices
+            labelledBy="owner-seats"
+            describedBy="owner-seats-hint"
+            items={choices.map((n) => ({ value: n, label: n, title: `${n} ghế` }))}
+            value={seats}
+            onChange={setSeats}
+            className="seg seg-fill"
+            itemClass="seg-item"
+            disabled={disabled}
+          />
+          <span id="owner-seats-hint" className={`owner-hint${errors.max_seats ? " is-error" : ""}`} role={errors.max_seats ? "alert" : undefined}>
+            {errors.max_seats ?? (lowest > 2 ? `Ít nhất ${lowest}: có người đang ngồi ghế ${lowest}` : "Áp ngay")}
+          </span>
+        </section>
+        <section className="owner-sec os-seven os-flag os-private">
+          <h4 id="owner-private">Riêng tư</h4>
+          <span className="os-seven-row">
+            <Toggle on={isPrivate} label="Riêng tư: chỉ ai có link mời" disabled={disabled} onChange={setPrivate} />
+          </span>
+          <span className="owner-hint is-desktop-only">{isPrivate ? "Không hiện trong sảnh, chỉ vào bằng link mời" : "Hiện trong sảnh cho mọi người"}</span>
+        </section>
+      </div>
+      {(dirty || failure) && (
+        <div className="owner-save">
+          {failure ? (
+            <span className="owner-hint is-error" role="alert">
+              {failure}
+            </span>
+          ) : (
+            <span className="owner-hint">Áp ngay, không đợi hết ván.</span>
+          )}
+          <Button kind="quiet" size="sm" onClick={reset} disabled={busy}>
+            Bỏ
+          </Button>
+          <Button kind="primary" size="sm" type="submit" busy={busy} disabled={!dirty}>
+            Lưu phòng
+          </Button>
+        </div>
+      )}
+    </form>
+  );
+}
 const digitsOnly = (text: string) => text.replace(/[^\d]/g, "").slice(0, 9);
 
 function RulesForm({

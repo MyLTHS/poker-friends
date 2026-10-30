@@ -6,6 +6,9 @@
 // came from; what no longer exists (gathered bets, the paid pot, folded cards) flies as a ghost
 // that removes itself. New cues finish the running ones first, a snapshot (epoch) finishes all,
 // a hidden tab skips them, and reduced motion turns movements into fades (ghosts are skipped).
+// Each action also gets its own small moment where it was made: a knock for a check, a gold ring
+// for a bet (wider for a raise, doubled when it is a pot or more); the deck riffles before a deal
+// and the pot bumps when the bets land in it.
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 
 import { BEAT, ChipStack, Confetti, DURATION, EASE, PlayingCard, STAGGER, fmt, play, prefersReducedMotion } from "@/ui";
@@ -40,6 +43,17 @@ export const BIG_HAND_MS = 1800;
 const BOARD_REST = 140;
 /** A win burst stays this long (its pieces fade within --dur-confetti). */
 const BURST_MS = 1500;
+/** The deck riffles this long in the middle before the cards fly. */
+export const SHUFFLE_MS = 560;
+/** A ring under an action stays this long (tbl-ring). */
+const RING_MS = 760;
+
+/** The ring an action makes where it was taken; null = no ring (a call, a fold). */
+export function ringFor(move: string, put: number, pot: number): Ring["tone"] | null {
+  if (move === "check") return "knock";
+  if (move === "bet" || move === "raise") return pot > 0 && put >= pot ? "big" : move;
+  return null;
+}
 
 /** Centre of an element in stage pixels. */
 function centre(el: Element, stage: Element, device: Device): Pt {
@@ -68,8 +82,9 @@ export type SeatPlace = { spot: number; me: boolean };
 
 /** What flies over the stage right now. Kept in a small store of its own so that a chip landing
  *  or a burst fading redraws only the effects layer, not the whole table. */
-type Scene = { ghosts: Ghost[]; bursts: { key: number; at: Pt }[]; big: { key: number; title: string } | null };
-const EMPTY_SCENE: Scene = { ghosts: [], bursts: [], big: null };
+type Ring = { key: number; at: Pt; tone: "knock" | "bet" | "raise" | "big" };
+type Scene = { ghosts: Ghost[]; bursts: { key: number; at: Pt }[]; rings: Ring[]; shuffle: number | null; big: { key: number; title: string } | null };
+const EMPTY_SCENE: Scene = { ghosts: [], bursts: [], rings: [], shuffle: null, big: null };
 
 function createScene() {
   let state = EMPTY_SCENE;
@@ -119,6 +134,24 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
       run();
     }, ms), run };
     timers.current.push(entry);
+  };
+
+  /** A class on one element for a while, from `at` ms on. */
+  const flash = (el: Element | null, name: string, at: number, ms: number) => {
+    if (!el) return;
+    later(at, () => {
+      el.classList.remove(name);
+      // restart the animation when the same element flashes again
+      void (el as HTMLElement).offsetWidth;
+      el.classList.add(name);
+    });
+    later(at + ms, () => el.classList.remove(name));
+  };
+
+  const ringAt = (at: Pt, tone: Ring["tone"], delay: number) => {
+    const key = ++seq.current;
+    later(delay, () => scene.set((sc) => ({ ...sc, rings: [...sc.rings, { key, at, tone }] })));
+    later(delay + RING_MS, () => scene.set((sc) => ({ ...sc, rings: sc.rings.filter((r) => r.key !== key) })));
   };
 
   const holdClass = (name: string, ms: number) => {
@@ -178,7 +211,28 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
 
     for (const cue of fresh) {
       switch (cue.kind) {
+        case "act": {
+          // beside the bet sliding out: does not hold up what follows
+          const tone = ringFor(cue.move, cue.put, cue.pot);
+          const at = placeOf(cue.seat);
+          if (!tone || !at || reduced) break;
+          const where = spotPos(device, at.spot, at.me);
+          ringAt(where, tone, t);
+          if (tone === "knock") flash(root.querySelector(`[data-seat="${cue.seat}"]`), "fx-knock", t, 420);
+          else {
+            if (tone === "big") ringAt(where, "big", t + 140);
+            flash(root.querySelector(`[data-bet="${cue.seat}"]`), "fx-bet-pop", t + DURATION.chip * 0.8, 460);
+          }
+          break;
+        }
         case "deal": {
+          // the deck riffles in the middle first
+          if (!reduced) {
+            const key = ++seq.current;
+            later(t, () => scene.set((sc) => ({ ...sc, shuffle: key })));
+            later(t + SHUFFLE_MS, () => scene.set((sc) => (sc.shuffle === key ? { ...sc, shuffle: null } : sc)));
+            t += SHUFFLE_MS;
+          }
           const n = cue.order.length;
           cue.order.forEach((seat, i) => {
             const box = root.querySelector(`[data-seat-cards="${seat}"]`);
@@ -209,7 +263,9 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
               if (at) ghost({ kind: "chips", amount: b.amount, from: betPos(device, at.spot, at.me), to: g.pot, delay: t + i * STAGGER.chips, duration: DURATION.chip, easing: EASE.settle, lift: 0, fadeOut: true, small: !d });
             });
           }
-          t += DURATION.chip + (cue.bets.length - 1) * STAGGER.chips + BEAT;
+          const landed = t + DURATION.chip + (cue.bets.length - 1) * STAGGER.chips;
+          if (!reduced) flash(root.querySelector("[data-pot]"), "fx-pot-bump", landed - 60, 480);
+          t = landed + BEAT;
           break;
         }
         case "board": {
@@ -314,7 +370,8 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
 /** The effects layer: flying chips and cards, win bursts, the big-hand title. Subscribed to the
  *  scene store, so its own updates never re-render the table around it. */
 const FxLayer = memo(function FxLayer({ scene, device, layerRef, track }: { scene: SceneStore; device: Device; layerRef: RefObject<HTMLDivElement | null>; track: (a: Animation | null) => void }) {
-  const { ghosts, bursts, big } = useSyncExternalStore(scene.subscribe, scene.get, scene.get);
+  const { ghosts, bursts, rings, shuffle, big } = useSyncExternalStore(scene.subscribe, scene.get, scene.get);
+  const c = GEO[device].c;
   // A finished flight leaves the scene; when the last one lands the list empties at once.
   const done = useCallback((key: number) => scene.set((sc) => ({ ...sc, ghosts: sc.ghosts.filter((g) => g.key !== key) })), [scene]);
   return (
@@ -322,6 +379,18 @@ const FxLayer = memo(function FxLayer({ scene, device, layerRef, track }: { scen
       <div ref={layerRef} className="fx-layer" aria-hidden>
         {ghosts.map((gh) => (
           <GhostPiece key={gh.key} ghost={gh} onDone={done} track={track} />
+        ))}
+        {shuffle !== null && (
+          <span key={shuffle} className="fx-shuffle" style={{ left: c.x, top: c.y }}>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <span key={i} className={`fx-shuffle-card ${i % 2 ? "is-right" : "is-left"}`} style={{ animationDelay: `${Math.floor(i / 2) * 70}ms` }}>
+                <PlayingCard card="??" w={device === "desktop" ? 30 : 20} />
+              </span>
+            ))}
+          </span>
+        )}
+        {rings.map((r) => (
+          <span key={r.key} className={`fx-ring is-${r.tone}`} style={{ left: r.at.x, top: r.at.y }} />
         ))}
         {bursts.map((b) => (
           <span key={b.key} className="fx-burst" style={{ left: b.at.x, top: b.at.y }}>
