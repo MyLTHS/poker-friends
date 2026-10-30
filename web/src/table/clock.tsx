@@ -27,6 +27,12 @@ export function Countdown({ deadline, frozenAt }: { deadline: number; frozenAt?:
   return <>{frozenAt ?? secondsLeft(deadline, now)}</>;
 }
 
+/** "4:32" until a moment minutes away (local ms), ticking once a second. */
+export function MinSec({ deadline }: { deadline: number }) {
+  const left = secondsLeft(deadline, useNow(1000));
+  return <>{`${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`}</>;
+}
+
 /** Chat lines younger than `ms` by the server's clock (`offsetMs` = server − local). Re-renders only
  *  when a line arrives or ages out, not on a ticker. */
 export function useRecent(messages: ChatMessage[], offsetMs: number, ms: number): ChatMessage[] {
