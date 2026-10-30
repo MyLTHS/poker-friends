@@ -48,10 +48,13 @@ export const SHUFFLE_MS = 560;
 /** A ring under an action stays this long (tbl-ring). */
 const RING_MS = 760;
 
-/** The ring an action makes where it was taken; null = no ring (a call, a fold). */
-export function ringFor(move: string, put: number, pot: number): Ring["tone"] | null {
+/** The ring an action makes where it was taken; null = no ring (a call, a fold). A bet or raise
+ *  rings twice when what it adds on top of the call is the pot or more (with the call in it), and
+ *  an all-in always does. */
+export function ringFor(move: string, put: number, call: number, pot: number): Ring["tone"] | null {
   if (move === "check") return "knock";
-  if (move === "bet" || move === "raise") return pot > 0 && put >= pot ? "big" : move;
+  if (move === "allin") return "big";
+  if (move === "bet" || move === "raise") return pot + call > 0 && put - call >= pot + call ? "big" : move;
   return null;
 }
 
@@ -213,7 +216,7 @@ export function useTableFx({ cues, epoch, device, placeOf }: { cues: Cue[]; epoc
       switch (cue.kind) {
         case "act": {
           // beside the bet sliding out: does not hold up what follows
-          const tone = ringFor(cue.move, cue.put, cue.pot);
+          const tone = ringFor(cue.move, cue.put, cue.call, cue.pot);
           const at = placeOf(cue.seat);
           if (!tone || !at || reduced) break;
           const where = spotPos(device, at.spot, at.me);

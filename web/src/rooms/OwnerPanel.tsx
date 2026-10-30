@@ -32,6 +32,7 @@ import {
   SEAT_CHOICES,
   SEVEN_CHOICES,
   PAUSE_CHOICES,
+  ruleKeys,
   THINK_CHOICES,
   type EditableRules,
   type FieldErrors,
@@ -144,7 +145,7 @@ export function OwnerPanel({ detail, seats, inHand, onChanged, rooms, noticeInHe
         save={(body) => run("room", () => api.update(roomId, body), "Đã lưu phòng")}
       />
 
-      <RulesForm key={JSON.stringify([room, detail.pending])} detail={detail} disabled={closed} busy={busy === "rules"} save={(body, done) => run("rules", () => api.update(roomId, body), done)} />
+      <RulesForm key={JSON.stringify([ruleKeys.map((k) => room[k]), detail.pending])} detail={detail} disabled={closed} busy={busy === "rules"} save={(body, done) => run("rules", () => api.update(roomId, body), done)} />
 
       {detail.invite_token && (
         <section className="owner-sec os-link" aria-labelledby="owner-link">
@@ -398,7 +399,9 @@ type RoomChanges = { name?: string; max_seats?: number; is_private?: boolean };
 function RoomForm({ detail, lowest, disabled, busy, save }: { detail: RoomDetail; lowest: number; disabled: boolean; busy: boolean; save: (body: RoomChanges) => Promise<Result<RoomDetail>> }) {
   const room = detail.room;
   const [name, setName] = useState(room.name);
-  const [seats, setSeats] = useState(room.max_seats);
+  const [picked, setSeats] = useState(room.max_seats);
+  // someone sat down in a higher seat while this was open: never below them
+  const seats = Math.max(picked, lowest);
   const [isPrivate, setPrivate] = useState(detail.is_private);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [failure, setFailure] = useState<string | null>(null);
@@ -453,18 +456,17 @@ function RoomForm({ detail, lowest, disabled, busy, save }: { detail: RoomDetail
         </section>
         <section className="owner-sec os-seats">
           <h4 id="owner-seats">Số ghế</h4>
-          <Choices
-            labelledBy="owner-seats"
-            describedBy="owner-seats-hint"
-            items={choices.map((n) => ({ value: n, label: n, title: `${n} ghế` }))}
-            value={seats}
-            onChange={setSeats}
-            className="seg seg-fill"
-            itemClass="seg-item"
-            disabled={disabled}
-          />
+          <span className="os-pick">
+            <select aria-labelledby="owner-seats" aria-describedby="owner-seats-hint" value={seats} disabled={disabled} onChange={(e) => setSeats(Number(e.target.value))}>
+              {choices.map((n) => (
+                <option key={n} value={n}>
+                  {n} ghế
+                </option>
+              ))}
+            </select>
+          </span>
           <span id="owner-seats-hint" className={`owner-hint${errors.max_seats ? " is-error" : ""}`} role={errors.max_seats ? "alert" : undefined}>
-            {errors.max_seats ?? (lowest > 2 ? `Ít nhất ${lowest}: có người đang ngồi ghế ${lowest}` : "Áp ngay")}
+            {errors.max_seats ?? (lowest > 2 ? `Ít nhất ${lowest}: có người ngồi ghế ${lowest}` : "Áp ngay")}
           </span>
         </section>
         <section className="owner-sec os-seven os-flag os-private">

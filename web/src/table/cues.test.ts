@@ -166,7 +166,7 @@ describe("the action cue", () => {
     } as unknown as Parameters<typeof cuesFor>[1])[0];
 
   it("calls the first chips of a street a bet, with what went in and the pot before it", () => {
-    expect(acted(1, "raise", 960, 30)).toEqual({ kind: "act", seat: 1, move: "bet", put: 30, pot: 30, timeout: false });
+    expect(acted(1, "raise", 960, 30)).toEqual({ kind: "act", seat: 1, move: "bet", put: 30, call: 0, pot: 30, timeout: false });
   });
 
   it("calls going over a bet a raise", () => {
@@ -177,12 +177,21 @@ describe("the action cue", () => {
       hand_id: quiet.hand_id,
       payload: { action: { player_id: "x", seat: 1, kind: "raise", amount: 60, timeout: false }, hand: { ...quiet, players: facing.map((p) => (p.seat === 1 ? { ...p, stack: 930, bet: 60 } : p)) } },
     } as unknown as Parameters<typeof cuesFor>[1])[0];
-    expect(cue).toMatchObject({ move: "raise", put: 60, pot: 50 });
+    expect(cue).toMatchObject({ move: "raise", put: 60, call: 20, pot: 50 });
   });
 
   it("calls the last chip in an all-in, call or raise", () => {
     expect(acted(1, "raise", 0, 990)).toMatchObject({ move: "allin", put: 990 });
-    expect(acted(1, "call", 0, 990)).toMatchObject({ move: "allin" });
+    const shoved = quiet.players.map((p) => (p.seat === 3 ? { ...p, stack: 0, bet: 990 } : p));
+    const before = { hand: { ...quiet, players: shoved } } as unknown as Parameters<typeof cuesFor>[0];
+    // the call ends the hand and the caller wins: the hand after it already shows the payout
+    const paid = shoved.map((p) => (p.seat === 1 ? { ...p, stack: 2010, bet: 0 } : { ...p, bet: 0 }));
+    const cue = cuesFor(before, {
+      ...flop,
+      hand_id: quiet.hand_id,
+      payload: { action: { player_id: "x", seat: 1, kind: "call", amount: null, timeout: false }, hand: { ...quiet, players: paid } },
+    } as unknown as Parameters<typeof cuesFor>[1])[0];
+    expect(cue).toMatchObject({ move: "allin", put: 990, call: 990 });
   });
 
   it("a check puts nothing in", () => {

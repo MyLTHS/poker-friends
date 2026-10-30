@@ -272,6 +272,8 @@ export function TableScreen({
   const nextAt = room.next_hand_at ? Date.parse(room.next_hand_at) - model.clockOffsetMs : null;
   // nobody seated: the server closes the room at this moment (local ms) unless someone sits down
   const closesAt = room.closes_at ? Date.parse(room.closes_at) - model.clockOffsetMs : null;
+  // then the idle words say so, not "next hand in …"
+  const closingSoon = closesAt !== null && table.seats.length === 0;
   const toggleRunning = control
     ? async () => {
         setControlBusy(true);
@@ -546,7 +548,7 @@ export function TableScreen({
         <aside className="ppanel idle-panel">
           <div className="ip-next">
             <span className="abar-eyebrow">{idle.eyebrow}</span>
-            {hand?.complete ? <NextHand bomb={nextBomb} at={nextAt} running={running} /> : <span className="ip-status">{idle.status}</span>}
+            {hand?.complete && !closingSoon ? <NextHand bomb={nextBomb} at={nextAt} running={running} /> : <span className="ip-status">{idle.status}</span>}
           </div>
           {idle.win && (
             <div className="ip-win">
@@ -680,7 +682,7 @@ export function TableScreen({
                 Xem lại ván
               </Link>
             )}
-            {hand?.complete && <NextHand bomb={nextBomb} at={nextAt} running={running} />}
+            {hand?.complete && !closingSoon && <NextHand bomb={nextBomb} at={nextAt} running={running} />}
           </>
         }
       />
@@ -894,6 +896,15 @@ function idleContent({
   // closed with nobody left in a seat: most likely the 5 empty minutes (the owner closing an
   // empty room reads the same)
   if (room.status === "closed") return { eyebrow: "Phòng đã đóng", status: "Không có ván mới", center: seated === 0 ? "Phòng đã đóng vì không còn ai ngồi." : "Chủ phòng đã đóng phòng." };
+  // nobody seated (the last hand may still be on the felt): the room closes on its own soon
+  if (!me && seated === 0 && closesAt !== null) {
+    const closing = (
+      <>
+        Không ai ngồi · phòng tự đóng sau <MinSec deadline={closesAt} />
+      </>
+    );
+    return { eyebrow: "Bạn đang xem", status: closing, center: closing };
+  }
   if (hand?.complete) {
     const net = myResult ? myResult.hand_net + myResult.seven_deuce_net : null;
     const showdown = hand.players.filter((p) => p.in_hand && p.cards.length && p.cards.every((c) => c !== "??")).length > 1;
@@ -921,14 +932,6 @@ function idleContent({
       : "Bạn đã ngồi — vào từ ván sau";
   if (!hand) {
     const waiting = room.running === false ? "Chờ chủ phòng bấm Bắt đầu" : seated < 2 ? "Cần ít nhất 2 người ngồi để chia bài" : "Ván mới sắp bắt đầu";
-    if (!me && seated === 0 && closesAt !== null) {
-      const closing = (
-        <>
-          Không ai ngồi · phòng tự đóng sau <MinSec deadline={closesAt} />
-        </>
-      );
-      return { eyebrow: "Bạn đang xem", status: closing, center: closing };
-    }
     if (!me) return { eyebrow: "Bạn đang xem", status: waiting, center: "Bấm một ghế trống để ngồi." };
     return { eyebrow: noChips ? "Bạn đã ngồi" : sittingOut ? "Bạn đang nghỉ" : "Giữa hai ván", status: noChips ? seatedWait : waiting, center: noChips ? seatedWait : waiting + "." };
   }

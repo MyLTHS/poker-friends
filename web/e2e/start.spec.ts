@@ -62,3 +62,26 @@ test("leaving the room during a hand waits for its end, then back to the lobby",
   await owner.context.close();
   await friend.context.close();
 });
+
+test("the owner renames the room, changes its seats and hides it, from the crown on the table", async ({ browser }) => {
+  const { owner, friend, id } = await twoAtTable(browser, "sua", true);
+  await owner.page.getByRole("button", { name: "Bảng chủ phòng" }).click();
+  const room = owner.page.getByRole("form", { name: "Phòng" });
+  await room.getByRole("textbox", { name: "Tên phòng" }).fill(`Bàn mới ${RUN}`);
+  // someone sits in seat 4: fewer than 4 seats is not offered
+  const seats = room.getByRole("combobox", { name: "Số ghế" });
+  await expect(seats.locator("option")).toHaveText(["4 ghế", "5 ghế", "6 ghế", "7 ghế", "8 ghế", "9 ghế"]);
+  await seats.selectOption("6");
+  await room.getByRole("switch", { name: "Riêng tư: chỉ ai có link mời" }).click();
+  await room.getByRole("button", { name: "Lưu phòng" }).click();
+  await expect
+    .poll(async () => {
+      const detail = await api(owner.page, "GET", `/api/rooms/${id}/`);
+      return [detail.room.name, detail.room.max_seats, detail.is_private];
+    })
+    .toEqual([`Bàn mới ${RUN}`, 6, true]);
+  // the friend's table shows the new name
+  await expect(friend.page.getByText(`Bàn mới ${RUN}`).first()).toBeVisible();
+  await owner.context.close();
+  await friend.context.close();
+});

@@ -4630,7 +4630,7 @@
     animation: tbl-ring 760ms var(--ease-d1-out) both;
     pointer-events: none;
   }
-  .d1 .tbl-mobile .fx-ring {
+  .d1 .stage-mobile .fx-ring {
     width: 60px;
     height: 60px;
     margin: -30px 0 0 -30px;
@@ -4689,8 +4689,10 @@
     }
   }
 
-  /* the bet lands with a little pop of its number */
-  .d1 .bet.fx-bet-pop {
+  /* the bet lands with a little pop of its number (the amount only: the bet itself is centred by
+     a transform and slides in by another) */
+  .d1 .bet.fx-bet-pop .bet-amt {
+    display: inline-block;
     animation: tbl-bet-pop 460ms var(--ease-d1-settle);
   }
   @keyframes tbl-bet-pop {
@@ -4760,10 +4762,10 @@
       transform: translateX(0) rotate(0deg);
     }
   }
-  .d1 .tbl-mobile .fx-shuffle-card {
+  .d1 .stage-mobile .fx-shuffle-card {
     animation-name: tbl-riffle-l-m;
   }
-  .d1 .tbl-mobile .fx-shuffle-card.is-right {
+  .d1 .stage-mobile .fx-shuffle-card.is-right {
     animation-name: tbl-riffle-r-m;
   }
   @keyframes tbl-riffle-l-m {

@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, MessageSquareText, Volume2 } from "lucide-react";
 
 import { Choices } from "@/rooms/Choices";
-import { Button, Modal, Toggle } from "@/ui";
+import { Button, Modal, Toggle, prefersReducedMotion } from "@/ui";
 
 import type { Cue } from "./cues";
 import { SHUFFLE_MS } from "./TableFx";
@@ -58,18 +58,18 @@ export function useTableSound(): TableSound {
     }
   }, []);
 
-  // Sound kept on from a past visit: audio may start only at the first click or key.
+  // Sound on (the default, or kept from a past visit): audio may start only in a click, tap or
+  // key, and a phone may suspend it again (locked, in the background). Every gesture wakes it
+  // while it is not running; waking a running context does nothing.
   useEffect(() => {
     if (!prefs.on) return;
     const wake = () => {
       synth.current ??= createSynth();
-      synth.current.wake();
+      if (!synth.current.running()) synth.current.wake();
     };
-    window.addEventListener("pointerdown", wake, { once: true });
-    window.addEventListener("keydown", wake, { once: true });
+    for (const type of ["pointerdown", "pointerup", "keydown", "touchend"] as const) window.addEventListener(type, wake, { passive: true });
     return () => {
-      window.removeEventListener("pointerdown", wake);
-      window.removeEventListener("keydown", wake);
+      for (const type of ["pointerdown", "pointerup", "keydown", "touchend"] as const) window.removeEventListener(type, wake);
     };
   }, [prefs.on]);
 
@@ -113,12 +113,13 @@ export function SoundCues({
   const heard = useRef(cues.at(-1)?.id ?? 0);
   // leaving the table: no sound left waiting
   const later = useRef<ReturnType<typeof setTimeout>[]>([]);
-  useEffect(() => {
-    const pending = later.current;
-    return () => {
-      for (const id of pending.splice(0)) clearTimeout(id);
-    };
-  }, []);
+  useEffect(
+    () => () => {
+      for (const id of later.current) clearTimeout(id);
+      later.current = [];
+    },
+    [],
+  );
   useEffect(() => {
     const fresh = cues.filter((c) => c.id > heard.current);
     if (fresh.length === 0) return;
@@ -126,10 +127,17 @@ export function SoundCues({
     // One event's sounds follow one another like its animations (the action, then the bets to
     // the pot, then the new cards) instead of all at once; the deal waits for the riffle.
     let at = 0;
+    const riffle = !prefersReducedMotion() && fresh.some((c) => c.kind === "deal");
     for (const s of soundsForCues(fresh, mySeat)) {
-      const delay = s.name === "deal" && fresh.some((c) => c.kind === "deal") ? Math.max(at, SHUFFLE_MS) : at;
+      const delay = s.name === "deal" && riffle ? Math.max(at, SHUFFLE_MS) : at;
       if (delay === 0) play(s.name, s.count, s.soft);
-      else later.current.push(setTimeout(() => play(s.name, s.count, s.soft), delay));
+      else {
+        const id = setTimeout(() => {
+          later.current = later.current.filter((t) => t !== id);
+          play(s.name, s.count, s.soft);
+        }, delay);
+        later.current.push(id);
+      }
       at = delay + SOUND_GAP_MS;
     }
   }, [cues, mySeat, play]);

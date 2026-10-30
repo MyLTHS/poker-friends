@@ -26,7 +26,7 @@ const throwing = {
   },
 } as unknown as Storage;
 
-const act = (move: Move, put = 0, pot = 30, timeout = false): CueBody => ({ kind: "act", seat: 2, move, put, pot, timeout });
+const act = (move: Move, put = 0, pot = 30, timeout = false, call = 0): CueBody => ({ kind: "act", seat: 2, move, put, call, pot, timeout });
 
 const ALL: SoundName[] = ["deal", "flip", "check", "call", "bet", "raise", "allin", "fold", "collect", "turn", "hurry", "pot", "win", "big", "seven"];
 
@@ -73,6 +73,12 @@ describe("soundsForCues", () => {
     expect(soundsForCues([act("allin", 500)], 2)).toEqual([{ name: "allin" }]);
     expect(soundsForCues([act("bet", 30, 30)], 2)).toEqual([{ name: "bet", count: 3 }]);
     expect(soundsForCues([act("raise", 30, 30)], 2)).toEqual([{ name: "raise", count: 3 }]);
+  });
+
+  it("sizes a raise by what it adds on top of the call: a preflop min-raise is small", () => {
+    // blinds 5/10 (15 in the middle): a min-raise to 20 with 10 to call, then a pot raise to 45
+    expect(soundsForCues([act("raise", 20, 15, false, 10)], null)).toEqual([{ name: "raise", count: 2 }]);
+    expect(soundsForCues([act("raise", 45, 15, false, 10)], null)).toEqual([{ name: "raise", count: 4 }]);
   });
 
   it("stacks more chips the bigger the bet is against the pot, 2 to 6", () => {

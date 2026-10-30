@@ -70,7 +70,8 @@ export function soundsForCues(cues: CueBody[], mySeat: number | null): Sound[] {
   for (const cue of cues) {
     if (cue.kind === "act") {
       const soft = cue.timeout ? { soft: true } : {};
-      if (cue.move === "bet" || cue.move === "raise") out.push({ name: cue.move, count: betChips(cue.put, cue.pot), ...soft });
+      // sized by what it adds on top of the call, against the pot with the call in it
+      if (cue.move === "bet" || cue.move === "raise") out.push({ name: cue.move, count: betChips(cue.put - cue.call, cue.pot + cue.call), ...soft });
       else out.push({ name: cue.move, ...soft });
     } else if (cue.kind === "deal") out.push({ name: "deal", count: Math.min(cue.order.length * 2, 12) });
     else if (cue.kind === "board") out.push({ name: "deal", count: cue.to - cue.from });
@@ -207,6 +208,8 @@ export type Synth = {
   wake: () => void;
   /** Leaving the table: give the audio device back. */
   close: () => void;
+  /** The AudioContext exists and plays (not suspended by the browser or the phone). */
+  running: () => boolean;
 };
 
 const NOISE_SECONDS = 1;
@@ -234,6 +237,7 @@ export function createSynth(): Synth {
       const c = context();
       if (c && c.state === "suspended") void c.resume();
     },
+    running: () => ctx?.state === "running",
     close() {
       if (ctx && ctx.state !== "closed") void ctx.close();
       ctx = null;

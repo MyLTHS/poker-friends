@@ -15,8 +15,9 @@ export type Move = "fold" | "check" | "call" | "bet" | "raise" | "allin";
 
 export type CueBody =
   /** every applied action, before its other cues: the seat's own small moment and its sound.
-   *  `put` = chips it put in, `pot` = chips in the middle (pots + bets) just before it. */
-  | { kind: "act"; seat: number; move: Move; put: number; pot: number; timeout: boolean }
+   *  `put` = chips it put in, `call` = what it had to put in just to call, `pot` = chips in the
+   *  middle (pots + bets) just before it. */
+  | { kind: "act"; seat: number; move: Move; put: number; call: number; pot: number; timeout: boolean }
   /** hand.started: cards fly from the deck, round-robin from the small blind. */
   | { kind: "deal"; order: number[] }
   /** call / raise: the seat's bet slides out from the seat. */
@@ -44,14 +45,23 @@ export type Cue = CueBody & { id: number };
 const sumBets = (hand: HandView) => hand.players.reduce((s, p) => s + p.bet, 0);
 const potOf = (hand: HandView) => hand.pots.reduce((s, p) => s + p.amount, 0) + sumBets(hand);
 
-function actCue(before: HandView, after: HandView, action: { kind: string; seat: number; timeout?: boolean }): CueBody {
+/** Worked out from the table before the action: the state after it may already show the hand
+ *  paid out (a call that ends the hand), so stacks after it say nothing about the chips put in. */
+function actCue(before: HandView, action: { kind: string; seat: number; amount?: number | null; timeout?: boolean }): CueBody {
   const was = before.players.find((p) => p.seat === action.seat);
-  const now = after.players.find((p) => p.seat === action.seat);
-  const put = was && now ? Math.max(0, was.stack - now.stack) : 0;
+  const stack = was?.stack ?? 0;
+  const bet = was?.bet ?? 0;
+  const call = Math.min(stack, Math.max(0, Math.max(0, ...before.players.map((p) => p.bet)) - bet));
   let move: Move = action.kind === "fold" ? "fold" : action.kind === "check" ? "check" : "call";
-  if (action.kind === "raise") move = before.players.some((p) => p.bet > 0) ? "raise" : "bet";
-  if ((move === "call" || move === "bet" || move === "raise") && put > 0 && now?.stack === 0) move = "allin";
-  return { kind: "act", seat: action.seat, move, put, pot: potOf(before), timeout: !!action.timeout };
+  let put = 0;
+  if (action.kind === "call") {
+    put = call;
+    if (stack > 0 && put >= stack) move = "allin";
+  } else if (action.kind === "raise") {
+    put = Math.min(stack, Math.max(0, (action.amount ?? 0) - bet));
+    move = stack > 0 && put >= stack ? "allin" : before.players.some((p) => p.bet > 0) ? "raise" : "bet";
+  }
+  return { kind: "act", seat: action.seat, move, put, call, pot: potOf(before), timeout: !!action.timeout };
 }
 
 /** Bets as they stood when the round closed: the last actor's chips added to its previous bet. */
@@ -76,7 +86,7 @@ export function cuesFor(prev: TableState, event: StateEvent): CueBody[] {
     case "action.applied": {
       if (!before || before.hand_id !== event.hand_id) return [];
       const { action, hand } = event.payload;
-      const cues: CueBody[] = [actCue(before, hand, action)];
+      const cues: CueBody[] = [actCue(before, action)];
       if (action.kind === "fold") cues.push({ kind: "fold", seat: action.seat });
       const roundClosed = hand.board.length > before.board.length || (sumBets(before) > 0 && sumBets(hand) === 0);
       if (roundClosed) {
