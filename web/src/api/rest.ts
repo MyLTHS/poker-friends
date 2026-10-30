@@ -13,7 +13,8 @@ export interface paths {
          * Lobby
          * @description Phòng chưa đóng mà người gọi được thấy: mọi phòng public, cộng phòng private mà người gọi là
          *     chủ hoặc đã vào bằng link mời. Mới tạo trước. Không cần đăng nhập (chưa đăng nhập thì chỉ
-         *     thấy phòng public).
+         *     thấy phòng public). Phòng đã quá giờ tự đóng (`room.closes_at` đã qua) cũng không hiện: server
+         *     sắp đóng nó.
          */
         get: operations["listRooms"];
         put?: never;
@@ -24,6 +25,7 @@ export interface paths {
          *     ghế mà chưa có chip trong phòng thì nhận ngay `starting_stack` (không cần chủ phòng); hết chip
          *     thì tự mua thêm bằng `rebuy`. Chủ phòng vẫn cấp thêm hoặc trừ bớt bằng `grantChips`. Phòng
          *     private chỉ người có link mời (`invite_token`) mới thấy. Giới hạn 10 phòng/giờ mỗi người.
+         *     Không ai vào ghế trong 5 phút thì phòng tự đóng (`room.closes_at`, như `closeRoom`).
          */
         post: operations["createRoom"];
         delete?: never;
@@ -80,6 +82,13 @@ export interface paths {
          *     thì có hiệu lực ngay. `small_blind` phải nhỏ hơn `big_blind` (tính cả giá trị đang có); bật
          *     `bomb_pot_every` thì `bomb_pot_amount` phải lớn hơn 0. Ante, bomb pot tính cho ván sau.
          *     `starting_stack` mới chỉ dùng cho những lần vào ghế và mua thêm sau đó; chip đang có giữ nguyên.
+         *
+         *     `max_seats` và `is_private` có hiệu lực ngay, kể cả giữa ván (không bao giờ nằm trong
+         *     `pending`; ván đang chạy không đổi gì). `max_seats` không được nhỏ hơn số ghế cao nhất đang có
+         *     người (kể cả người đang chờ rời ghế): `validation_error` ở trường `max_seats`; ghế trên giới
+         *     hạn mới thì không vào được (`invalid_seat`). `is_private: true` thì phòng biến khỏi lobby của
+         *     người ngoài ngay; ai đang xem vẫn xem tiếp, mở lại thì cần link mời (người đang ngồi ghế và
+         *     thành viên vẫn vào được). Cả bàn nhận `room.updated`.
          */
         patch: operations["updateRoom"];
         trace?: never;
@@ -151,6 +160,10 @@ export interface paths {
          * @description Chỉ chủ phòng. Không có ván thì đóng ngay (200). Đang có ván thì đóng khi ván xong (202,
          *     `closing: true`). Phòng đóng: không chia ván mới, không vào ghế được, biến khỏi lobby; sổ chip
          *     và lịch sử giữ nguyên. Cả bàn nhận `room.updated` với `status: "closed"`.
+         *
+         *     Server cũng tự đóng y như vậy phòng không ai ngồi ghế (người xem không tính; người ngồi mà
+         *     tạm nghỉ hay hết chip vẫn tính) liên tục 5 phút: lúc đó là `room.closes_at`, ai vào ghế
+         *     trước đó thì huỷ. Nhật ký chủ phòng ghi việc này là `auto_close`, không có người làm.
          */
         post: operations["closeRoom"];
         delete?: never;
@@ -898,6 +911,10 @@ export interface components {
             run_it_twice?: boolean;
             rabbit_hunt?: boolean;
             hand_pause_seconds?: number;
+            /** @description Có hiệu lực ngay; không nhỏ hơn số ghế cao nhất đang có người. */
+            max_seats?: number;
+            /** @description Có hiệu lực ngay (lobby, quyền xem phòng). */
+            is_private?: boolean;
         };
         JoinRoomRequest: {
             invite_token: string;
@@ -1154,6 +1171,8 @@ export interface components {
             running: boolean;
             /** @description When the next hand will be dealt: the countdown after Start (or when a running room gets two players) or the pause after a hand. null when nothing is counting down; hand.started ends it. */
             next_hand_at: components["schemas"]["ServerTime"] | null;
+            /** @description When the room will close itself because nobody is seated (spectators do not count): 5 minutes after the last seated player left, or after the room was made. null while someone is seated, and for a closed or suspended room. Someone sitting down cancels it (room.updated). The server always sends it; optional only for older clients and mocks. */
+            closes_at?: components["schemas"]["ServerTime"] | null;
         };
         /**
          * PlayerId

@@ -229,6 +229,10 @@ export interface RoomInfo {
    * When the next hand will be dealt: the countdown after Start (or when a running room gets two players) or the pause after a hand. null when nothing is counting down; hand.started ends it.
    */
   next_hand_at: ServerTime | null;
+  /**
+   * When the room will close itself because nobody is seated (spectators do not count): 5 minutes after the last seated player left, or after the room was made. null while someone is seated, and for a closed or suspended room. Someone sitting down cancels it (room.updated). The server always sends it; optional only for older clients and mocks.
+   */
+  closes_at?: ServerTime | null;
 }
 /**
  * Who sits in a seat. stack is the room balance from the ledger: during a hand it is the balance before that hand; the live stack is in HandView.
