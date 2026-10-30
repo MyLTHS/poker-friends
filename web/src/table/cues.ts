@@ -9,7 +9,14 @@ import type { StateEvent } from "./reducer";
 import { bigHandTitle, biggestHand } from "./handName";
 import { dealOrder, showdownOrder } from "./seatView";
 
+/** What one action was, as a player hears and sees it ("bet" opens the betting on a street,
+ *  "raise" goes over a bet, "allin" is any call or raise that puts the last chip in). */
+export type Move = "fold" | "check" | "call" | "bet" | "raise" | "allin";
+
 export type CueBody =
+  /** every applied action, before its other cues: the seat's own small moment and its sound.
+   *  `put` = chips it put in, `pot` = chips in the middle (pots + bets) just before it. */
+  | { kind: "act"; seat: number; move: Move; put: number; pot: number; timeout: boolean }
   /** hand.started: cards fly from the deck, round-robin from the small blind. */
   | { kind: "deal"; order: number[] }
   /** call / raise: the seat's bet slides out from the seat. */
@@ -35,6 +42,17 @@ export type CueBody =
 export type Cue = CueBody & { id: number };
 
 const sumBets = (hand: HandView) => hand.players.reduce((s, p) => s + p.bet, 0);
+const potOf = (hand: HandView) => hand.pots.reduce((s, p) => s + p.amount, 0) + sumBets(hand);
+
+function actCue(before: HandView, after: HandView, action: { kind: string; seat: number; timeout?: boolean }): CueBody {
+  const was = before.players.find((p) => p.seat === action.seat);
+  const now = after.players.find((p) => p.seat === action.seat);
+  const put = was && now ? Math.max(0, was.stack - now.stack) : 0;
+  let move: Move = action.kind === "fold" ? "fold" : action.kind === "check" ? "check" : "call";
+  if (action.kind === "raise") move = before.players.some((p) => p.bet > 0) ? "raise" : "bet";
+  if ((move === "call" || move === "bet" || move === "raise") && put > 0 && now?.stack === 0) move = "allin";
+  return { kind: "act", seat: action.seat, move, put, pot: potOf(before), timeout: !!action.timeout };
+}
 
 /** Bets as they stood when the round closed: the last actor's chips added to its previous bet. */
 function closingBets(prev: HandView, next: HandView, actorSeat: number | null) {
@@ -58,7 +76,7 @@ export function cuesFor(prev: TableState, event: StateEvent): CueBody[] {
     case "action.applied": {
       if (!before || before.hand_id !== event.hand_id) return [];
       const { action, hand } = event.payload;
-      const cues: CueBody[] = [];
+      const cues: CueBody[] = [actCue(before, hand, action)];
       if (action.kind === "fold") cues.push({ kind: "fold", seat: action.seat });
       const roundClosed = hand.board.length > before.board.length || (sumBets(before) > 0 && sumBets(hand) === 0);
       if (roundClosed) {
