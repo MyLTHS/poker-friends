@@ -4,6 +4,8 @@
 # (web/Dockerfile.dockerignore).
 *
 !apps
+# the WebSocket contract: apps/games/contract.py checks every table message against it
+!docs/api
 !config
 !manage.py
 !pyproject.toml
