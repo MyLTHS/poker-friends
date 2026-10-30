@@ -181,6 +181,9 @@ paths:
         hạn mới thì không vào được (`invalid_seat`). `is_private: true` thì phòng biến khỏi lobby của
         người ngoài ngay; ai đang xem vẫn xem tiếp, mở lại thì cần link mời (người đang ngồi ghế và
         thành viên vẫn vào được). Cả bàn nhận `room.updated`.
+
+        Phòng đã đóng (chủ phòng đóng, hoặc tự đóng vì trống 5 phút) thì `409 room_closed`. Lưu
+        thất bại thì không thay đổi nào được giữ lại, kể cả phần chờ ván sau.
       x-phase: B7
       requestBody:
         required: true

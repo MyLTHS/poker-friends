@@ -10,6 +10,7 @@ rooms whose actor is not loaded. Tests shorten the time through TableActor.idle_
 
 import asyncio
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 from django.db import DatabaseError, connection
@@ -657,6 +658,43 @@ class TestReviewFixes:
         run_async(body)
         room.refresh_from_db()
         assert (room.name, room.max_seats) == ("Still fine", 9)
+
+    def test_a_failed_save_leaves_nothing_pending(self, monkeypatch):
+        room, owner, a = owned_one_player()
+
+        async def body():
+            table = await actor_module.get_actor(room.pk)
+            await asyncio.sleep(0.05)
+
+            async def broken(self, *args, **kwargs):
+                raise DatabaseError("down")
+
+            monkeypatch.setattr(Room, "asave", broken)
+            with pytest.raises(DatabaseError):
+                await table.update_settings({"think_time_seconds": 45, "max_seats": 4})
+            assert table.pending == {}
+            assert table.room.pending_settings == {}
+            assert (table.room.think_time_seconds, table.room.max_seats) == (30, 9)
+
+        run_async(body)
+
+    def test_a_hand_that_cannot_be_resumed_suspends_the_room(self, monkeypatch, caplog):
+        room = make_room()
+
+        async def broken(self):
+            self.hand = SimpleNamespace(pk=987654)
+            raise RuntimeError("no turn clock")
+
+        monkeypatch.setattr(actor_module.TableActor, "_resume", broken)
+
+        async def body():
+            table = await actor_module.get_actor(room.pk)
+            await asyncio.sleep(0.05)
+            assert table.suspended
+            assert not table._task.done()
+
+        run_async(body)
+        assert "resuming the hand failed" in caplog.text
 
     def test_no_settings_change_on_a_room_closed_when_its_actor_loaded(self):
         room, owner, a = owned_one_player()

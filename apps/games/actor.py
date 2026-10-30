@@ -348,11 +348,17 @@ class TableActor:
     async def _run(self) -> None:
         try:
             await self._resume()
-        except Exception:
+        except Exception as error:
             # Never let the start kill the room's only writer: the queue still has to be served
-            # (a missing turn clock is set again by the next action, a countdown by the next
-            # seat or connection).
+            # (a countdown is set again by the next seat or connection). A hand that could not
+            # be resumed (its turn clock may be missing) is not left frozen: the room is
+            # suspended, as for any other broken hand, and says so.
             log.exception("room %s: resuming the table failed", self.room.pk)
+            if self.hand is not None and not self.suspended:
+                try:
+                    await self._fail_stop(f"resuming the hand failed: {error}", self.hand.pk)
+                except Exception:
+                    log.exception("room %s: suspending after a failed resume failed", self.room.pk)
         while True:
             item = await self._queue.get()
             try:
@@ -1067,33 +1073,41 @@ class TableActor:
         # pending could fall below a seat taken later, and the database would refuse it).
         now = {key: value for key, value in changes.items() if key in IMMEDIATE_SETTINGS}
         later = {key: value for key, value in changes.items() if key not in IMMEDIATE_SETTINGS}
-        if self.hand is None:
-            self.pending.update(later)
-            await self._apply_settings(now)
-            return
-        if now:
-            await self._apply_settings(now, with_pending=False)
-        if later:
-            # Kept in the database too, so a restart before the hand ends does not lose them.
-            await Room.objects.filter(pk=self.room.pk).aupdate(
-                pending_settings={**self.pending, **later}
-            )
-            self.pending.update(later)
-            self.room.pending_settings = dict(self.pending)
+        # A failed save leaves nothing behind, pending included: the owner got an error.
+        kept = dict(self.pending)
+        self.pending.update(later)
+        try:
+            if self.hand is None:
+                await self._apply_settings(now)
+            else:
+                # ``now`` and what waits for the end of the hand in one save: a restart before
+                # then does not lose them, and a failed save keeps neither (nor its audit entry).
+                await self._apply_settings(now, with_pending=False, store_pending=bool(later))
+        except Exception:
+            self.pending = kept
+            raise
 
     async def _apply_settings(
-        self, now: dict[str, Any] | None = None, with_pending: bool = True
+        self,
+        now: dict[str, Any] | None = None,
+        with_pending: bool = True,
+        store_pending: bool = False,
     ) -> None:
         """Store and use the owner's changes in one save: ``now`` (IMMEDIATE_SETTINGS) and,
-        with_pending (no hand running), everything pending."""
+        with_pending (no hand running), everything pending; store_pending (a hand running) also
+        writes what waits for the next hand without using it yet."""
         staged = dict(self.pending) if with_pending else {}
         changes = {**staged, **(now or {})}
         before = {key: getattr(self.room, key) for key in changes}
+        before_pending = self.room.pending_settings
         for key, value in changes.items():
             setattr(self.room, key, value)
         fields = [*changes]
         if with_pending:
             self.room.pending_settings = {}
+            fields.append("pending_settings")
+        elif store_pending:
+            self.room.pending_settings = dict(self.pending)
             fields.append("pending_settings")
         try:
             await self.room.asave(update_fields=fields)
@@ -1101,11 +1115,12 @@ class TableActor:
             # Not saved: memory goes back to what the database has.
             for key, value in before.items():
                 setattr(self.room, key, value)
-            if with_pending:
-                self.room.pending_settings = staged
+            self.room.pending_settings = before_pending
             raise
         if with_pending:
             self.pending = {}
+        elif not changes:
+            return  # only stored for the next hand: nothing changes at the table yet
         self.session.max_seats = self.room.max_seats
         self.session.small_blind = self.room.small_blind
         self.session.big_blind = self.room.big_blind
