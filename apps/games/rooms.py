@@ -8,12 +8,14 @@ Owner actions go through the room's actor (ADR-001), so they are ordered with th
 import json
 import re
 import secrets
+from datetime import timedelta
 from typing import Any
 
 from asgiref.sync import sync_to_async
 from django.conf import settings as django_settings
 from django.db.models import Count, Exists, OuterRef, Q
 from django.http import HttpRequest, JsonResponse
+from django.utils import timezone
 
 from apps.accounts.ratelimit import RateLimit, RateLimited
 from apps.accounts.views import client_ip
@@ -175,6 +177,9 @@ def room_info(room: Room) -> dict[str, Any]:
         # No actor yet (nobody opened the room since the server started): an unfinished hand
         # in the database will be resumed (or suspend the room) when someone does.
         status = "playing" if getattr(room, "unfinished_hand", False) else "open"
+    closes_at = None
+    if room.status != Room.Status.CLOSED and room.empty_since is not None:
+        closes_at = room.empty_since + timedelta(seconds=actor_module.idle_close_seconds())
     return {
         "room_id": room.pk,
         "name": room.name,
@@ -193,6 +198,9 @@ def room_info(room: Room) -> dict[str, Any]:
         "hand_pause_seconds": room.hand_pause_seconds,
         "running": room.running,
         "next_hand_at": None,  # no actor, so nothing scheduled
+        # Nobody seated: the sweep (actor.sweep_idle_rooms) closes it then, or its actor if
+        # someone opens it first.
+        "closes_at": actor_module.iso(closes_at) if closes_at else None,
     }
 
 
@@ -239,8 +247,11 @@ async def _lobby(request: HttpRequest) -> JsonResponse:
     if user.is_authenticated:
         visible |= Q(owner=user) | Q(members__user=user)
         visible &= ~Q(bans__user=user)
+    # A room past its idle close is as good as closed: the sweep is about to close it.
+    due = timezone.now() - timedelta(seconds=actor_module.idle_close_seconds())
     rooms = (
         Room.objects.exclude(status=Room.Status.CLOSED)
+        .exclude(empty_since__lte=due)
         .filter(visible)
         .distinct()
         .select_related("owner")
@@ -349,6 +360,8 @@ async def _update(request: HttpRequest, room_id: int) -> JsonResponse:
     except actor_module.Reject as reject:
         return _reject_response(reject)
     await log_action(room, user, OwnerAction.Kind.SETTINGS, changes)
+    # Read again: is_private (in the detail, not in RoomInfo) may have just changed.
+    room = await Room.objects.select_related("owner").aget(pk=room.pk)
     return JsonResponse(room_detail(room, user))
 
 

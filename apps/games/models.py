@@ -8,6 +8,7 @@ chip history and every hand can always be replayed from them alone.
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 MAX_SEATS = 9
 # A room made without a starting stack gives this many big blinds, up to the cap. The cap keeps a
@@ -70,6 +71,10 @@ class Room(models.Model):
     # the middle of that hand does not forget them.
     pending_settings = models.JSONField(default=dict, blank=True)
     closing = models.BooleanField(default=False)
+    # Since when nobody is seated (spectators do not count; a seated player sitting out or with
+    # no chips does): set when the last seat is freed, and on creation; null while someone sits.
+    # ROOM_IDLE_CLOSE_SECONDS after it the room closes itself (actor.py, "idle close").
+    empty_since = models.DateTimeField(null=True, blank=True, default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -350,9 +355,15 @@ class OwnerAction(AppendOnlyModel):
         INVITE = "invite", "Rotate invite link"
         START = "start", "Start room"
         PAUSE = "pause", "Pause room"
+        # Not an owner power: the server closed a room nobody sat in for ROOM_IDLE_CLOSE_SECONDS.
+        # Logged here so the room's history says why it closed; user is null (nobody did it).
+        AUTO_CLOSE = "auto_close", "Closed automatically (empty)"
 
     room = models.ForeignKey(Room, on_delete=models.PROTECT, related_name="owner_actions")
-    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name="owner_actions")
+    # null only for what the server did by itself (AUTO_CLOSE).
+    user = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="owner_actions", null=True, blank=True
+    )
     by_staff = models.BooleanField(help_text="Done by staff in a room they do not own.")
     kind = models.CharField(max_length=10, choices=Kind.choices)
     details = models.JSONField(default=dict)

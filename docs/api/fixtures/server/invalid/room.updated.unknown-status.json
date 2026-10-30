@@ -23,7 +23,8 @@
       "rabbit_hunt": true,
       "hand_pause_seconds": 10,
       "running": true,
-      "next_hand_at": null
+      "next_hand_at": null,
+      "closes_at": null
     }
   }
 }

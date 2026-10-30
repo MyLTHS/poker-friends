@@ -422,6 +422,17 @@
               "type": "null"
             }
           ]
+        },
+        "closes_at": {
+          "description": "When the room will close itself because nobody is seated (spectators do not count): 5 minutes after the last seated player left, or after the room was made. null while someone is seated, and for a closed or suspended room. Someone sitting down cancels it (room.updated). The server always sends it; optional only for older clients and mocks.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServerTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
