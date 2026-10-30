@@ -1,0 +1,30 @@
+{
+  "protocol_version": 1,
+  "type": "room.updated",
+  "room_id": 1,
+  "hand_id": null,
+  "version": 44,
+  "server_time": "2026-10-27T15:20:00.000Z",
+  "payload": {
+    "room": {
+      "room_id": 1,
+      "name": "Bàn bạn bè",
+      "status": "open",
+      "max_seats": 9,
+      "small_blind": 10,
+      "big_blind": 20,
+      "think_time_seconds": 30,
+      "seven_deuce_bonus": 50,
+      "starting_stack": 1000,
+      "ante": 0,
+      "bomb_pot_every": 0,
+      "bomb_pot_amount": 0,
+      "run_it_twice": false,
+      "rabbit_hunt": true,
+      "hand_pause_seconds": 10,
+      "running": false,
+      "next_hand_at": null,
+      "closes_at": "2026-10-27T15:25:00.000Z"
+    }
+  }
+}

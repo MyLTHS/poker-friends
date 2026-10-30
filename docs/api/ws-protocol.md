@@ -257,7 +257,7 @@ Ví dụ đầy đủ: [giữa hai ván](fixtures/server/valid/table.snapshot.be
              "small_blind": 5, "big_blind": 10, "think_time_seconds": 20, "seven_deuce_bonus": 50,
              "starting_stack": 1000, "ante": 0, "bomb_pot_every": 0, "bomb_pot_amount": 0,
              "run_it_twice": false, "rabbit_hunt": true, "hand_pause_seconds": 10,
-             "running": true, "next_hand_at": null},
+             "running": true, "next_hand_at": null, "closes_at": null},
     "you": {"player_id": "1", "seat": 1},
     "seats": [
       {"seat": 1, "player_id": "1", "display_name": "Lym", "stack": 1000, "sitting_out": false, "connected": true, "leaving": false},
@@ -489,12 +489,21 @@ không biết chắc trạng thái nên **dừng phòng** (fail-stop) thay vì �
 
 ### `room.updated` (sự kiện): cấu hình hoặc trạng thái phòng đổi (B7)
 
-Chủ phòng đổi blind, thời gian suy nghĩ, thưởng 7-2 hay tên phòng (REST `PATCH /api/rooms/{id}/`),
-hoặc đóng phòng. `room` là `RoomInfo` mới, thay nguyên cục. Đổi lúc đang có ván thì **ván đó giữ
+Chủ phòng đổi blind, thời gian suy nghĩ, thưởng 7-2, tên phòng, số ghế hay chế độ private (REST
+`PATCH /api/rooms/{id}/`), hoặc đóng phòng. `room` là `RoomInfo` mới, thay nguyên cục. Đổi lúc đang có ván thì **ván đó giữ
 cấu hình cũ**; sự kiện này được phát khi cấu hình mới bắt đầu có hiệu lực (ngay sau
 `hand.completed`, trước `hand.started` của ván sau). Thay đổi chờ ván sau được lưu
 trong DB nên không mất khi server khởi động lại. Đóng phòng giữa ván cũng chờ ván xong; sau đó `room.status` là
-`"closed"`, server không chia ván mới, vào ghế bị từ chối `room_closed`.
+`"closed"`, server không chia ván mới, vào ghế bị từ chối `room_closed`. Riêng `max_seats` và
+`is_private` có hiệu lực ngay, cả giữa ván (ván đó không dùng tới): `room.updated` phát ngay lúc đổi.
+
+**Phòng trống tự đóng.** Không ai ngồi ghế (người xem không tính; người ngồi mà tạm nghỉ hay hết
+chip vẫn tính) liên tục **5 phút** thì server đóng phòng y như chủ phòng đóng: `room.updated` với
+`status: "closed"`. `room.closes_at` là lúc đó (web hiện "Phòng sẽ tự đóng lúc…"), `null` khi có
+người ngồi, khi phòng đã đóng hoặc tạm dừng vì lỗi. Mỗi lần nó đổi, cả bàn nhận `room.updated`:
+người cuối cùng rời ghế (tự đứng dậy, bị kick, hay rời sau ván khi ván xong) thì `closes_at` = lúc
+đó + 5 phút; có người ngồi xuống trước giờ thì `closes_at: null` và lần sau trống đếm lại từ đầu.
+Phòng mới tạo chưa ai ngồi cũng đếm từ lúc tạo. Giờ đó lưu trong DB nên server khởi động lại vẫn giữ.
 
 **Bắt đầu, đếm ngược, nghỉ giữa ván, tạm dừng.** Bàn chỉ chia bài khi `room.running` (chủ phòng bấm
 Bắt đầu, `POST /api/rooms/{id}/start/`; phòng mới thì tạm dừng). `room.next_hand_at` là lúc ván tới
@@ -521,7 +530,7 @@ Bắt đầu, `POST /api/rooms/{id}/start/`; phòng mới thì tạm dừng). `r
               "seven_deuce_bonus": 50, "starting_stack": 1000, "ante": 0,
               "bomb_pot_every": 0, "bomb_pot_amount": 0, "run_it_twice": false,
               "rabbit_hunt": true, "hand_pause_seconds": 10, "running": true,
-              "next_hand_at": "2026-10-27T15:10:10.000Z"}}
+              "next_hand_at": "2026-10-27T15:10:10.000Z", "closes_at": null}}
 }
 ```
 

@@ -200,6 +200,9 @@ ACCOUNTS_GUESTS_PER_IP_HOUR = int(os.environ.get("GUESTS_PER_IP_HOUR", "20"))
 ROOMS_START_RUNNING = env_bool("ROOMS_START_RUNNING")
 TABLE_START_COUNTDOWN_SECONDS = env_float("TABLE_START_COUNTDOWN_SECONDS")
 TABLE_HAND_PAUSE_SECONDS = env_float("TABLE_HAND_PAUSE_SECONDS")
+# A room with nobody seated closes itself after this many seconds (apps/games/actor.py, "idle
+# close"). Unset in real use: 5 minutes. Only the E2E server shortens it.
+ROOM_IDLE_CLOSE_SECONDS = env_float("ROOM_IDLE_CLOSE_SECONDS")
 
 # Links in emails and the end of the Google flow point at the web app, not at Django.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
