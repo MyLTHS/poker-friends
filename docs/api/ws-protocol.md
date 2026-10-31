@@ -505,6 +505,14 @@ người cuối cùng rời ghế (tự đứng dậy, bị kick, hay rời sau 
 đó + 5 phút; có người ngồi xuống trước giờ thì `closes_at: null` và lần sau trống đếm lại từ đầu.
 Phòng mới tạo chưa ai ngồi cũng đếm từ lúc tạo. Giờ đó lưu trong DB nên server khởi động lại vẫn giữ.
 
+**Người ngồi mất kết nối.** Người ngồi ghế mà không còn kết nối nào tới bàn (đóng tab, mất mạng)
+liên tục **5 phút** thì server cho đứng dậy, chip vẫn là của họ trong phòng: giữa hai ván thì
+`seat.updated` với `occupant: null` ngay; đang trong ván thì `seat.updated` với `leaving: true`, và
+ghế trống khi ván xong như người tự bấm rời ghế. Trong 5 phút đó họ hiện `connected: false`; kết
+nối lại kịp thì giữ ghế (và `leaving` server đặt cho họ được bỏ: `seat.updated` với
+`leaving: false`). Ghế trống hết thì phòng tự đóng 5 phút sau như trên. Server khởi động lại thì
+5 phút đếm lại từ lúc đó.
+
 **Bắt đầu, đếm ngược, nghỉ giữa ván, tạm dừng.** Bàn chỉ chia bài khi `room.running` (chủ phòng bấm
 Bắt đầu, `POST /api/rooms/{id}/start/`; phòng mới thì tạm dừng). `room.next_hand_at` là lúc ván tới
 được chia; mỗi lần nó đổi, cả bàn nhận `room.updated`:
