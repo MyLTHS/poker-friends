@@ -315,3 +315,23 @@ Vẫn một người ghi duy nhất:
   đầu tiên không ai thấy phòng nào; lobby cũng bỏ phòng đã quá giờ, nên không ai thấy phòng "lẽ ra
   đã đóng" trong vài giây trước khi lượt quét đầu xong.
 - Phòng tạm dừng vì lỗi không tự đóng: chờ admin.
+
+## Người ngồi mất kết nối thì đứng dậy (01/11/2026)
+
+Người ngồi ghế mà không còn kết nối nào tới bàn liên tục `ROOM_AWAY_STAND_SECONDS` (5 phút) thì
+đứng dậy y như tự bấm "Đứng dậy": giữa hai ván thì ngay, đang trong ván thì `leaving: true` và đứng
+dậy khi ván xong (đồng hồ suy nghĩ đánh hộ họ tới lúc đó). Chip vẫn là của họ trong phòng (sổ cái
+không đổi). Không có luật này thì phòng mọi người bỏ đi mà không bấm đứng dậy giữ ghế mãi và không
+bao giờ tự đóng. Ghế trống hết thì phần "Phòng trống tự đóng" ở trên lo tiếp.
+
+- **Actor đã nạp** hẹn giờ cho từng người (`_AwayStand`, có token như epoch): kết nối cuối cùng của
+  người ngồi đóng (hay bị staff ngắt), ngồi xuống từ sảnh mà chưa mở bàn, hoặc actor vừa khởi động
+  (chưa ai kết nối) thì hẹn; kết nối lại thì huỷ, và bỏ `leaving` mà server đặt cho họ (rời ghế do
+  chính họ bấm thì giữ nguyên). Hẹn giờ cũ bắn muộn không làm gì.
+- **Phòng chưa có actor** thì chẳng ai đang ở bàn (mọi kết nối đều nạp actor). Task quét
+  (`sweep_away_seats`, trước phần đóng phòng) trả ghế của các phòng đó thẳng trong DB, dưới khoá
+  bảng actor như đóng phòng, khi process đã phục vụ ít nhất 5 phút (`_serving_since`, từ kết nối
+  đầu tiên); `empty_since` = lúc đó nên phòng tự đóng 5 phút sau nữa. Phòng còn ván dở thì để yên:
+  chỉ actor mới chơi tiếp được ván đó.
+- Ai là người server đặt `leaving` (`_away_leaving`) chỉ nằm trong bộ nhớ: khởi động lại giữa ván
+  thì người đó kết nối lại vẫn rời ghế khi ván xong, như tự bấm rời; bấm "Ở lại" là giữ ghế.

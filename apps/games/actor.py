@@ -130,6 +130,12 @@ class _IdleClose:
 
 
 @dataclass
+class _AwayStand:
+    player_id: str
+    token: int  # the absence it was set for; a later one (they came back) is ignored
+
+
+@dataclass
 class _TakeSeat:
     user: User
     seat: int
@@ -194,6 +200,10 @@ ROOM_IDLE_CLOSE_SECONDS = 5 * 60
 IDLE_SWEEP_SECONDS = 30.0
 # The sweep waits this long for a loaded room's actor to answer, then goes on to the next room.
 IDLE_SWEEP_ACTOR_TIMEOUT = 10.0
+# A seated player with no connection to the table this long stands up, as if they had left the
+# seat themselves (in a hand: when it ends). Their chips stay theirs in the room. Without it a
+# room everyone walked away from would keep its seats taken and never close itself.
+ROOM_AWAY_STAND_SECONDS = 5 * 60
 
 
 class TableActor:
@@ -203,6 +213,8 @@ class TableActor:
     next_hand_delay: float | None = None
     # Tests set this too: how long a room stays open with nobody seated (ROOM_IDLE_CLOSE_SECONDS).
     idle_close: float | None = None
+    # And this: how long a seated player may be gone before they stand up (ROOM_AWAY_STAND_SECONDS).
+    away_stand: float | None = None
 
     def __init__(self, room: Room, session: TableSession, hand: Hand | None):
         self.room = room
@@ -229,6 +241,11 @@ class TableActor:
         # The idle close (room.empty_since + idle_close_seconds()), same epoch rule as the deal.
         self._idle_epoch = 0
         self._idle_timer: asyncio.TimerHandle | None = None
+        # Seated players with no connection: their stand-up timer (token, handle). The token
+        # moves on with every new timer, so an old one that fires anyway does nothing.
+        self._away: dict[str, tuple[int, asyncio.TimerHandle]] = {}
+        self._away_token = 0
+        self._away_leaving: set[str] = set()  # leaving because they were gone, not by asking
         self._closers: set[asyncio.Task] = set()  # see _drop_full
         # The last finished hand, whose players may show their cards until the next hand
         # starts (command.show_cards), and what was shown. In memory only: lost on a restart.
@@ -335,6 +352,8 @@ class TableActor:
             self._deadline_timer.cancel()
         self._cancel_deal()
         self._cancel_idle_close()
+        for player_id in list(self._away):
+            self._cancel_away(player_id)
         for closer in list(self._closers):
             closer.cancel()
         self._task.cancel()
@@ -382,6 +401,9 @@ class TableActor:
             await self._between_hands(pause=False)
         if not self.suspended:
             await self._idle_at_start()
+            # A new actor has no connection yet: every seated player's absence starts now.
+            for player_id in self.session.seats.values():
+                self._arm_away(player_id)
 
     def _task_ended(self, task: asyncio.Task) -> None:
         """The writer's task only ends when stopped; anything else must be loud."""
@@ -404,6 +426,8 @@ class TableActor:
                 await self._on_start_hand(item)
             case _IdleClose():
                 await self._on_idle_close(item)
+            case _AwayStand():
+                await self._on_away_stand(item)
             case _TakeSeat():
                 await self._on_take_seat(item)
             case _LeaveSeat():
@@ -440,6 +464,8 @@ class TableActor:
         await self._reply(item.conn, "table.snapshot", {"table": self._table_state(player_id)})
         await self._reply(item.conn, "audience.updated", {"spectators": self._spectators()})
         await self._audience_changed(exclude=item.conn)
+        if player_id in self.session.seats.values():
+            await self._came_back(player_id)  # after the snapshot: always a client's first message
         await self._maybe_count_down()
 
     async def _on_disconnect(self, item: _Disconnect) -> None:
@@ -451,10 +477,75 @@ class TableActor:
             and not self._connected(player_id)
         ):
             await self._seat_updated(self._seat_of(player_id))
+            self._arm_away(player_id)
         await self._audience_changed()
 
     def _connected(self, player_id: str) -> bool:
         return player_id in self.connections.values()
+
+    # ---- away: a seated player gone too long stands up ------------------------------------
+
+    def _arm_away(self, player_id: str) -> None:
+        """A seated player with no connection: they stand up after away_stand_seconds()."""
+        self._cancel_away(player_id)
+        if self._connected(player_id) or player_id not in self.session.seats.values():
+            return
+        self._away_token += 1
+        token = self._away_token
+        handle = asyncio.get_running_loop().call_later(
+            away_stand_seconds(), lambda: self._queue.put_nowait(_AwayStand(player_id, token))
+        )
+        self._away[player_id] = (token, handle)
+
+    def _cancel_away(self, player_id: str) -> None:
+        entry = self._away.pop(player_id, None)
+        if entry is not None:
+            entry[1].cancel()
+
+    async def _came_back(self, player_id: str) -> None:
+        """Connected again in time: no stand up, and a leave the server set for them (they were
+        gone in a hand) is taken back. A leave they asked for themselves stays."""
+        self._cancel_away(player_id)
+        if player_id in self._away_leaving:
+            self._away_leaving.discard(player_id)
+            if player_id in self.session.leaving:
+                await self._set_leaving(player_id, False)
+                await self._maybe_count_down()  # they count for a new hand again
+
+    async def _on_away_stand(self, item: _AwayStand) -> None:
+        player_id = item.player_id
+        entry = self._away.get(player_id)
+        if entry is None or entry[0] != item.token:
+            return  # they came back (or sat down again) since: this timer is void
+        del self._away[player_id]
+        if (
+            self.suspended
+            or self.closed
+            or player_id not in self.session.seats.values()
+            or self._connected(player_id)
+        ):
+            return
+        seat = self._seat_of(player_id)
+        if self.session._in_hand(player_id):
+            # Their clock plays for them; _between_hands stands them up when the hand ends.
+            if player_id not in self.session.leaving:
+                await self._set_leaving(player_id, True)
+                self._away_leaving.add(player_id)
+            return
+        try:
+            # The row first, as in _on_leave_seat: a failed delete leaves them seated everywhere.
+            await RoomSeat.objects.filter(room=self.room, user_id=int(player_id)).adelete()
+        except Exception:
+            log.exception("room %s: standing up %s (away) failed", self.room.pk, player_id)
+            self._arm_away(player_id)  # try again after another spell
+            return
+        self.session.stand_up(player_id)
+        self._away_leaving.discard(player_id)
+        log.info(
+            "room %s: %s stood up after %s s away", self.room.pk, player_id, away_stand_seconds()
+        )
+        await self._seat_updated(seat)
+        await self._track_empty()  # the last one up: the idle close starts
 
     # ---- commands ------------------------------------------------------------------------
 
@@ -932,6 +1023,7 @@ class TableActor:
             item.future.set_exception(Reject(code, str(error)))
         else:
             item.future.set_result(self._occupant(item.seat))
+            self._arm_away(player_id)  # seated from the lobby, not at the table yet
             await self._track_empty()  # no longer empty: the idle close is off
             await self._maybe_count_down()
 
@@ -943,6 +1035,7 @@ class TableActor:
             if player_id not in self.session.seats.values():
                 raise Reject("not_seated")
             seat = self._seat_of(player_id)
+            self._away_leaving.discard(player_id)  # their own leave now, not the server's
             left_now = not self.session._in_hand(player_id)
             if left_now:
                 # The row first, as in _stand_up_leaving: if the delete fails they are still
@@ -965,6 +1058,7 @@ class TableActor:
         self._refuse_if_suspended()
         if player_id not in self.session.seats.values():
             raise Reject("not_seated")
+        self._away_leaving.discard(player_id)
         if player_id in self.session.leaving:
             await self._set_leaving(player_id, False)
             await self._maybe_count_down()  # they count for a new hand again
@@ -994,6 +1088,7 @@ class TableActor:
                 log.exception("room %s: freeing the seat of %s failed", self.room.pk, player_id)
                 continue
             self.session.stand_up(player_id)
+            self._away_leaving.discard(player_id)
             await self._seat_updated(seat)
         await self._track_empty()
 
@@ -1165,6 +1260,7 @@ class TableActor:
                 await layer.send(channel, {"type": "table.close", "code": code})
         if dropped and player_id in self.session.seats.values():
             await self._seat_updated(self._seat_of(player_id))  # shown as disconnected
+            self._arm_away(player_id)
 
     async def _close(self) -> bool:
         self._refuse_if_suspended()
@@ -1481,8 +1577,10 @@ class TableActor:
         socket. It has missed an event, so close its socket as soon as the channel has room;
         the client then reconnects and resyncs from a snapshot."""
         log.warning("room %s: channel full, dropping connection %s", self.room.pk, conn)
-        self.connections.pop(conn, None)
+        player_id = self.connections.pop(conn, None)
         channel = self.channels.pop(conn, None)
+        if player_id is not None:
+            self._arm_away(player_id)  # its disconnect will not find it any more
         if channel is None:
             return
 
@@ -1518,6 +1616,11 @@ def _seconds(override: float | None, setting: str, real: float) -> float:
 def idle_close_seconds() -> float:
     """How long a room stays open with nobody seated (ROOM_IDLE_CLOSE_SECONDS, overridable)."""
     return _seconds(TableActor.idle_close, "ROOM_IDLE_CLOSE_SECONDS", ROOM_IDLE_CLOSE_SECONDS)
+
+
+def away_stand_seconds() -> float:
+    """How long a seated player may be gone before they stand up (ROOM_AWAY_STAND_SECONDS)."""
+    return ROOM_AWAY_STAND_SECONDS if TableActor.away_stand is None else TableActor.away_stand
 
 
 def _illegal_action_code(error: IllegalAction) -> str:
@@ -1590,6 +1693,9 @@ async def drop_player_everywhere(user_id: int, code: int) -> None:
 # ---- the idle sweep: rooms past their idle close whose actor is not loaded ------------------
 
 _sweeper: asyncio.Task | None = None
+# When this process started serving (start_idle_sweeper). A room with no actor has had nobody
+# at its table since then: every connection loads the actor.
+_serving_since: datetime | None = None
 
 
 async def sweep_idle_rooms() -> int:
@@ -1600,7 +1706,13 @@ async def sweep_idle_rooms() -> int:
     registry lock: there is no writer to bypass, and get_actor cannot make one meanwhile.
     Loading an actor for it instead would run a full recovery and keep the actor of a closed,
     empty room in memory for the life of the process: after a deploy, one per old empty room.
-    One room failing or hanging never stops the sweep."""
+    One room failing or hanging never stops the sweep.
+
+    First, the away stand up for rooms with no actor (sweep_away_seats)."""
+    try:
+        await sweep_away_seats()
+    except Exception:
+        log.exception("away sweep failed")  # the idle close still runs
     due = timezone.now() - timedelta(seconds=idle_close_seconds())
     rooms = Room.objects.exclude(status=Room.Status.CLOSED).filter(empty_since__lte=due)
     closed = 0
@@ -1658,6 +1770,52 @@ def _close_unloaded_room(room_id: int, due: datetime) -> bool:
     return True
 
 
+async def sweep_away_seats() -> int:
+    """Stand up the players of every open room with no actor, once this process has served for
+    away_stand_seconds(): nobody has been at those tables for at least that long. How many rooms.
+
+    A loaded actor times its own players (_arm_away). Here, as in the idle close, the database
+    directly under the registry lock instead of loading an actor per old room. A room with an
+    unfinished hand is left alone: only its actor can finish the hand (a connection loads it)."""
+    if _serving_since is None:
+        return 0
+    if timezone.now() - _serving_since < timedelta(seconds=away_stand_seconds()):
+        return 0
+    seated = Exists(RoomSeat.objects.filter(room=OuterRef("pk")))
+    rooms = Room.objects.exclude(status=Room.Status.CLOSED).filter(seated)
+    emptied = 0
+    for room_id in [pk async for pk in rooms.order_by("pk").values_list("pk", flat=True)]:
+        try:
+            async with _lock:
+                if room_id not in _actors:
+                    emptied += await _stand_up_unloaded_room(room_id)
+        except Exception:
+            log.exception("room %s: away sweep failed", room_id)
+    return emptied
+
+
+@database_sync_to_async
+def _stand_up_unloaded_room(room_id: int) -> bool:
+    """Free every seat of a room with no actor (callers hold _lock); chips stay in the ledger.
+    The room is empty from now on: the idle close counts from here."""
+    with transaction.atomic():
+        room = (
+            Room.objects.select_for_update()
+            .exclude(status=Room.Status.CLOSED)
+            .filter(pk=room_id)
+            .filter(~Exists(Hand.objects.filter(room=OuterRef("pk"), completed_at=None)))
+            .first()
+        )
+        if room is None:
+            return False
+        freed, _ = RoomSeat.objects.filter(room=room).delete()
+        if not freed:
+            return False
+        Room.objects.filter(pk=room_id).update(empty_since=timezone.now())
+    log.info("room %s: %s seated player(s) stood up, nobody at the table", room_id, freed)
+    return True
+
+
 async def _sweep_forever() -> None:
     while True:
         try:
@@ -1671,7 +1829,9 @@ async def _sweep_forever() -> None:
 def start_idle_sweeper() -> None:
     """Start the sweep in the running event loop, once per process (config/asgi.py calls this
     on every connection; the loop exists only once the server serves)."""
-    global _sweeper
+    global _sweeper, _serving_since
+    if _serving_since is None:
+        _serving_since = timezone.now()
     if _sweeper is None or _sweeper.done():
         _sweeper = asyncio.get_running_loop().create_task(_sweep_forever())
 
@@ -1681,7 +1841,8 @@ async def reset_registry_for_tests() -> None:
     global and would otherwise leak DB objects and background tasks across tests; it also
     stands in for "the process died" in recovery tests.
     """
-    global _lock, _sweeper
+    global _lock, _sweeper, _serving_since
+    _serving_since = None
     if _sweeper is not None:
         _sweeper.cancel()
         try:
