@@ -20,7 +20,22 @@ django.setup()
 
 http_application = get_asgi_application()
 
-from apps.games.routing import websocket_urlpatterns  # noqa: E402  (after django.setup())
+from apps.games import actor as table_actors  # noqa: E402  (after django.setup())
+from apps.games.routing import websocket_urlpatterns  # noqa: E402
+
+
+class StartIdleSweep:
+    """Start the sweep that closes rooms nobody has sat in for a while (apps/games/actor.py,
+    sweep_idle_rooms) in this process's event loop, which runs only once the server serves: on
+    the first connection, HTTP or WebSocket. Before that nobody can see a room either, and the
+    lobby already leaves out rooms past their time."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        table_actors.start_idle_sweeper()
+        return await self.app(scope, receive, send)
 
 
 class WildcardOriginMustBeThisHost:
@@ -49,12 +64,14 @@ def websocket_application():
     )
 
 
-application = ProtocolTypeRouter(
-    {
-        "http": http_application,
-        # Origin must be one of ALLOWED_HOSTS: another site cannot open a socket with our
-        # visitors' cookies. Browsers always send Origin; scripts must set it. Opening the dev
-        # app from a LAN address (a phone) needs that address in DJANGO_ALLOWED_HOSTS.
-        "websocket": websocket_application(),
-    }
+application = StartIdleSweep(
+    ProtocolTypeRouter(
+        {
+            "http": http_application,
+            # Origin must be one of ALLOWED_HOSTS: another site cannot open a socket with our
+            # visitors' cookies. Browsers always send Origin; scripts must set it. Opening the dev
+            # app from a LAN address (a phone) needs that address in DJANGO_ALLOWED_HOSTS.
+            "websocket": websocket_application(),
+        }
+    )
 )

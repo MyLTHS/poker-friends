@@ -17,6 +17,8 @@
     "protocol.error": "1",
     "room.suspended": "1",
     "room.updated.blinds": "1",
+    "room.updated.closed-when-empty": "1",
+    "room.updated.empty-closes-soon": "1",
     "seat.updated.leaving": "1",
     "seat.updated.left": "1",
     "seat.updated.sit-out": "1",

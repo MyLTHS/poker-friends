@@ -8,16 +8,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, MessageSquareText, Volume2 } from "lucide-react";
 
 import { Choices } from "@/rooms/Choices";
-import { Button, Modal, Toggle } from "@/ui";
+import { Button, Modal, Toggle, prefersReducedMotion } from "@/ui";
 
 import type { Cue } from "./cues";
+import { SHUFFLE_MS } from "./TableFx";
 import { readKeysOn, SHORTCUTS, writeKeysOn } from "./shortcuts";
 import { createSynth, readPrefs, soundsForCues, VOLUMES, writePrefs, type SoundName, type SoundPrefs, type Synth } from "./sound";
 
 export type TableSound = {
   prefs: SoundPrefs;
   setPrefs: (next: SoundPrefs) => void;
-  play: (name: SoundName, count?: number) => void;
+  /** `soft`: quieter and duller (an action the clock took) */
+  play: (name: SoundName, count?: number, soft?: boolean) => void;
 };
 
 export function useTableSound(): TableSound {
@@ -38,10 +40,10 @@ export function useTableSound(): TableSound {
     [],
   );
 
-  const play = useCallback((name: SoundName, count?: number) => {
+  const play = useCallback((name: SoundName, count?: number, soft?: boolean) => {
     const p = current.current;
     if (!p.on || typeof document === "undefined" || document.hidden) return;
-    synth.current?.play(name, p.volume, count);
+    synth.current?.play(name, p.volume, count, soft);
   }, []);
 
   const setPrefs = useCallback((next: SoundPrefs) => {
@@ -56,18 +58,18 @@ export function useTableSound(): TableSound {
     }
   }, []);
 
-  // Sound kept on from a past visit: audio may start only at the first click or key.
+  // Sound on (the default, or kept from a past visit): audio may start only in a click, tap or
+  // key, and a phone may suspend it again (locked, in the background). Every gesture wakes it
+  // while it is not running; waking a running context does nothing.
   useEffect(() => {
     if (!prefs.on) return;
     const wake = () => {
       synth.current ??= createSynth();
-      synth.current.wake();
+      if (!synth.current.running()) synth.current.wake();
     };
-    window.addEventListener("pointerdown", wake, { once: true });
-    window.addEventListener("keydown", wake, { once: true });
+    for (const type of ["pointerdown", "pointerup", "keydown", "touchend"] as const) window.addEventListener(type, wake, { passive: true });
     return () => {
-      window.removeEventListener("pointerdown", wake);
-      window.removeEventListener("keydown", wake);
+      for (const type of ["pointerdown", "pointerup", "keydown", "touchend"] as const) window.removeEventListener(type, wake);
     };
   }, [prefs.on]);
 
@@ -83,6 +85,9 @@ export function useKeysPref(): [boolean, (on: boolean) => void] {
   }, []);
   return [on, set];
 }
+
+/** Gap between the sounds of one event. */
+const SOUND_GAP_MS = 260;
 
 /** Plays the table's moments. Renders nothing. */
 export function SoundCues({
@@ -106,11 +111,35 @@ export function SoundCues({
 }) {
   const { play } = sound;
   const heard = useRef(cues.at(-1)?.id ?? 0);
+  // leaving the table: no sound left waiting
+  const later = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(
+    () => () => {
+      for (const id of later.current) clearTimeout(id);
+      later.current = [];
+    },
+    [],
+  );
   useEffect(() => {
     const fresh = cues.filter((c) => c.id > heard.current);
     if (fresh.length === 0) return;
     heard.current = fresh[fresh.length - 1].id;
-    for (const s of soundsForCues(fresh, mySeat)) play(s.name, s.count);
+    // One event's sounds follow one another like its animations (the action, then the bets to
+    // the pot, then the new cards) instead of all at once; the deal waits for the riffle.
+    let at = 0;
+    const riffle = !prefersReducedMotion() && fresh.some((c) => c.kind === "deal");
+    for (const s of soundsForCues(fresh, mySeat)) {
+      const delay = s.name === "deal" && riffle ? Math.max(at, SHUFFLE_MS) : at;
+      if (delay === 0) play(s.name, s.count, s.soft);
+      else {
+        const id = setTimeout(() => {
+          later.current = later.current.filter((t) => t !== id);
+          play(s.name, s.count, s.soft);
+        }, delay);
+        later.current.push(id);
+      }
+      at = delay + SOUND_GAP_MS;
+    }
   }, [cues, mySeat, play]);
 
   const chimed = useRef<string | null>(null);

@@ -1960,10 +1960,11 @@
     .d1 .owner {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 296px;
-      grid-template-rows: auto auto auto auto 1fr;
+      grid-template-rows: auto auto auto auto auto 1fr;
       grid-template-areas:
         "notice  notice"
         "players two"
+        "room    two"
         "link    two"
         "danger  two"
         ".       two";
@@ -1986,6 +1987,10 @@
     .d1 .owner .owner-rules {
       grid-area: two;
       gap: 8px;
+    }
+    /* the room itself (name, seats, private) sits in the left column, under the players */
+    .d1 .owner .owner-rules.owner-room {
+      grid-area: room;
     }
     .d1 .owner .os-link {
       grid-area: link;
@@ -2288,5 +2293,90 @@
   /* "Xem" sits beside the card's main button */
   .d1 .rc-foot .rc-watch {
     margin-left: auto;
+  }
+}
+
+@layer components {
+  /* The room form (OwnerPanel RoomForm): the name across, then the seats and the private switch
+     side by side, each label over its control. */
+  .d1 .owner-room .owner-two {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .d1 .owner-room .os-name {
+    grid-column: 1 / -1;
+  }
+  .d1 .owner .owner-room .owner-two > :is(.os-seats, .os-private) {
+    grid-column: auto;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 4px;
+  }
+  .d1 .owner .owner-room .owner-two > .os-private .os-seven-row {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .d1 .owner-room .os-pick select {
+    min-height: 44px;
+    min-width: 110px;
+    padding: 0 10px;
+    border-radius: 10px;
+    border: 1px solid var(--line-2);
+    background: rgba(8, 6, 4, 0.5);
+    color: var(--ivory);
+    font: var(--w-label) var(--fs-md) / 1 var(--text);
+  }
+}
+
+@layer components {
+  /* landscape phone: the left column (players, room, invite link, closing) must fit without
+     scrolling, so the room form is one row: name · seats · private; the headings stay for screen
+     readers only (the controls point at them) */
+  @media (orientation: landscape) and (max-height: 500px) {
+    .d1 .owner .owner-room .owner-two {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .d1 .owner .owner-room .owner-two > .owner-sec {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .d1 .owner .owner-room .owner-two > .os-name {
+      flex: 1;
+      min-width: 0;
+    }
+    .d1 .owner .owner-room .os-name .input {
+      flex: 1;
+      min-width: 0;
+      height: 44px;
+      padding: 0;
+    }
+    .d1 .owner .owner-room .os-name .input input {
+      height: 44px;
+      margin-block: 0;
+      padding: 0 12px;
+    }
+    .d1 .owner .owner-room .owner-two h4 {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .d1 .owner .owner-room .owner-two > .os-private h4 {
+      position: static;
+      width: auto;
+      height: auto;
+      clip-path: none;
+      overflow: visible;
+    }
+    .d1 .owner .owner-room .owner-hint:not(.is-error) {
+      display: none;
+    }
+    .d1 .owner .owner-room .os-pick select {
+      min-width: 0;
+    }
   }
 }

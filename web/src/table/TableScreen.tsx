@@ -18,7 +18,7 @@ import { FeedbackDialog } from "@/feedback/FeedbackDialog";
 import { Button, ButtonLink, CardText, D1Root, Sheet, Spinner, ToastProvider, fmt, signed } from "@/ui";
 
 import { IdleBar, PreActions, TurnBar, TurnPanel, type ActKind } from "./ActionBar";
-import { Countdown, secondsLeft, useNow, useRecent, type TurnClock } from "./clock";
+import { Countdown, MinSec, secondsLeft, useNow, useRecent, type TurnClock } from "./clock";
 import { useDevice } from "./device";
 import type { Device } from "./geometry";
 import type { LogEntry } from "./log";
@@ -270,6 +270,10 @@ export function TableScreen({
   // next one comes at next_hand_at, read on our clock like the turn deadline.
   const running = room.running !== false;
   const nextAt = room.next_hand_at ? Date.parse(room.next_hand_at) - model.clockOffsetMs : null;
+  // nobody seated: the server closes the room at this moment (local ms) unless someone sits down
+  const closesAt = room.closes_at ? Date.parse(room.closes_at) - model.clockOffsetMs : null;
+  // then the idle words say so, not "next hand in …"
+  const closingSoon = closesAt !== null && table.seats.length === 0;
   const toggleRunning = control
     ? async () => {
         setControlBusy(true);
@@ -494,7 +498,7 @@ export function TableScreen({
     </p>
   );
 
-  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, canRebuy: !!onRebuy, nextBomb, runouts: view.runouts });
+  const idle = idleContent({ table, me, myResult, winners, nameOf, handOf, sittingOut, clock, celebration: !!celebration, canRebuy: !!onRebuy, nextBomb, runouts: view.runouts, closesAt });
   // Any seated player with no chips buys back in (the room's starting stack), owner included. Not
   // while their all-in is still being played; yes on a finished hand they lost it all in (the
   // table keeps that hand on screen until the next one, which may never come heads-up).
@@ -544,7 +548,7 @@ export function TableScreen({
         <aside className="ppanel idle-panel">
           <div className="ip-next">
             <span className="abar-eyebrow">{idle.eyebrow}</span>
-            {hand?.complete ? <NextHand bomb={nextBomb} at={nextAt} running={running} /> : <span className="ip-status">{idle.status}</span>}
+            {hand?.complete && !closingSoon ? <NextHand bomb={nextBomb} at={nextAt} running={running} /> : <span className="ip-status">{idle.status}</span>}
           </div>
           {idle.win && (
             <div className="ip-win">
@@ -594,7 +598,7 @@ export function TableScreen({
                   Mất kết nối · đang thử lại
                 </span>
               ) : (
-                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} />
+                <MobileTools unread={unread} onChat={() => openDrawer(true)} onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} onOwner={owner ? () => setDialog("owner") : undefined} />
               )
             }
           />
@@ -678,7 +682,7 @@ export function TableScreen({
                 Xem lại ván
               </Link>
             )}
-            {hand?.complete && <NextHand bomb={nextBomb} at={nextAt} running={running} />}
+            {hand?.complete && !closingSoon && <NextHand bomb={nextBomb} at={nextAt} running={running} />}
           </>
         }
       />
@@ -715,7 +719,7 @@ export function TableScreen({
           </>
         }
         right={
-          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} onExit={occupant?.leaving ? undefined : exitRoom} />
+          <TableTools onInvite={invite ? () => setDialog("invite") : undefined} menu={menu} spectators={model.spectators} sound={soundToggle} onOwner={owner ? () => setDialog("owner") : undefined} onExit={occupant?.leaving ? undefined : exitRoom} />
         }
       />
       <div className={`table-area${!online || suspended ? " is-dimmed" : ""}${!online && myTurn ? " is-spot-me" : ""}`} {...probe}>
@@ -866,6 +870,7 @@ function idleContent({
   canRebuy,
   nextBomb,
   runouts,
+  closesAt,
 }: {
   table: TableState;
   me: SeatView | undefined;
@@ -882,11 +887,24 @@ function idleContent({
   nextBomb: boolean;
   /** the completed hand was run twice: its two boards and who each paid */
   runouts: RunoutView[] | null;
+  /** nobody is seated: when the room closes on its own (local ms) */
+  closesAt: number | null;
 }): Idle {
   const { hand, room } = table;
   const seated = table.seats.length;
   if (room.status === "suspended") return { eyebrow: "Bàn tạm dừng", status: "Chờ máy chủ khôi phục", center: "Bàn tạm dừng để khôi phục." };
-  if (room.status === "closed") return { eyebrow: "Phòng đã đóng", status: "Không có ván mới", center: "Chủ phòng đã đóng phòng." };
+  // closed with nobody left in a seat: most likely the 5 empty minutes (the owner closing an
+  // empty room reads the same)
+  if (room.status === "closed") return { eyebrow: "Phòng đã đóng", status: "Không có ván mới", center: seated === 0 ? "Phòng đã đóng vì không còn ai ngồi." : "Chủ phòng đã đóng phòng." };
+  // nobody seated (the last hand may still be on the felt): the room closes on its own soon
+  if (!me && seated === 0 && closesAt !== null) {
+    const closing = (
+      <>
+        Không ai ngồi · phòng tự đóng sau <MinSec deadline={closesAt} />
+      </>
+    );
+    return { eyebrow: "Bạn đang xem", status: closing, center: closing };
+  }
   if (hand?.complete) {
     const net = myResult ? myResult.hand_net + myResult.seven_deuce_net : null;
     const showdown = hand.players.filter((p) => p.in_hand && p.cards.length && p.cards.every((c) => c !== "??")).length > 1;

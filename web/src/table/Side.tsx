@@ -75,11 +75,21 @@ function SoundButton({ sound, size }: { sound: SoundToggle; size: number }) {
   );
 }
 
-export function TableTools({ onInvite, menu, spectators = [], sound, onExit }: { onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[]; sound?: SoundToggle; onExit?: () => void }) {
+/** The owner's crown on the top bar: opens the owner's sheet without going through the menu. */
+function OwnerButton({ onOwner, size }: { onOwner: () => void; size: number }) {
+  return (
+    <IconButton label="Bảng chủ phòng" aria-haspopup="dialog" onClick={onOwner}>
+      <Crown size={size} strokeWidth={1.9} aria-hidden />
+    </IconButton>
+  );
+}
+
+export function TableTools({ onInvite, menu, spectators = [], sound, onOwner, onExit }: { onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[]; sound?: SoundToggle; onOwner?: () => void; onExit?: () => void }) {
   return (
     <>
       <WatchCount spectators={spectators} />
       {sound && <SoundButton sound={sound} size={19} />}
+      {onOwner && <OwnerButton onOwner={onOwner} size={19} />}
       {onExit && (
         <button type="button" className="tbar-btn is-quiet" aria-label="Rời phòng" onClick={onExit}>
           <LogOut size={15} strokeWidth={1.9} aria-hidden />
@@ -239,12 +249,13 @@ export function MobileTableBar({ backHref, title, sub, right }: { backHref: stri
   );
 }
 
-export function MobileTools({ unread, onChat, onInvite, menu, spectators = [], sound }: { unread: number; onChat: () => void; onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[]; sound?: SoundToggle }) {
+export function MobileTools({ unread, onChat, onInvite, menu, spectators = [], sound, onOwner }: { unread: number; onChat: () => void; onInvite?: () => void; menu: MenuButtonProps; spectators?: Spectator[]; sound?: SoundToggle; onOwner?: () => void }) {
   // id: the chat drawer gives focus back to this button when it closes
   return (
     <>
       <WatchCount spectators={spectators} />
       {sound && <SoundButton sound={sound} size={18} />}
+      {onOwner && <OwnerButton onOwner={onOwner} size={18} />}
       <IconButton id="tbl-chat-btn" label="Chat" badge={unread > 0 ? unread : undefined} onClick={onChat}>
         <MessageCircle size={20} strokeWidth={1.9} aria-hidden />
       </IconButton>

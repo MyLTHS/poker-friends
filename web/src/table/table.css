@@ -4615,3 +4615,185 @@
     }
   }
 }
+
+@layer components {
+  /* An action's own moment (TableFx "act"): a ring where it was taken. A check knocks twice on
+     the felt (pale), a bet rings gold, a raise wider, a pot-sized bet twice and brighter. */
+  .d1 .fx-ring {
+    position: absolute;
+    width: 92px;
+    height: 92px;
+    margin: -46px 0 0 -46px;
+    border-radius: 50%;
+    border: 2px solid rgba(240, 205, 120, 0.85);
+    box-shadow: 0 0 18px rgba(240, 190, 90, 0.45);
+    animation: tbl-ring 760ms var(--ease-d1-out) both;
+    pointer-events: none;
+  }
+  .d1 .stage-mobile .fx-ring {
+    width: 60px;
+    height: 60px;
+    margin: -30px 0 0 -30px;
+  }
+  .d1 .fx-ring.is-knock {
+    border-color: rgba(236, 236, 228, 0.55);
+    border-width: 1.5px;
+    box-shadow: none;
+    animation-duration: 520ms;
+  }
+  .d1 .fx-ring.is-raise {
+    border-width: 3px;
+    animation-name: tbl-ring-wide;
+  }
+  .d1 .fx-ring.is-big {
+    border-width: 3px;
+    border-color: rgba(255, 214, 110, 1);
+    box-shadow: 0 0 26px rgba(255, 190, 70, 0.7);
+    animation-name: tbl-ring-wide;
+  }
+  @keyframes tbl-ring {
+    from {
+      opacity: 0.95;
+      scale: 0.45;
+    }
+    to {
+      opacity: 0;
+      scale: 1.35;
+    }
+  }
+  @keyframes tbl-ring-wide {
+    from {
+      opacity: 1;
+      scale: 0.45;
+    }
+    to {
+      opacity: 0;
+      scale: 1.9;
+    }
+  }
+
+  /* the knock itself: the seat dips twice */
+  .d1 .seat.fx-knock .seat-plate,
+  .d1 .me.fx-knock .me-plate {
+    animation: tbl-knock 420ms var(--ease-d1-standard);
+  }
+  @keyframes tbl-knock {
+    0%,
+    50%,
+    100% {
+      translate: 0 0;
+    }
+    25%,
+    75% {
+      translate: 0 2px;
+    }
+  }
+
+  /* the bet lands with a little pop of its number (the amount only: the bet itself is centred by
+     a transform and slides in by another) */
+  .d1 .bet.fx-bet-pop .bet-amt {
+    display: inline-block;
+    animation: tbl-bet-pop 460ms var(--ease-d1-settle);
+  }
+  @keyframes tbl-bet-pop {
+    40% {
+      scale: 1.22;
+    }
+  }
+
+  /* the bets land in the pot: it bumps */
+  .d1 .pot.fx-pot-bump .pot-pill {
+    animation: tbl-bet-pop 480ms var(--ease-d1-settle);
+  }
+
+  /* before a deal: the deck splits in two and riffles back together in the middle */
+  .d1 .fx-shuffle {
+    position: absolute;
+    width: 0;
+    height: 0;
+  }
+  .d1 .fx-shuffle-card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    translate: -50% -50%;
+    animation: tbl-riffle-l 560ms var(--ease-d1-standard) both;
+  }
+  .d1 .fx-shuffle-card.is-right {
+    animation-name: tbl-riffle-r;
+  }
+  @keyframes tbl-riffle-l {
+    0% {
+      opacity: 0;
+      transform: translateX(0) rotate(0deg);
+    }
+    15% {
+      opacity: 1;
+    }
+    45% {
+      transform: translateX(-26px) rotate(-12deg);
+    }
+    85% {
+      opacity: 1;
+      transform: translateX(0) rotate(0deg);
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(0) rotate(0deg);
+    }
+  }
+  @keyframes tbl-riffle-r {
+    0% {
+      opacity: 0;
+      transform: translateX(0) rotate(0deg);
+    }
+    15% {
+      opacity: 1;
+    }
+    45% {
+      transform: translateX(26px) rotate(12deg);
+    }
+    85% {
+      opacity: 1;
+      transform: translateX(0) rotate(0deg);
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(0) rotate(0deg);
+    }
+  }
+  .d1 .stage-mobile .fx-shuffle-card {
+    animation-name: tbl-riffle-l-m;
+  }
+  .d1 .stage-mobile .fx-shuffle-card.is-right {
+    animation-name: tbl-riffle-r-m;
+  }
+  @keyframes tbl-riffle-l-m {
+    0%,
+    100% {
+      opacity: 0;
+      transform: none;
+    }
+    15%,
+    85% {
+      opacity: 1;
+    }
+    45% {
+      transform: translateX(-16px) rotate(-12deg);
+    }
+  }
+  @keyframes tbl-riffle-r-m {
+    0%,
+    100% {
+      opacity: 0;
+      transform: none;
+    }
+    15%,
+    85% {
+      opacity: 1;
+    }
+    45% {
+      transform: translateX(16px) rotate(12deg);
+    }
+  }
+}
